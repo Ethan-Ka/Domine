@@ -268,6 +268,29 @@ final class Engine {
         r.tap == nil && r.aggregate == nil && r.kernel == nil && r.ioProc == nil
     }
 
+    // MARK: - Meters and diagnostics
+
+    /// Linear peaks the kernel last wrote to position A (Front Left device)
+    /// and position B (Front Right device). Both 0 when not running.
+    func peaks() -> (Float, Float) {
+        guard state == .running, let kernel = resources.kernel else { return (0, 0) }
+        return (domine_kernel_peak(kernel, 0), domine_kernel_peak(kernel, 1))
+    }
+
+    /// Total output latency the device reports, in ms at its nominal rate.
+    /// nil when the device is absent or a read fails (the failure is logged).
+    func reportedLatencyMs(uid: String) -> Double? {
+        do throws(HALError) {
+            let id = try hal.deviceID(forUID: uid)
+            guard id != kAudioObjectUnknown else { return nil }
+            let latency = try hal.outputLatency(of: id)
+            return latency.milliseconds(sampleRate: try hal.nominalSampleRate(of: id))
+        } catch {
+            Self.log.error("Could not read latency of \(uid, privacy: .public): \(error.description, privacy: .public)")
+            return nil
+        }
+    }
+
     // MARK: - Controls
 
     private func applyControls() {

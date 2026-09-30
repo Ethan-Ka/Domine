@@ -12,6 +12,7 @@ final class SettingsStore {
         case lastLeftUID, lastRightUID
         case volumeKeysEnabled, restorePreviousOutput, closeBehavior, startWhenBothConnect
         case previousOutputUID, excludedAppsPlayThroughUID, exclusions
+        case hasCompletedWelcome
 
         var name: String { SettingsStore.keyPrefix + rawValue }
     }
@@ -95,6 +96,12 @@ final class SettingsStore {
     var excludedAppsPlayThroughUID: String? {
         get { string(.excludedAppsPlayThroughUID) }
         set { set(newValue, .excludedAppsPlayThroughUID) }
+    }
+
+    /// The first-run checklist was dismissed with Continue. Off by default.
+    var hasCompletedWelcome: Bool {
+        get { bool(.hasCompletedWelcome, default: false) }
+        set { defaults.set(newValue, forKey: Key.hasCompletedWelcome.name) }
     }
 
     /// Entries that fail to decode are dropped; the rest are kept.

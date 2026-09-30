@@ -61,6 +61,20 @@ final class CoreAudioHAL: AudioHAL {
         try writeScalar(device, address(kAudioDevicePropertyNominalSampleRate), Float64(rate))
     }
 
+    func outputLatency(of device: AudioObjectID) throws(HALError) -> DeviceLatency {
+        let output = kAudioObjectPropertyScopeOutput
+        let streams = try readArray(device, address(kAudioDevicePropertyStreams, scope: output), of: AudioObjectID.self)
+        var streamFrames: UInt32 = 0
+        for stream in streams {
+            let frames = try readScalar(stream, address(kAudioStreamPropertyLatency), as: UInt32.self)
+            streamFrames = max(streamFrames, frames)
+        }
+        return DeviceLatency(
+            deviceFrames: try readScalar(device, address(kAudioDevicePropertyLatency, scope: output), as: UInt32.self),
+            safetyOffsetFrames: try readScalar(device, address(kAudioDevicePropertySafetyOffset, scope: output), as: UInt32.self),
+            streamFrames: streamFrames)
+    }
+
     func transportType(of device: AudioObjectID) throws(HALError) -> UInt32 {
         try readScalar(device, address(kAudioDevicePropertyTransportType), as: UInt32.self)
     }

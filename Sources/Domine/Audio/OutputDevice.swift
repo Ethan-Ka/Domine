@@ -18,6 +18,25 @@ struct OutputDevice: Identifiable, Equatable, Sendable {
             || transportType == kAudioDeviceTransportTypeBluetoothLE
     }
 
+    /// Short connection name for lists, e.g. "Bluetooth" or "USB".
+    var transportName: String {
+        switch transportType {
+        case kAudioDeviceTransportTypeBluetooth, kAudioDeviceTransportTypeBluetoothLE: "Bluetooth"
+        case kAudioDeviceTransportTypeBuiltIn: "Built-in"
+        case kAudioDeviceTransportTypeUSB: "USB"
+        case kAudioDeviceTransportTypeHDMI: "HDMI"
+        case kAudioDeviceTransportTypeDisplayPort: "DisplayPort"
+        case kAudioDeviceTransportTypeAirPlay: "AirPlay"
+        case kAudioDeviceTransportTypeThunderbolt: "Thunderbolt"
+        case kAudioDeviceTransportTypeFireWire: "FireWire"
+        case kAudioDeviceTransportTypePCI: "PCI"
+        case kAudioDeviceTransportTypeAVB: "AVB"
+        case kAudioDeviceTransportTypeVirtual: "Virtual"
+        case kAudioDeviceTransportTypeAggregate: "Aggregate"
+        default: "Audio output"
+        }
+    }
+
     /// Four characters that tell two identically named devices apart, e.g. "5BB0"
     /// for "60-FD-A6-19-5B-B0:output".
     var uidSuffix: String {

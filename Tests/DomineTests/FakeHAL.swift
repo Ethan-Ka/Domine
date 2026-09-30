@@ -16,6 +16,7 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
         var outputStreams: [Int]? = nil
         var inputStreams: [Int] = []
         var sampleRate: Double = 48_000
+        var latency = DeviceLatency()
 
         var outputLayout: [Int] { outputStreams ?? (outputChannels > 0 ? [outputChannels] : []) }
     }
@@ -212,6 +213,10 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
 
     func nominalSampleRate(of device: AudioObjectID) throws(HALError) -> Double {
         try self.device(device, kAudioDevicePropertyNominalSampleRate).sampleRate
+    }
+
+    func outputLatency(of device: AudioObjectID) throws(HALError) -> DeviceLatency {
+        try self.device(device, kAudioDevicePropertyLatency).latency
     }
 
     func setNominalSampleRate(_ rate: Double, of device: AudioObjectID) throws(HALError) {

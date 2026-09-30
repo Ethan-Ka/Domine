@@ -17,6 +17,8 @@ protocol AudioHAL: AnyObject, Sendable {
     func streamChannels(of device: AudioObjectID, scope: StreamScope) throws(HALError) -> [Int]
     func nominalSampleRate(of device: AudioObjectID) throws(HALError) -> Double
     func setNominalSampleRate(_ rate: Double, of device: AudioObjectID) throws(HALError)
+    /// Device latency, safety offset, and output stream latency, all output scope.
+    func outputLatency(of device: AudioObjectID) throws(HALError) -> DeviceLatency
 
     func defaultOutputDevice() throws(HALError) -> AudioObjectID
     func setDefaultOutputDevice(_ device: AudioObjectID) throws(HALError)

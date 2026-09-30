@@ -347,4 +347,25 @@ struct EngineTests {
         #expect(out.channel(0) == Self.right.map { $0 * 0.5 })
         #expect(out.channel(2) == Self.left)
     }
+
+    // MARK: - Meters and latency
+
+    @Test func peaksReadTheKernelWhileRunning() async {
+        #expect(engine.peaks() == (0, 0))
+        await startGrips()
+        _ = render(output: [2, 2])
+        let (a, b) = engine.peaks()
+        #expect(a == 0.4)
+        #expect(b == 0.4)
+        engine.stop()
+        #expect(engine.peaks() == (0, 0))
+    }
+
+    @Test func reportedLatencyIsTheSumAtTheNominalRate() {
+        var device = FakeHAL.Device(uid: "usb", name: "USB", sampleRate: 48_000)
+        device.latency = DeviceLatency(deviceFrames: 480, safetyOffsetFrames: 96, streamFrames: 384)
+        hal.add(device)
+        #expect(engine.reportedLatencyMs(uid: "usb") == 20)
+        #expect(engine.reportedLatencyMs(uid: "missing") == nil)
+    }
 }
