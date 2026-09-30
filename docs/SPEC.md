@@ -106,7 +106,7 @@ Each speaker card shows a post-kernel peak meter for the signal Domine sends to 
 Two different problems, handled differently:
 
 - **Clock drift** (the two devices run at slightly different real sample rates, so they slowly slide apart): handled by the aggregate device's drift compensation on the non-main sub-device. No app code needed beyond setting the key.
-- **Fixed latency offset** (Bluetooth speakers buffer differently, often 100 to 300 ms, and models differ): handled by a delay line in the render kernel. The user adjusts a "Delay Left / Delay Right" slider in milliseconds; negative means delay the other side. Only one side is ever delayed; the kernel converts the signed value into a delay on one channel. With two Grips the offset should be small, so the slider shows -50 to +50 ms in 1 ms steps by default, with an "extended range" toggle for -300 to +300 ms (needed when pairing a Grip with a different speaker model). Store the offset per device pair, since it can differ after a firmware update or codec change.
+- **Fixed latency offset** (Bluetooth speakers buffer differently, often 100 to 300 ms, and models differ): handled by a delay line in the render kernel. The user adjusts a "Delay Left / Delay Right" slider in milliseconds; negative means delay the other side. Sign convention: a positive offset delays the right speaker (use it when the right speaker plays early); negative delays the left. Only one side is ever delayed; the kernel converts the signed value into a delay on one channel. With two Grips the offset should be small, so the slider shows -50 to +50 ms in 1 ms steps by default, with an "extended range" toggle for -300 to +300 ms (needed when pairing a Grip with a different speaker model). Store the offset per device pair, since it can differ after a firmware update or codec change.
 
 Note: at typical listening distances, an offset under about 1 ms is inaudible as a timing problem but will shift the stereo image toward the earlier speaker. That is why the step size is 1 ms and not coarser.
 
@@ -159,6 +159,8 @@ void domine_kernel_set_gains(DomineKernel *k, float leftGain, float rightGain);
 void domine_kernel_set_delay_ms(DomineKernel *k, float signedDelayMs);
 void domine_kernel_set_mode(DomineKernel *k, int monoPerSpeaker, int swapSides, int monoFallback);
 void domine_kernel_set_test_tone(DomineKernel *k, int side); // 0 off, 1 left, 2 right
+void domine_kernel_set_muted(DomineKernel *k, int muted);     // 50 ms linear fade (section 7)
+float domine_kernel_peak(DomineKernel *k, int position);      // meters (section 3a); 0 = A, 1 = B
 
 // Called from the IOProc. in: interleaved or deinterleaved stereo from the tap.
 // outA / outB: the output buffers for Device A and Device B inside the aggregate.
@@ -170,7 +172,9 @@ void domine_kernel_process(DomineKernel *k,
                            uint32_t outBChannelOffset);
 ```
 
-The channel offsets come from the aggregate's output stream layout, which the Swift side reads once at start (`kAudioDevicePropertyStreamConfiguration`). Do not assume the layout; Bluetooth devices can expose one stereo stream or separate mono streams.
+The channel offsets come from the aggregate's output stream layout, which the Swift side reads once at start (`kAudioDevicePropertyStreamConfiguration`). Do not assume the layout; Bluetooth devices can expose one stereo stream or separate mono streams. An offset is a flat index across all output channels in buffer order (buffer 0's channels, then buffer 1's). `DOMINE_NO_DEVICE` as the B offset means only Device A is present (mono fallback).
+
+The IOProc itself is a C function in `DomineDSP` (`domine_kernel_ioproc`, passed to `AudioDeviceCreateIOProcID` with the kernel as client data), so no Swift runs on the audio thread at all. The Swift side stores the layout in the kernel through atomics before starting the device.
 
 ## 6. App structure (Swift)
 
