@@ -96,6 +96,14 @@ final class Kernel {
     }
 
     func peak(_ position: Int32) -> Float { domine_kernel_peak(raw, position) }
+
+    /// Runs one cycle through the IOProc entry point, as the HAL would.
+    @discardableResult
+    func ioproc(_ input: TestBufferList, _ output: TestBufferList) -> OSStatus {
+        var now = AudioTimeStamp(), inTime = AudioTimeStamp(), outTime = AudioTimeStamp()
+        return domine_kernel_ioproc(
+            0, &now, input.pointer, &inTime, output.pointer, &outTime, UnsafeMutableRawPointer(raw))
+    }
 }
 
 let noDevice = UInt32.max

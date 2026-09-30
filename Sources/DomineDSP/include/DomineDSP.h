@@ -4,8 +4,8 @@
 // Domine real-time render kernel (SPEC section 5).
 //
 // Threading: the setters and domine_kernel_peak may be called from any thread.
-// They only touch C11 atomics. domine_kernel_process runs on the real-time
-// audio thread and never allocates, locks, logs, or does I/O.
+// They only touch C11 atomics. domine_kernel_process and domine_kernel_ioproc
+// run on the real-time audio thread and never allocate, lock, log, or do I/O.
 // domine_kernel_create and domine_kernel_destroy allocate and free, so call
 // them only while no IOProc is using the kernel.
 //
@@ -17,10 +17,17 @@
 
 #include <stdint.h>
 #include <CoreAudio/CoreAudioTypes.h>
+#include <CoreAudio/AudioHardwareBase.h> // AudioObjectID only; no Core Audio calls
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+// Pointers are nonnull unless marked _Nullable, matching Core Audio's headers
+// so domine_kernel_ioproc has exactly the AudioDeviceIOProc type in Swift.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wnullability-extension"
+#pragma clang assume_nonnull begin
 
 typedef struct DomineKernel DomineKernel;
 
@@ -41,10 +48,10 @@ typedef struct DomineKernel DomineKernel;
 /// sampleRate if higher) and start zeroed. maxFrames is the IOProc buffer size
 /// the caller expects; process handles any frame count safely regardless.
 /// Returns NULL if sampleRate is not positive or allocation fails.
-DomineKernel *domine_kernel_create(double sampleRate, uint32_t maxFrames);
+DomineKernel *_Nullable domine_kernel_create(double sampleRate, uint32_t maxFrames);
 
 /// Frees the kernel. Safe to call with NULL.
-void domine_kernel_destroy(DomineKernel *k);
+void domine_kernel_destroy(DomineKernel *_Nullable k);
 
 /// Per-position trim gains, linear. leftGain scales position A, rightGain
 /// scales position B, after any swap. Default 1.0 each. Non-finite or
@@ -103,8 +110,8 @@ void domine_kernel_set_muted(DomineKernel *k, int muted);
 /// frames: frames to render. Buffers shorter than this (by mDataByteSize) are
 ///     read as silence past their end and never written past their end.
 void domine_kernel_process(DomineKernel *k,
-                           const AudioBufferList *in,
-                           AudioBufferList *out,
+                           const AudioBufferList *_Nullable in,
+                           AudioBufferList *_Nullable out,
                            uint32_t frames,
                            uint32_t outAChannelOffset,
                            uint32_t outBChannelOffset);
@@ -113,6 +120,33 @@ void domine_kernel_process(DomineKernel *k,
 /// process call (SPEC section 3a). position 0 = A (left), 1 = B (right).
 /// Returns 0 for other values.
 float domine_kernel_peak(DomineKernel *k, int position);
+
+/// Aggregate layout used by domine_kernel_ioproc. Stored in atomics; set it
+/// before the device starts. Defaults: inFirstBuffer 0, A offset 0, B offset 2.
+///   inFirstBuffer: index of the tap's first buffer in the aggregate's input
+///       buffer list (sub-device input buffers come before it).
+///   outAChannelOffset, outBChannelOffset: as in domine_kernel_process.
+void domine_kernel_set_layout(DomineKernel *k,
+                              uint32_t inFirstBuffer,
+                              uint32_t outAChannelOffset,
+                              uint32_t outBChannelOffset);
+
+// The AudioDeviceIOProc for the aggregate device (SPEC section 5). Pass it to
+// AudioDeviceCreateIOProcID with the DomineKernel as client data. Real-time
+// safe. It reads the layout atomics, views the input list from inFirstBuffer
+// on (a missing tap buffer is silence), derives the frame count from the
+// largest output buffer (mDataByteSize / (4 * mNumberChannels)), and calls
+// the renderer. NULL client data or output does nothing. Always returns 0.
+OSStatus domine_kernel_ioproc(AudioObjectID inDevice,
+                              const AudioTimeStamp *inNow,
+                              const AudioBufferList *inInputData,
+                              const AudioTimeStamp *inInputTime,
+                              AudioBufferList *outOutputData,
+                              const AudioTimeStamp *inOutputTime,
+                              void *_Nullable inClientData);
+
+#pragma clang assume_nonnull end
+#pragma clang diagnostic pop
 
 #ifdef __cplusplus
 }

@@ -27,6 +27,9 @@ struct DomineKernel {
     _Atomic int monoFallback;
     _Atomic int toneSide;
     _Atomic int muted;
+    _Atomic uint32_t layoutInFirstBuffer;
+    _Atomic uint32_t layoutOutA;
+    _Atomic uint32_t layoutOutB;
 
     // Meters: written by the render thread, read by any thread.
     _Atomic uint32_t peakABits;
@@ -110,19 +113,19 @@ static InChannel in_channel(const AudioBuffer *buf, uint32_t channel) {
     return c;
 }
 
-// Detects interleaved vs deinterleaved stereo input.
-static void resolve_input(const AudioBufferList *in, InChannel *left, InChannel *right) {
+// Detects interleaved vs deinterleaved stereo input in `count` buffers.
+static void resolve_input(const AudioBuffer *buffers, uint32_t count, InChannel *left, InChannel *right) {
     InChannel none = { NULL, 1, 0 };
     *left = none;
     *right = none;
-    if (in == NULL || in->mNumberBuffers == 0) return;
-    const AudioBuffer *b0 = &in->mBuffers[0];
+    if (buffers == NULL || count == 0) return;
+    const AudioBuffer *b0 = &buffers[0];
     if (b0->mNumberChannels >= 2) {
         *left = in_channel(b0, 0);
         *right = in_channel(b0, 1);
-    } else if (in->mNumberBuffers >= 2) {
+    } else if (count >= 2) {
         *left = in_channel(b0, 0);
-        *right = in_channel(&in->mBuffers[1], 0);
+        *right = in_channel(&buffers[1], 0);
     } else {
         *left = in_channel(b0, 0);
         *right = *left;
@@ -170,6 +173,9 @@ DomineKernel *domine_kernel_create(double sampleRate, uint32_t maxFrames) {
     atomic_init(&k->monoFallback, 0);
     atomic_init(&k->toneSide, 0);
     atomic_init(&k->muted, 0);
+    atomic_init(&k->layoutInFirstBuffer, 0);
+    atomic_init(&k->layoutOutA, 0);
+    atomic_init(&k->layoutOutB, 2);
     atomic_init(&k->peakABits, float_bits(0.0f));
     atomic_init(&k->peakBBits, float_bits(0.0f));
     return k;
@@ -223,13 +229,25 @@ float domine_kernel_peak(DomineKernel *k, int position) {
     return 0.0f;
 }
 
-void domine_kernel_process(DomineKernel *k,
-                           const AudioBufferList *in,
-                           AudioBufferList *out,
-                           uint32_t frames,
-                           uint32_t outAChannelOffset,
-                           uint32_t outBChannelOffset) {
-    if (k == NULL || out == NULL) return;
+void domine_kernel_set_layout(DomineKernel *k,
+                              uint32_t inFirstBuffer,
+                              uint32_t outAChannelOffset,
+                              uint32_t outBChannelOffset) {
+    if (k == NULL) return;
+    atomic_store_explicit(&k->layoutInFirstBuffer, inFirstBuffer, memory_order_relaxed);
+    atomic_store_explicit(&k->layoutOutA, outAChannelOffset, memory_order_relaxed);
+    atomic_store_explicit(&k->layoutOutB, outBChannelOffset, memory_order_relaxed);
+}
+
+// Shared renderer. The input is `inCount` buffers starting at `inBuffers`, so
+// the IOProc can pass a view into the aggregate's input list without copying.
+static void render(DomineKernel *k,
+                   const AudioBuffer *inBuffers,
+                   uint32_t inCount,
+                   AudioBufferList *out,
+                   uint32_t frames,
+                   uint32_t outAChannelOffset,
+                   uint32_t outBChannelOffset) {
 
     // Zero every output channel first; the kernel then writes only its own.
     for (uint32_t b = 0; b < out->mNumberBuffers; b++) {
@@ -255,7 +273,7 @@ void domine_kernel_process(DomineKernel *k,
     k->lastToneSide = toneSide;
 
     InChannel inL, inR;
-    resolve_input(in, &inL, &inR);
+    resolve_input(inBuffers, inCount, &inL, &inR);
 
     OutChannel a0 = {0}, a1 = {0}, b0 = {0}, b1 = {0};
     const int hasA0 = map_out_channel(out, outAChannelOffset, &a0);
@@ -319,4 +337,52 @@ void domine_kernel_process(DomineKernel *k,
 
     atomic_store_explicit(&k->peakABits, float_bits(peakA), memory_order_relaxed);
     atomic_store_explicit(&k->peakBBits, float_bits(peakB), memory_order_relaxed);
+}
+
+void domine_kernel_process(DomineKernel *k,
+                           const AudioBufferList *in,
+                           AudioBufferList *out,
+                           uint32_t frames,
+                           uint32_t outAChannelOffset,
+                           uint32_t outBChannelOffset) {
+    if (k == NULL || out == NULL) return;
+    const AudioBuffer *inBuffers = in != NULL ? in->mBuffers : NULL;
+    const uint32_t inCount = in != NULL ? in->mNumberBuffers : 0;
+    render(k, inBuffers, inCount, out, frames, outAChannelOffset, outBChannelOffset);
+}
+
+OSStatus domine_kernel_ioproc(AudioObjectID inDevice,
+                              const AudioTimeStamp *inNow,
+                              const AudioBufferList *inInputData,
+                              const AudioTimeStamp *inInputTime,
+                              AudioBufferList *outOutputData,
+                              const AudioTimeStamp *inOutputTime,
+                              void *inClientData) {
+    (void)inDevice;
+    (void)inNow;
+    (void)inInputTime;
+    (void)inOutputTime;
+    DomineKernel *k = (DomineKernel *)inClientData;
+    if (k == NULL || outOutputData == NULL) return 0;
+
+    const uint32_t first = atomic_load_explicit(&k->layoutInFirstBuffer, memory_order_relaxed);
+    const uint32_t outA = atomic_load_explicit(&k->layoutOutA, memory_order_relaxed);
+    const uint32_t outB = atomic_load_explicit(&k->layoutOutB, memory_order_relaxed);
+
+    uint32_t frames = 0;
+    for (uint32_t b = 0; b < outOutputData->mNumberBuffers; b++) {
+        const AudioBuffer *buf = &outOutputData->mBuffers[b];
+        if (buf->mNumberChannels == 0) continue;
+        const uint32_t n = buf->mDataByteSize / (uint32_t)(sizeof(float) * buf->mNumberChannels);
+        if (n > frames) frames = n;
+    }
+
+    const AudioBuffer *inBuffers = NULL;
+    uint32_t inCount = 0;
+    if (inInputData != NULL && first < inInputData->mNumberBuffers) {
+        inBuffers = inInputData->mBuffers + first;
+        inCount = inInputData->mNumberBuffers - first;
+    }
+    render(k, inBuffers, inCount, outOutputData, frames, outA, outB);
+    return 0;
 }
