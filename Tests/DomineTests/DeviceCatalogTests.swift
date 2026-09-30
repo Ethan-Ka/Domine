@@ -103,6 +103,11 @@ struct DeviceCatalogTests {
         #expect(OutputDevice.suffix(forUID: Self.gripA.uid) == "4F2A")
         #expect(OutputDevice.suffix(forUID: Self.gripB.uid) == "9C11")
     }
+
+    @Test func uidSuffixHashesNonAddressUIDs() {
+        #expect(OutputDevice.suffix(forUID: "BuiltInSpeakerDevice") == "DB08")
+        #expect(OutputDevice.suffix(forUID: "60-FD-A6-19-5B-B0:output") == "5BB0")
+    }
 }
 
 struct HALErrorTests {

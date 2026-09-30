@@ -24,9 +24,19 @@ struct OutputDevice: Identifiable, Equatable, Sendable {
         Self.suffix(forUID: uid)
     }
 
+    /// The last four hex digits of a Bluetooth address, or four hex digits of a
+    /// stable hash for UIDs that are not addresses ("BuiltInSpeakerDevice").
     static func suffix(forUID uid: String) -> String {
         let base = uid.split(separator: ":").first.map(String.init) ?? uid
-        let alphanumerics = base.filter { $0.isLetter || $0.isNumber }
-        return String(alphanumerics.suffix(4)).uppercased()
+        let hex = base.filter { $0 != "-" }
+        if hex.count == 12, hex.allSatisfy(\.isHexDigit) {
+            return String(hex.suffix(4)).uppercased()
+        }
+        // FNV-1a, folded to 16 bits. Stable across launches, unlike hashValue.
+        var hash: UInt32 = 2_166_136_261
+        for byte in uid.utf8 {
+            hash = (hash ^ UInt32(byte)) &* 16_777_619
+        }
+        return String(format: "%04X", (hash >> 16) ^ (hash & 0xFFFF))
     }
 }
