@@ -270,3 +270,15 @@ The toolbar already has a Stereo / Quad control with Quad disabled in v1. Quad m
 - The delay model becomes one offset per position relative to the slowest speaker, instead of a single signed value.
 - Four Bluetooth A2DP links at once is a real bandwidth risk; test on hardware before committing. Two Grips plus two different speakers is the likely test setup.
 - Kernel API changes: `set_gains` and `set_delay_ms` take a position index; `process` takes four channel offsets.
+
+## 12. Auto-calibration with clicks and the microphone (planned)
+
+Requested by the owner; replaces hand-tuning the delay slider as the normal path. The manual slider stays as an override.
+
+- Input: the Mac's built-in microphone only. Never a Bluetooth input (section 9, headset profile switch). Needs `NSMicrophoneUsageDescription` and its own permission prompt.
+- Measurement: the kernel plays a short click (or a chirp, which survives room noise better) on Front Left, waits, then on Front Right. Record both with the mic and cross-correlate each against the emitted signal to get each speaker's arrival time. The difference is the offset; write it to the delay setting.
+- Repeat about five times per side and take the median. Reject the run if the correlation peak is weak or the spread between repeats is over 2 ms, and tell the user to move the Mac or lower background noise.
+- The Mac's position matters: it measures arrival time at the Mac, not at the listener. The Tuning sheet says to put the Mac where the listener sits.
+- The "Play Click Test" button in the Tuning sheet mockup is the entry point. Add an "Auto-calibrate" button next to it.
+- Kernel support needed: a one-shot click/chirp generator per side with a sample-accurate start time reported back through an atomic, so the recording can be aligned to the emission.
+- Milestone: after M5, before quad mode. Quad mode reuses it to measure all four positions.

@@ -1,0 +1,62 @@
+name: Domine
+options:
+  bundleIdPrefix: com.ethankawley
+  deploymentTarget:
+    macOS: "14.4"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.4"
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    GCC_C_LANGUAGE_STANDARD: c11
+
+targets:
+  Domine:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/Domine
+    info:
+      path: Sources/Domine/Info.plist
+      properties:
+        CFBundleDisplayName: Domine
+        CFBundleShortVersionString: "0.1"
+        CFBundleVersion: "1"
+        LSApplicationCategoryType: public.app-category.music
+        NSAudioCaptureUsageDescription: Domine captures system audio to send the left channel to one speaker and the right channel to another.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ethankawley.Domine
+        ENABLE_HARDENED_RUNTIME: YES
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Sources/Domine/Info.plist
+
+  DomineTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/DomineTests
+    dependencies:
+      - target: Domine
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.ethankawley.DomineTests
+
+schemes:
+  Domine:
+    build:
+      targets:
+        Domine: all
+        DomineTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - DomineTests
