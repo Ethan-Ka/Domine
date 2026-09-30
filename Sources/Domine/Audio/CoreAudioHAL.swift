@@ -2,7 +2,8 @@ import CoreAudio
 import Foundation
 import os
 
-/// The real `AudioHAL`. The only file that calls `AudioObjectGetPropertyData` and friends.
+/// The real `AudioHAL`. The only file that calls Core Audio functions:
+/// property access, taps, aggregates, and IOProcs.
 final class CoreAudioHAL: AudioHAL {
     private static let log = Logger(subsystem: "com.ethankawley.Domine", category: "HAL")
     private let system = AudioObjectID(kAudioObjectSystemObject)
@@ -19,13 +20,29 @@ final class CoreAudioHAL: AudioHAL {
         try readString(device, kAudioObjectPropertyName)
     }
 
+    func deviceID(forUID uid: String) throws(HALError) -> AudioObjectID {
+        var addr = address(kAudioHardwarePropertyTranslateUIDToDevice)
+        var qualifier = uid as CFString
+        var id = AudioObjectID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioObjectID>.size)
+        let status = withUnsafePointer(to: &qualifier) {
+            AudioObjectGetPropertyData(system, &addr, UInt32(MemoryLayout<CFString>.size), $0, &size, &id)
+        }
+        try HALError.check(status, "AudioObjectGetPropertyData", selector: addr.mSelector)
+        return id
+    }
+
     func outputChannelCount(of device: AudioObjectID) throws(HALError) -> Int {
-        var addr = address(kAudioDevicePropertyStreamConfiguration, scope: kAudioObjectPropertyScopeOutput)
+        try streamChannels(of: device, scope: .output).reduce(0, +)
+    }
+
+    func streamChannels(of device: AudioObjectID, scope: StreamScope) throws(HALError) -> [Int] {
+        var addr = address(kAudioDevicePropertyStreamConfiguration, scope: scope.propertyScope)
         var size: UInt32 = 0
         try HALError.check(
             AudioObjectGetPropertyDataSize(device, &addr, 0, nil, &size),
             "AudioObjectGetPropertyDataSize", selector: addr.mSelector)
-        guard size > 0 else { return 0 }
+        guard size > 0 else { return [] }
         let raw = UnsafeMutableRawPointer.allocate(
             byteCount: Int(size), alignment: MemoryLayout<AudioBufferList>.alignment)
         defer { raw.deallocate() }
@@ -33,7 +50,15 @@ final class CoreAudioHAL: AudioHAL {
             AudioObjectGetPropertyData(device, &addr, 0, nil, &size, raw),
             "AudioObjectGetPropertyData", selector: addr.mSelector)
         let list = UnsafeMutableAudioBufferListPointer(raw.assumingMemoryBound(to: AudioBufferList.self))
-        return list.reduce(0) { $0 + Int($1.mNumberChannels) }
+        return list.map { Int($0.mNumberChannels) }
+    }
+
+    func nominalSampleRate(of device: AudioObjectID) throws(HALError) -> Double {
+        try readScalar(device, address(kAudioDevicePropertyNominalSampleRate), as: Float64.self)
+    }
+
+    func setNominalSampleRate(_ rate: Double, of device: AudioObjectID) throws(HALError) {
+        try writeScalar(device, address(kAudioDevicePropertyNominalSampleRate), Float64(rate))
     }
 
     func transportType(of device: AudioObjectID) throws(HALError) -> UInt32 {
@@ -71,6 +96,113 @@ final class CoreAudioHAL: AudioHAL {
                 Self.log.error("\(HALError(status, "AudioObjectRemovePropertyListenerBlock", selector: a.mSelector).description)")
             }
         }
+    }
+
+    // MARK: - Process taps
+
+    func ownProcessObject() throws(HALError) -> AudioObjectID {
+        var addr = address(kAudioHardwarePropertyTranslatePIDToProcessObject)
+        var pid = getpid()
+        var object = AudioObjectID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioObjectID>.size)
+        let status = AudioObjectGetPropertyData(
+            system, &addr, UInt32(MemoryLayout<pid_t>.size), &pid, &size, &object)
+        try HALError.check(status, "AudioObjectGetPropertyData", selector: addr.mSelector)
+        return object
+    }
+
+    func createProcessTap(excluding processes: [AudioObjectID]) throws(HALError) -> ProcessTap {
+        let description = CATapDescription(stereoGlobalTapButExcludeProcesses: processes)
+        description.name = "Domine"
+        description.muteBehavior = .muted
+        description.isPrivate = true
+        var tap = AudioObjectID(kAudioObjectUnknown)
+        try HALError.check(AudioHardwareCreateProcessTap(description, &tap), "AudioHardwareCreateProcessTap")
+        do {
+            return ProcessTap(id: tap, uid: try readString(tap, kAudioTapPropertyUID))
+        } catch {
+            // Do not leak a muting tap if its UID cannot be read.
+            let status = AudioHardwareDestroyProcessTap(tap)
+            if status != noErr {
+                Self.log.error("\(HALError(status, "AudioHardwareDestroyProcessTap").description)")
+            }
+            throw error
+        }
+    }
+
+    func destroyProcessTap(_ tap: AudioObjectID) throws(HALError) {
+        try HALError.check(AudioHardwareDestroyProcessTap(tap), "AudioHardwareDestroyProcessTap")
+    }
+
+    func tapFormat(of tap: AudioObjectID) throws(HALError) -> AudioStreamBasicDescription {
+        try readScalar(tap, address(kAudioTapPropertyFormat), as: AudioStreamBasicDescription.self)
+    }
+
+    // MARK: - Aggregate devices
+
+    func createAggregateDevice(_ description: [String: Any]) throws(HALError) -> AudioObjectID {
+        var device = AudioObjectID(kAudioObjectUnknown)
+        try HALError.check(
+            AudioHardwareCreateAggregateDevice(description as CFDictionary, &device),
+            "AudioHardwareCreateAggregateDevice")
+        return device
+    }
+
+    func destroyAggregateDevice(_ device: AudioObjectID) throws(HALError) {
+        try HALError.check(AudioHardwareDestroyAggregateDevice(device), "AudioHardwareDestroyAggregateDevice")
+    }
+
+    // MARK: - IOProcs
+
+    func createIOProc(
+        on device: AudioObjectID,
+        proc: AudioDeviceIOProc,
+        clientData: UnsafeMutableRawPointer?
+    ) throws(HALError) -> IOProcHandle {
+        var procID: AudioDeviceIOProcID?
+        try HALError.check(
+            AudioDeviceCreateIOProcID(device, proc, clientData, &procID), "AudioDeviceCreateIOProcID")
+        guard let procID else {
+            throw HALError(kAudioHardwareUnspecifiedError, "AudioDeviceCreateIOProcID")
+        }
+        return IOProcHandle(device: device, bits: unsafeBitCast(procID, to: UInt.self))
+    }
+
+    func setInputStreamUsage(_ enabled: [Bool], for proc: IOProcHandle) throws(HALError) {
+        var addr = address(kAudioDevicePropertyIOProcStreamUsage, scope: kAudioObjectPropertyScopeInput)
+        let flagsOffset = MemoryLayout<AudioHardwareIOProcStreamUsage>.offset(of: \.mStreamIsOn)!
+        let size = max(
+            flagsOffset + enabled.count * MemoryLayout<UInt32>.stride,
+            MemoryLayout<AudioHardwareIOProcStreamUsage>.size)
+        let raw = UnsafeMutableRawPointer.allocate(
+            byteCount: size, alignment: MemoryLayout<AudioHardwareIOProcStreamUsage>.alignment)
+        defer { raw.deallocate() }
+        raw.initializeMemory(as: UInt8.self, repeating: 0, count: size)
+        let usage = raw.assumingMemoryBound(to: AudioHardwareIOProcStreamUsage.self)
+        usage.pointee.mIOProc = UnsafeMutableRawPointer(bitPattern: proc.bits)!
+        usage.pointee.mNumberStreams = UInt32(enabled.count)
+        let flags = (raw + flagsOffset).assumingMemoryBound(to: UInt32.self)
+        for (index, on) in enabled.enumerated() { flags[index] = on ? 1 : 0 }
+        try HALError.check(
+            AudioObjectSetPropertyData(proc.device, &addr, 0, nil, UInt32(size), raw),
+            "AudioObjectSetPropertyData", selector: addr.mSelector)
+    }
+
+    func destroyIOProc(_ proc: IOProcHandle) throws(HALError) {
+        try HALError.check(
+            AudioDeviceDestroyIOProcID(proc.device, procID(proc)), "AudioDeviceDestroyIOProcID")
+    }
+
+    func startDevice(_ proc: IOProcHandle) throws(HALError) {
+        try HALError.check(AudioDeviceStart(proc.device, procID(proc)), "AudioDeviceStart")
+    }
+
+    func stopDevice(_ proc: IOProcHandle) throws(HALError) {
+        try HALError.check(AudioDeviceStop(proc.device, procID(proc)), "AudioDeviceStop")
+    }
+
+    private func procID(_ proc: IOProcHandle) -> AudioDeviceIOProcID {
+        unsafeBitCast(proc.bits, to: AudioDeviceIOProcID.self)
     }
 
     // MARK: - Helpers

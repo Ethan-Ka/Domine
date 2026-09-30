@@ -8,8 +8,8 @@ import os
 @Observable
 final class DeviceCatalog {
     /// UIDs starting with this belong to Domine's own aggregates and are never listed.
-    static let domineUIDPrefix = "com.ethankawley.Domine."
-    static let gripName = "JBL Grip"
+    nonisolated static let domineUIDPrefix = "com.ethankawley.Domine."
+    nonisolated static let gripName = "JBL Grip"
 
     private(set) var outputs: [OutputDevice] = []
     private(set) var defaultOutputUID: String?

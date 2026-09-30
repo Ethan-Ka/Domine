@@ -10,6 +10,10 @@ struct OutputDevice: Identifiable, Equatable, Sendable {
     let transportType: UInt32
 
     var isBluetooth: Bool {
+        Self.isBluetooth(transportType: transportType)
+    }
+
+    static func isBluetooth(transportType: UInt32) -> Bool {
         transportType == kAudioDeviceTransportTypeBluetooth
             || transportType == kAudioDeviceTransportTypeBluetoothLE
     }

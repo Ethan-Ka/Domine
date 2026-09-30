@@ -63,6 +63,7 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.ethankawley.DomineTests
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/Sources/DomineDSP
 
   DomineDSPTests:
     type: bundle.unit-test
