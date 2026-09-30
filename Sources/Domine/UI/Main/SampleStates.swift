@@ -61,5 +61,5 @@ enum SampleStates {
         delayMs: 4,
         isExtendedRange: false,
         balance: 0,
-        reportedLatencies: "macOS reports 182 ms (Left) and 178 ms (Right). Bluetooth reports are often off, so trust your ears.")
+        reportedLatencies: "Reported latency: left 182 ms, right 178 ms")
 }

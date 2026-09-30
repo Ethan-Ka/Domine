@@ -6,8 +6,10 @@ struct TuningState: Equatable, Sendable {
     var isExtendedRange: Bool
     /// -1 (all left) ... 0 (centered) ... 1 (all right).
     var balance: Double
-    /// e.g. "macOS reports 182 ms (Left) and 178 ms (Right). ..."
+    /// e.g. "Reported latency: left 182 ms, right 176 ms".
     var reportedLatencies: String?
+    /// Play Click Test needs a running engine.
+    var isClickTestAvailable = true
 
     static let normalRange = -50...50
     static let extendedRange = -300...300

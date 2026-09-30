@@ -78,6 +78,7 @@ private struct AssignRowView: View {
             .lineLimit(1)
             Spacer(minLength: 8)
             Button("Play tone") { actions.playTone(row.uid) }
+                .disabled(!row.canPlayTone)
                 .accessibilityLabel("Play tone on \(row.name) \(row.suffix)")
         }
         .padding(.vertical, 8)

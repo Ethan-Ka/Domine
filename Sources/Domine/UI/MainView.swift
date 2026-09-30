@@ -1,62 +1,23 @@
 import SwiftUI
 
-/// Temporary layout: engine controls above the live output list. Replaced by
-/// the stage layout from docs/mockups/Main.dc.html in M5.
+/// Hosts the main window content and its sheets, bound to `AppModel`.
 struct MainView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        let catalog = model.catalog
-        VStack(alignment: .leading, spacing: 0) {
-            EngineControls()
-                .padding(12)
-            Divider()
-            if catalog.showsGripPairingHint {
-                Text("Only one JBL Grip is connected. If the two are stereo-paired, unpair them in the JBL Portable app.")
-                    .font(.callout)
-                    .padding(12)
+        @Bindable var model = model
+        MainContentView(state: model.mainWindowState, actions: model.mainWindowActions)
+            .sheet(item: $model.assignPosition) { position in
+                AssignSheet(
+                    state: model.assignSheetState(for: position),
+                    actions: model.assignSheetActions(for: position))
             }
-            List(catalog.outputs) { device in
-                OutputRow(device: device, isDefault: device.uid == catalog.defaultOutputUID)
+            .sheet(isPresented: $model.showsTuning) {
+                TuningSheet(state: model.tuningState, actions: model.tuningActions)
             }
-            .overlay {
-                if catalog.outputs.isEmpty {
-                    ContentUnavailableView("No output devices", systemImage: "speaker.slash")
-                }
+            .sheet(isPresented: $model.showsWelcome) {
+                WelcomeView(state: model.welcomeState, actions: model.welcomeActions)
+                    .interactiveDismissDisabled()
             }
-            if let error = catalog.lastError {
-                Text(error.description)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                    .padding(12)
-            }
-        }
-        .onChange(of: catalog.outputs) { model.chooseDefaultSpeakers() }
-    }
-}
-
-private struct OutputRow: View {
-    let device: OutputDevice
-    let isDefault: Bool
-
-    var body: some View {
-        HStack {
-            Image(systemName: device.isBluetooth ? "hifispeaker" : "speaker.wave.2")
-                .frame(width: 20)
-            Text(device.name)
-            Text(device.uidSuffix)
-                .font(.caption.monospaced())
-                .foregroundStyle(.secondary)
-            Spacer()
-            Text("\(device.outputChannels) ch")
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-            if isDefault {
-                Text("System output")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
     }
 }

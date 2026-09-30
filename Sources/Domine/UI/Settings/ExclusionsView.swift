@@ -10,6 +10,7 @@ struct ExclusionsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Picker("Excluded apps play through:", selection: $state.playThroughDeviceUID) {
+                Text("Previous output").tag(String?.none)
                 ForEach(state.outputChoices) { choice in
                     Text(choice.label).tag(Optional(choice.uid))
                 }

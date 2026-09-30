@@ -1,0 +1,29 @@
+import AppKit
+
+/// System calls the model makes outside Core Audio: opening System Settings,
+/// Accessibility trust, the login item, and app names. Tests pass fakes.
+struct SystemServices: Sendable {
+    var openURL: @MainActor @Sendable (URL) -> Void
+    var isAccessibilityTrusted: @MainActor @Sendable () -> Bool
+    var requestAccessibility: @MainActor @Sendable () -> Void
+    var isLaunchAtLoginEnabled: @MainActor @Sendable () -> Bool
+    var setLaunchAtLogin: @MainActor @Sendable (Bool) throws -> Void
+    /// Display name of an installed app, or nil if it is not installed.
+    var appName: @MainActor @Sendable (_ bundleID: String) -> String?
+
+    static let bluetoothSettingsURL = URL(string: "x-apple.systempreferences:com.apple.Bluetooth")!
+    static let audioCaptureSettingsURL = URL(
+        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture")!
+
+    static let live = SystemServices(
+        openURL: { NSWorkspace.shared.open($0) },
+        isAccessibilityTrusted: { VolumeKeyTap.isTrusted },
+        requestAccessibility: { VolumeKeyTap.requestAccess() },
+        isLaunchAtLoginEnabled: { LaunchAtLogin.isEnabled },
+        setLaunchAtLogin: { try LaunchAtLogin.setEnabled($0) },
+        appName: { bundleID in
+            guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
+            let name = FileManager.default.displayName(atPath: url.path)
+            return name.hasSuffix(".app") ? String(name.dropLast(4)) : name
+        })
+}

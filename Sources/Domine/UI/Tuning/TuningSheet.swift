@@ -54,6 +54,7 @@ struct TuningSheet: View {
                     .fixedSize()
                 Spacer(minLength: 8)
                 Button("Play Click Test", action: actions.playClickTest)
+                    .disabled(!state.isClickTestAvailable)
                 Button("Auto-calibrate") { actions.autoCalibrate?() }
                     .disabled(actions.autoCalibrate == nil)
                     .help(actions.autoCalibrate == nil ? "Coming in a later version" : "")

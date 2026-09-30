@@ -8,6 +8,8 @@ struct AssignRow: Identifiable, Equatable, Sendable {
     /// or ["In use as Front Right"].
     var details: [String]
     var isSelected: Bool
+    /// "Play tone" is enabled only when the tone has a path to this device.
+    var canPlayTone = true
 
     var id: String { uid }
 }
