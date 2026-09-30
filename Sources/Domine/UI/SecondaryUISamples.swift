@@ -41,10 +41,10 @@ extension WelcomeState {
 
 extension StatusMenuState {
     static let sample = StatusMenuState(
-        statusText: "Playing · Stereo · In sync",
+        statusText: "Playing",
         isOn: true,
-        left: StatusMenuSpeaker(position: "Front Left", deviceLabel: "JBL Grip · 4F2A", isConnected: true),
-        right: StatusMenuSpeaker(position: "Front Right", deviceLabel: "JBL Grip · 9C11", isConnected: true),
+        left: StatusMenuSpeaker(position: "Front Left", deviceName: "JBL Grip", uidSuffix: "4F2A", isConnected: true),
+        right: StatusMenuSpeaker(position: "Front Right", deviceName: "JBL Grip", uidSuffix: "9C11", isConnected: true),
         masterVolume: 0.62
     )
 

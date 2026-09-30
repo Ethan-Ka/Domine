@@ -34,8 +34,13 @@ struct SecondaryUIRenderTests {
     /// Hosts the view in an offscreen window so AppKit-backed controls
     /// (toggles, popups, lists) draw for real, then snapshots it.
     private func render(_ view: some View, named name: String) throws {
+        try render(view, named: name, appearance: .aqua)
+        try render(view, named: name + "-dark", appearance: .darkAqua)
+    }
+
+    private func render(_ view: some View, named name: String, appearance: NSAppearance.Name) throws {
         let host = NSHostingView(rootView: view.background(.windowBackground))
-        host.appearance = NSAppearance(named: .aqua)
+        host.appearance = NSAppearance(named: appearance)
         let size = host.fittingSize
         host.frame = CGRect(origin: .zero, size: size)
         let window = NSWindow(

@@ -57,7 +57,7 @@ struct EngineControls: View {
         switch engine.state {
         case .idle: return engine.idleReason?.description ?? "Off"
         case .starting: return "Starting"
-        case .running: return engine.swapSides ? "Playing · Stereo · Swapped" : "Playing · Stereo"
+        case .running: return engine.swapSides ? "Playing, sides swapped" : "Playing"
         case .stopping: return "Stopping"
         case .error(let message): return "Error: \(message)"
         }
@@ -73,10 +73,10 @@ private struct SpeakerPicker: View {
         Picker(title, selection: $selection) {
             Text("None").tag(String?.none)
             ForEach(outputs) { device in
-                Text("\(device.name) · \(device.uidSuffix)").tag(Optional(device.uid))
+                Text(device.menuLabel).tag(Optional(device.uid))
             }
             if let selection, !outputs.contains(where: { $0.uid == selection }) {
-                Text("Not connected · \(OutputDevice.suffix(forUID: selection))").tag(Optional(selection))
+                Text("Not connected (\(OutputDevice.suffix(forUID: selection)))").tag(Optional(selection))
             }
         }
         .frame(maxWidth: 260)

@@ -2,7 +2,8 @@
 struct StatusMenuSpeaker: Equatable, Sendable {
     /// "Front Left" or "Front Right".
     var position: String
-    /// Device name plus UID suffix, e.g. "JBL Grip · 4F2A". Never the name alone.
-    var deviceLabel: String
+    var deviceName: String
+    /// Shown beside the name, since both Grips are called "JBL Grip".
+    var uidSuffix: String
     var isConnected: Bool
 }

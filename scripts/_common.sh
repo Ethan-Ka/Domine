@@ -12,5 +12,5 @@ require_tools() {
 
 # Drops the simulator and plug-in noise that Xcode prints on every run.
 quiet() {
-    grep -vE "DVTPlugIn|DVTCoreDevice|CoreSimulator|appintentsmetadataprocessor|linkd.autoShortcut" || true
+    grep -vE "DVTPlugIn|DVTCoreDevice|CoreSimulator|appintentsmetadataprocessor|linkd.autoShortcut|CUICatalog" || true
 }

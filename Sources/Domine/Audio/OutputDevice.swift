@@ -24,6 +24,16 @@ struct OutputDevice: Identifiable, Equatable, Sendable {
         Self.suffix(forUID: uid)
     }
 
+    /// Single-string label for menus and pickers, which cannot style parts
+    /// separately: "JBL Grip (4F2A)". Elsewhere show name and suffix as two views.
+    var menuLabel: String {
+        Self.menuLabel(name: name, uid: uid)
+    }
+
+    static func menuLabel(name: String, uid: String) -> String {
+        "\(name) (\(suffix(forUID: uid)))"
+    }
+
     /// The last four hex digits of a Bluetooth address, or four hex digits of a
     /// stable hash for UIDs that are not addresses ("BuiltInSpeakerDevice").
     static func suffix(forUID uid: String) -> String {

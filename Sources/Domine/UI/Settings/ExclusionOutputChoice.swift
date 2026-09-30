@@ -8,6 +8,6 @@ struct ExclusionOutputChoice: Identifiable, Equatable, Sendable {
 
     init(uid: String, name: String) {
         self.uid = uid
-        self.label = "\(name) · \(OutputDevice.suffix(forUID: uid))"
+        self.label = OutputDevice.menuLabel(name: name, uid: uid)
     }
 }

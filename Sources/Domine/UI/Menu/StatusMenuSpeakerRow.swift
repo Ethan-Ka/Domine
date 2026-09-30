@@ -12,8 +12,11 @@ struct StatusMenuSpeakerRow: View {
                 .accessibilityHidden(true)
             Text(speaker.position)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Text(speaker.deviceLabel)
+            Text(speaker.deviceName)
                 .foregroundStyle(.secondary)
+            Text(speaker.uidSuffix)
+                .font(.caption.monospaced())
+                .foregroundStyle(.tertiary)
         }
         .accessibilityElement(children: .combine)
         .accessibilityValue(speaker.isConnected ? "Connected" : "Not connected")

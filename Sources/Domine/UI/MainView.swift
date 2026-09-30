@@ -44,7 +44,10 @@ private struct OutputRow: View {
         HStack {
             Image(systemName: device.isBluetooth ? "hifispeaker" : "speaker.wave.2")
                 .frame(width: 20)
-            Text(device.name) + Text(" · \(device.uidSuffix)").foregroundStyle(.secondary)
+            Text(device.name)
+            Text(device.uidSuffix)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
             Spacer()
             Text("\(device.outputChannels) ch")
                 .foregroundStyle(.secondary)
