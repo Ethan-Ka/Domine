@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings, General</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#0066CC}a:hover{color:#004C99}
+</style>
+</helmet>
+<div style="width: 640px; height: 480px; position: relative; overflow: hidden; background: #ECECEC; border-radius: 10px; border: 1px solid #C4C4C4; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, &quot;SF Pro Text&quot;, &quot;Helvetica Neue&quot;, sans-serif; color: #1D1D1F; font-size: 13px">
+<div style="height: 76px; display: flex; flex-direction: column; background: #E8E8E8; border-bottom: 1px solid #D4D4D4; border-radius: 10px 10px 0 0; padding: 10px 20px 0; box-sizing: border-box">
+<div style="display: flex; align-items: center"><div style="display: flex; gap: 8px">
+<div style="width: 12px; height: 12px; border-radius: 6px; background: #FF5F57; border: 0.5px solid #E0443E"></div>
+<div style="width: 12px; height: 12px; border-radius: 6px; background: #FEBC2E; border: 0.5px solid #DEA123"></div>
+<div style="width: 12px; height: 12px; border-radius: 6px; background: #28C840; border: 0.5px solid #1AAB29"></div>
+</div><div style="flex-grow: 1; text-align: center; font-weight: 600; font-size: 13px; margin-right: 52px">General</div></div>
+<div style="display: flex; justify-content: center; gap: 4px; margin-top: 2px"><button type="button" aria-pressed="true" style="font-family: inherit; border: none; border-radius: 6px; padding: 4px 10px; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; background: #DCDCDF; color: #1D1D1F"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"></path></svg><span>General</span></button><button type="button" aria-pressed="false" style="font-family: inherit; border: none; border-radius: 6px; padding: 4px 10px; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; background: transparent; color: #3A3A3C"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M6 6l12 12"></path></svg><span>Exclusions</span></button></div>
+</div><div style="padding: 24px 32px; display: flex; flex-direction: column; gap: 18px">
+<div style="display: grid; grid-template-columns: 170px minmax(0, 1fr); column-gap: 14px">
+<div style="text-align: right; padding-top: 1px">Volume keys:</div>
+<div style="display: flex; flex-direction: column; gap: 8px"><label style="display: flex; gap: 8px; align-items: flex-start">
+<div style="width: 14px; height: 14px; box-sizing: border-box; border-radius: 4px; background: #0066CC; border: 1px solid #0066CC; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3L13 5"></path></svg></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span>Control Domine with the keyboard volume keys</span><span style="font-size: 11px; color: #6E6E73; line-height: 15px">Volume up, down, and mute change both speakers together and show the standard volume HUD.</span></div>
+</label></div>
+</div>
+<div style="height: 1px; background: #D8D8DC"></div>
+<div style="display: grid; grid-template-columns: 170px minmax(0, 1fr); column-gap: 14px">
+<div style="text-align: right; padding-top: 1px">When Domine stops:</div>
+<div style="display: flex; flex-direction: column; gap: 8px"><label style="display: flex; gap: 8px; align-items: flex-start">
+<div style="width: 14px; height: 14px; box-sizing: border-box; border-radius: 4px; background: #0066CC; border: 1px solid #0066CC; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3L13 5"></path></svg></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span>Switch back to the previous output</span><span style="font-size: 11px; color: #6E6E73; line-height: 15px">Also happens on Quit. Previous output: MacBook Pro Speakers.</span></div>
+</label></div>
+</div>
+<div style="height: 1px; background: #D8D8DC"></div>
+<div style="display: grid; grid-template-columns: 170px minmax(0, 1fr); column-gap: 14px">
+<div style="text-align: right; padding-top: 1px">Closing the window:</div>
+<div style="display: flex; flex-direction: column; gap: 8px"><label style="display: flex; gap: 8px; align-items: flex-start">
+<div style="width: 14px; height: 14px; box-sizing: border-box; border-radius: 7px; background: #FFFFFF; border: 4px solid #0066CC; flex-shrink: 0; margin-top: 1px"></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span>Keep playing in the background</span><span style="font-size: 11px; color: #6E6E73; line-height: 15px">Domine stays in the menu bar so you can check status or quit.</span></div>
+</label><label style="display: flex; gap: 8px; align-items: flex-start">
+<div style="width: 14px; height: 14px; box-sizing: border-box; border-radius: 7px; background: #FFFFFF; border: 1px solid #B0B0B5; flex-shrink: 0; margin-top: 1px"></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span>Stop playing</span><span style="font-size: 11px; color: #6E6E73; line-height: 15px">Closing the window turns Domine off.</span></div>
+</label></div>
+</div>
+<div style="display: grid; grid-template-columns: 170px minmax(0, 1fr); column-gap: 14px">
+<div style="text-align: right; padding-top: 1px"></div>
+<div style="display: flex; flex-direction: column; gap: 8px"><label style="display: flex; gap: 8px; align-items: flex-start">
+<div style="width: 14px; height: 14px; box-sizing: border-box; border-radius: 4px; background: #0066CC; border: 1px solid #0066CC; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3L13 5"></path></svg></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span>Start routing when both speakers connect</span><span style="font-size: 11px; color: #6E6E73; line-height: 15px">Works even if the window is closed.</span></div>
+</label></div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": 640, "height": 480}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
