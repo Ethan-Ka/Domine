@@ -1,0 +1,4 @@
+module DomineDSP {
+    header "include/DomineDSP.h"
+    export *
+}

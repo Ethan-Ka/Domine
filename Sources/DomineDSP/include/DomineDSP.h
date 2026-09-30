@@ -1,0 +1,121 @@
+#ifndef DOMINE_DSP_H
+#define DOMINE_DSP_H
+
+// Domine real-time render kernel (SPEC section 5).
+//
+// Threading: the setters and domine_kernel_peak may be called from any thread.
+// They only touch C11 atomics. domine_kernel_process runs on the real-time
+// audio thread and never allocates, locks, logs, or does I/O.
+// domine_kernel_create and domine_kernel_destroy allocate and free, so call
+// them only while no IOProc is using the kernel.
+//
+// Terms:
+//   Side: the source channel of the tapped stereo input, L or R.
+//   Position: the output speaker slot. Position A is the left speaker
+//   (Device A), position B is the right speaker (Device B). Swapping sides
+//   changes which side feeds which position; positions never move.
+
+#include <stdint.h>
+#include <CoreAudio/CoreAudioTypes.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct DomineKernel DomineKernel;
+
+/// Largest delay magnitude accepted by domine_kernel_set_delay_ms.
+#define DOMINE_MAX_DELAY_MS 300.0f
+
+/// Test tone frequency and amplitude (-12 dBFS).
+#define DOMINE_TONE_HZ 1000.0
+#define DOMINE_TONE_AMPLITUDE 0.25
+
+/// Length of the mute and unmute fade.
+#define DOMINE_FADE_MS 50.0
+
+/// Pass as outBChannelOffset when Device B is absent (one speaker only).
+#define DOMINE_NO_DEVICE UINT32_MAX
+
+/// Creates a kernel. Delay ring buffers are sized for 300 ms at 96 kHz (or at
+/// sampleRate if higher) and start zeroed. maxFrames is the IOProc buffer size
+/// the caller expects; process handles any frame count safely regardless.
+/// Returns NULL if sampleRate is not positive or allocation fails.
+DomineKernel *domine_kernel_create(double sampleRate, uint32_t maxFrames);
+
+/// Frees the kernel. Safe to call with NULL.
+void domine_kernel_destroy(DomineKernel *k);
+
+/// Per-position trim gains, linear. leftGain scales position A, rightGain
+/// scales position B, after any swap. Default 1.0 each. Non-finite or
+/// negative values are stored as 0.
+void domine_kernel_set_gains(DomineKernel *k, float leftGain, float rightGain);
+
+/// Signed delay offset in milliseconds, clamped to +-300 ms.
+///   signedDelayMs > 0: position B (right speaker) is delayed. Use this when
+///                      the right speaker plays early.
+///   signedDelayMs < 0: position A (left speaker) is delayed by |ms|. Use this
+///                      when the left speaker plays early.
+/// Only one position is ever delayed. Delay in samples is
+/// round(|ms| * sampleRate / 1000). Default 0.
+void domine_kernel_set_delay_ms(DomineKernel *k, float signedDelayMs);
+
+/// Channel mapping flags (each 0 or nonzero).
+///   monoPerSpeaker (default 1): each speaker gets its side on both of its
+///       channels. Required for mono speakers like the JBL Grip. When 0, each
+///       speaker gets its side on its first channel only and silence on its
+///       second channel.
+///   swapSides (default 0): L feeds position B and R feeds position A.
+///   monoFallback (default 0): every present speaker gets (L + R) / 2 on both
+///       of its channels, ignoring monoPerSpeaker and swapSides. Used when one
+///       speaker is missing (SPEC section 7).
+void domine_kernel_set_mode(DomineKernel *k, int monoPerSpeaker, int swapSides, int monoFallback);
+
+/// Test tone: 0 off, 1 position A (left speaker), 2 position B (right
+/// speaker). Positions are not affected by swapSides. While the tone is on,
+/// the chosen position plays a 1 kHz sine at -12 dBFS (amplitude 0.25) in
+/// place of program audio, on the same channels program audio would use, and
+/// the other position is silent. The tone ignores trim gain and delay but
+/// follows the mute fade. Its phase starts at 0 when the tone turns on (or
+/// changes position) and stays continuous across process calls.
+/// Other values are treated as 0.
+void domine_kernel_set_test_tone(DomineKernel *k, int side);
+
+/// Muted (nonzero) or unmuted (0). The output gain ramps linearly toward the
+/// target over 50 ms of samples (round(0.05 * sampleRate)). A new kernel
+/// starts unmuted at full gain with no ramp.
+void domine_kernel_set_muted(DomineKernel *k, int muted);
+
+/// Renders one IOProc cycle. Real-time safe.
+///
+/// in: float32 stereo from the tap, either interleaved (one buffer with 2 or
+///     more channels; the first two are used) or deinterleaved (two or more
+///     buffers; the first channel of the first two buffers is used). A single
+///     mono buffer feeds both sides. NULL or empty input is silence.
+/// out: float32 output of the aggregate, any number of buffers, each
+///     interleaved with any channel count. Channel offsets are flat indexes
+///     across all output channels in buffer order (buffer 0's channels first,
+///     then buffer 1's, and so on). Device A uses outAChannelOffset and
+///     outAChannelOffset + 1; Device B uses outBChannelOffset and
+///     outBChannelOffset + 1. Pass DOMINE_NO_DEVICE for an absent device.
+///     Channels that do not exist in out are skipped. Every output channel the
+///     kernel does not write is zeroed.
+/// frames: frames to render. Buffers shorter than this (by mDataByteSize) are
+///     read as silence past their end and never written past their end.
+void domine_kernel_process(DomineKernel *k,
+                           const AudioBufferList *in,
+                           AudioBufferList *out,
+                           uint32_t frames,
+                           uint32_t outAChannelOffset,
+                           uint32_t outBChannelOffset);
+
+/// Peak absolute sample value written to a position during the most recent
+/// process call (SPEC section 3a). position 0 = A (left), 1 = B (right).
+/// Returns 0 for other values.
+float domine_kernel_peak(DomineKernel *k, int position);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

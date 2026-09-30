@@ -21,6 +21,8 @@ targets:
     platform: macOS
     sources:
       - Sources/Domine
+    dependencies:
+      - target: DomineDSP
     info:
       path: Sources/Domine/Info.plist
       properties:
@@ -35,6 +37,20 @@ targets:
         ENABLE_HARDENED_RUNTIME: YES
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: Sources/Domine/Info.plist
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/Sources/DomineDSP
+
+  DomineDSP:
+    type: library.static
+    platform: macOS
+    sources:
+      - path: Sources/DomineDSP
+        excludes:
+          - module.modulemap
+    settings:
+      base:
+        GCC_WARN_PEDANTIC: YES
+        CLANG_WARN_DOCUMENTATION_COMMENTS: YES
+        GCC_TREAT_WARNINGS_AS_ERRORS: YES
 
   DomineTests:
     type: bundle.unit-test
@@ -48,15 +64,30 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.ethankawley.DomineTests
 
+  DomineDSPTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/DomineDSPTests
+    dependencies:
+      - target: DomineDSP
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.ethankawley.DomineDSPTests
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/Sources/DomineDSP
+
 schemes:
   Domine:
     build:
       targets:
         Domine: all
         DomineTests: [test]
+        DomineDSPTests: [test]
     run:
       config: Debug
     test:
       config: Debug
       targets:
         - DomineTests
+        - DomineDSPTests
