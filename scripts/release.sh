@@ -88,7 +88,19 @@ run xcodebuild -exportArchive -quiet \
     -exportOptionsPlist "$OPTIONS"
 
 run ditto -c -k --keepParent "$APP_OUT" "$ZIP"
-run xcrun notarytool submit "$ZIP" --keychain-profile "$NOTARY_PROFILE" --wait
+if [ "$DRY_RUN" -eq 1 ]; then
+    run xcrun notarytool submit "$ZIP" --keychain-profile "$NOTARY_PROFILE" --wait --output-format plist
+else
+    # notarytool can exit 0 on a rejected submission, so check the status it reports.
+    RESULT="$OUT/notary-result.plist"
+    xcrun notarytool submit "$ZIP" --keychain-profile "$NOTARY_PROFILE" --wait --output-format plist > "$RESULT"
+    STATUS=$(/usr/libexec/PlistBuddy -c "Print :status" "$RESULT" 2>/dev/null || echo unknown)
+    if [ "$STATUS" != "Accepted" ]; then
+        ID=$(/usr/libexec/PlistBuddy -c "Print :id" "$RESULT" 2>/dev/null || echo "")
+        echo "Notarization status: $STATUS. See why with: xcrun notarytool log $ID --keychain-profile $NOTARY_PROFILE" >&2
+        exit 1
+    fi
+fi
 run xcrun stapler staple "$APP_OUT"
 
 # Re-zip so the distributed archive carries the stapled ticket.
