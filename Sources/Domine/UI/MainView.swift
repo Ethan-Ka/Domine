@@ -1,13 +1,16 @@
 import SwiftUI
 
-/// M1 placeholder: the live output list. Replaced by the stage layout from
-/// docs/mockups/Main.dc.html in a later milestone.
+/// Temporary layout: engine controls above the live output list. Replaced by
+/// the stage layout from docs/mockups/Main.dc.html in M5.
 struct MainView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
         let catalog = model.catalog
         VStack(alignment: .leading, spacing: 0) {
+            EngineControls()
+                .padding(12)
+            Divider()
             if catalog.showsGripPairingHint {
                 Text("Only one JBL Grip is connected. If the two are stereo-paired, unpair them in the JBL Portable app.")
                     .font(.callout)
@@ -29,6 +32,7 @@ struct MainView: View {
                     .padding(12)
             }
         }
+        .onChange(of: catalog.outputs) { model.chooseDefaultSpeakers() }
     }
 }
 

@@ -22,9 +22,10 @@ final class AppModel {
         catalog.start()
         chooseDefaultSpeakers()
         guard terminationObserver == nil else { return }
-        // Never leave a muting tap behind on quit.
+        // Never leave a muting tap behind on quit. AppKit posts this on the
+        // main thread; a nil queue runs the block before termination continues.
         terminationObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+            forName: NSApplication.willTerminateNotification, object: nil, queue: nil
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.engine.stop() }
         }

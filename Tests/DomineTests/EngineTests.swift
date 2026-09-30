@@ -5,8 +5,8 @@ import Testing
 
 @MainActor
 struct EngineTests {
-    static let gripA = FakeHAL.Device(uid: "60-FD-A6-19-4F-2A:output", name: "JBL Grip", sampleRate: 44_100)
-    static let gripB = FakeHAL.Device(uid: "60-FD-A6-19-9C-11:output", name: "JBL Grip", sampleRate: 44_100)
+    nonisolated static let gripA = FakeHAL.Device(uid: "60-FD-A6-19-4F-2A:output", name: "JBL Grip", sampleRate: 44_100)
+    nonisolated static let gripB = FakeHAL.Device(uid: "60-FD-A6-19-9C-11:output", name: "JBL Grip", sampleRate: 44_100)
 
     static let left: [Float] = [0.1, 0.2, 0.3, 0.4]
     static let right: [Float] = [-0.1, -0.2, -0.3, -0.4]
