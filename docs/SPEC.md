@@ -79,6 +79,7 @@ Domine takes over the routing itself so it can control exactly which samples rea
    - Device B channels 1 and 2 both receive the right channel.
    - This "mono per speaker" mode is required for the Grip. Its single driver plays (ch1 + ch2) / 2, so sending the left signal on ch1 alone would come out at half amplitude. For stereo speakers it is still the right default.
    - Per-side gain and per-side delay applied in the kernel.
+   - The aggregate can publish its stream layout a moment after `AudioHardwareCreateAggregateDevice` returns. Poll `kAudioDevicePropertyStreamConfiguration` until the output channel count equals the sub-devices' sum and the tap's input stream is present, rather than assuming it is ready.
 4. Start with `AudioDeviceStart`. Tear down in reverse order on stop: stop device, destroy IOProc, destroy aggregate, destroy tap.
 
 Why this approach: no kernel extension or HAL driver install, no admin password, no coreaudiod restart, and the user never has to touch Audio MIDI Setup. The cost is the macOS 14.4 minimum and a one-time audio capture permission prompt.
@@ -174,6 +175,8 @@ void domine_kernel_process(DomineKernel *k,
 
 The channel offsets come from the aggregate's output stream layout, which the Swift side reads once at start (`kAudioDevicePropertyStreamConfiguration`). Do not assume the layout; Bluetooth devices can expose one stereo stream or separate mono streams. An offset is a flat index across all output channels in buffer order (buffer 0's channels, then buffer 1's). `DOMINE_NO_DEVICE` as the B offset means only Device A is present (mono fallback).
 
+Input streams in the aggregate list sub-device inputs first, then the tap's streams, so the tap's first buffer index is the number of sub-device input buffers. Bluetooth outputs have no input streams (macOS splits them into separate ":input" and ":output" devices); the engine refuses to start if one does, and disables any other sub-device inputs with `kAudioDevicePropertyIOProcStreamUsage`. This ordering is an assumption to confirm on hardware.
+
 The IOProc itself is a C function in `DomineDSP` (`domine_kernel_ioproc`, passed to `AudioDeviceCreateIOProcID` with the kernel as client data), so no Swift runs on the audio thread at all. The Swift side stores the layout in the kernel through atomics before starting the device.
 
 ## 6. App structure (Swift)
@@ -236,6 +239,7 @@ States: `idle`, `starting`, `running`, `degraded(reason)`, `stopping`, `error(me
 - On `kAudioHardwarePropertyDevices` change: if either selected device disappeared, go to `degraded(.monoFallback(missing: side))`: rebuild the aggregate with the remaining speaker only and set the kernel to mono mode, sending (L+R)/2 to both of its channels at the same master volume. When the missing speaker returns (matched by UID), rebuild with both and return to stereo. Fade 50 ms out and in across each rebuild to avoid clicks.
 - If both speakers are gone, go to `idle` and restore the previous output (section 4c).
 - On `kAudioDevicePropertyDeviceIsAlive` = 0 for a sub-device: same as disappearance.
+- Setting a nominal sample rate takes effect asynchronously, so the aggregate can change rate after the kernel was created. Listen for `kAudioDevicePropertyNominalSampleRate` on the aggregate and rebuild when it changes.
 - On sleep/wake (`NSWorkspace` notifications): stop before sleep, rebuild after wake.
 - Every rebuild creates a fresh tap and aggregate. Never try to patch a live aggregate.
 - On quit, always destroy the tap and aggregate. On launch, look for and destroy any stale private aggregate with Domine's UID prefix left by a crash.
@@ -244,7 +248,7 @@ States: `idle`, `starting`, `running`, `degraded(reason)`, `stopping`, `error(me
 
 - `Info.plist`: `NSAudioCaptureUsageDescription` (required for process taps; without it the tap silently returns no audio).
 - Hardened runtime on. No sandbox for v1: aggregate device and tap behavior under the App Sandbox has not been verified, and the app is distributed outside the App Store anyway.
-- If the user denies audio capture, show a clear message with a button that opens the Privacy & Security pane.
+- A tap without capture permission returns silence, and there is no reliable API to detect a denial. Detect it best-effort (all-zero tap input for several seconds while another app is known to be playing) and then show a message with a button that opens the Privacy & Security pane.
 
 ## 9. Known risks
 
