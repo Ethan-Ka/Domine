@@ -39,15 +39,14 @@ struct MainBottomBar: View {
         .frame(height: 84)
     }
 
-    @ViewBuilder
+    /// One stable toggle per side. A button that swapped styles was rebuilt on
+    /// every change and could miss the click that turns the tone off.
     private func testButton(_ title: String, side: StereoSide) -> some View {
-        let button = Button(title) { actions.toggleTestTone(side) }
-            .accessibilityValue(state.testToneSide == side ? "Playing" : "")
-        if state.testToneSide == side {
-            button.buttonStyle(.borderedProminent)
-        } else {
-            button
-        }
+        Toggle(title, isOn: Binding(
+            get: { state.testToneSide == side },
+            set: { _ in actions.toggleTestTone(side) }))
+            .toggleStyle(.button)
+            .disabled(!state.canPlayTestTones)
     }
 }
 

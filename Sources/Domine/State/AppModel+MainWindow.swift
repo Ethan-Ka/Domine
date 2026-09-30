@@ -15,6 +15,7 @@ extension AppModel {
             ],
             masterVolume: Double(pairSettings.masterVolume),
             testToneSide: testToneSide,
+            canPlayTestTones: engine.state == .running,
             bannerMessage: catalog.showsGripPairingHint ? Self.gripPairingHint : nil)
     }
 

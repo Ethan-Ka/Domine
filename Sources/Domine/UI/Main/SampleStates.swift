@@ -42,7 +42,8 @@ enum SampleStates {
                 position: .frontRight, sideTag: "R", statusText: "Choose a speaker",
                 connection: .unassigned),
         ],
-        masterVolume: 0.62)
+        masterVolume: 0.62,
+        canPlayTestTones: false)
 
     static let assign = AssignSheetState(
         position: .frontLeft,

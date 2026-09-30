@@ -141,6 +141,14 @@ final class AppModelTests {
         #expect(model.mainWindowState.testToneSide == .left)
         model.toggleTestTone(.left)
         #expect(model.engine.testTone == .off)
+        #expect(model.mainWindowState.testToneSide == nil)
+    }
+
+    @Test func testTonesDisabledUntilRunning() async {
+        addGripsAndStart()
+        #expect(!model.mainWindowState.canPlayTestTones)
+        await model.startRouting()
+        #expect(model.mainWindowState.canPlayTestTones)
     }
 
     @Test func metersRunOnlyWhileRunning() async {

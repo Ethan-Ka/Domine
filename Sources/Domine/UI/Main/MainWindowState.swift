@@ -14,6 +14,8 @@ struct MainWindowState: Equatable, Sendable {
     var masterVolume: Double
     /// The side whose test tone is playing, if any.
     var testToneSide: StereoSide?
+    /// Tones need the engine running; Test L and Test R are disabled otherwise.
+    var canPlayTestTones: Bool
     /// Shown at the bottom of the stage, e.g. while in mono fallback.
     var bannerMessage: String?
 
@@ -26,6 +28,7 @@ struct MainWindowState: Equatable, Sendable {
         speakers: [SpeakerCardState],
         masterVolume: Double,
         testToneSide: StereoSide? = nil,
+        canPlayTestTones: Bool = true,
         bannerMessage: String? = nil
     ) {
         self.statusLine = statusLine
@@ -36,6 +39,7 @@ struct MainWindowState: Equatable, Sendable {
         self.speakers = speakers
         self.masterVolume = masterVolume
         self.testToneSide = testToneSide
+        self.canPlayTestTones = canPlayTestTones
         self.bannerMessage = bannerMessage
     }
 
