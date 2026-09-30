@@ -28,6 +28,7 @@ Status: early development. Nothing here produces a usable app yet. See [the mile
 | `./scripts/xcode.sh` | Open the project in Xcode for breakpoints |
 | `./scripts/reset-permissions.sh` | Forget the audio capture and microphone grants so macOS asks again |
 | `./scripts/clean.sh` | Delete `build/` and the generated project |
+| `./scripts/release.sh` | Archive, Developer ID sign, notarize, and staple into `build/release/` (see [Releasing](#releasing)) |
 
 A typical loop: edit, `./scripts/test.sh`, then `./scripts/run.sh --logs` to try it.
 
@@ -42,6 +43,25 @@ xcodegen generate
 xcodebuild -scheme Domine -configuration Debug -destination 'platform=macOS' build
 xcodebuild -scheme Domine -destination 'platform=macOS' test
 ```
+
+## Releasing
+
+One-time setup:
+
+1. Install a Developer ID Application certificate in your login keychain (Xcode > Settings > Accounts > Manage Certificates).
+2. Store notary credentials under a profile name, using an app-specific password from appleid.apple.com:
+
+   ```sh
+   xcrun notarytool store-credentials NAME --apple-id you@example.com --team-id TEAMID
+   ```
+
+Each release:
+
+```sh
+DEVELOPMENT_TEAM=TEAMID NOTARY_PROFILE=NAME ./scripts/release.sh
+```
+
+The stapled app is `build/release/export/Domine.app` and the zip to distribute is `build/release/Domine.zip`. Add `--dry-run` to print the commands without running them.
 
 ## Using two JBL Grips
 
