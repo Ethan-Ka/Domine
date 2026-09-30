@@ -12,9 +12,30 @@ Status: early development. Nothing here produces a usable app yet. See [the mile
 - Xcode 16 or later
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen): `brew install xcodegen`
 
-## Build
+## Development
 
-`project.yml` is the source of truth. The `.xcodeproj` is generated and not checked in.
+`project.yml` is the source of truth. The `.xcodeproj` is generated and not checked in, so every script regenerates it first. Build output goes to `build/`.
+
+| Script | What it does |
+|---|---|
+| `./scripts/run.sh` | Build, quit any running copy, launch the Debug app |
+| `./scripts/run.sh --logs` | Same, then stream the app's log in the terminal |
+| `./scripts/test.sh` | Run every unit test |
+| `./scripts/test.sh DomineDSPTests` | Run one test target (or `Target/Suite`, `Target/Suite/test()`) |
+| `./scripts/build.sh` | Build only |
+| `./scripts/stop.sh` | Quit Domine; force-quits after 5 seconds |
+| `./scripts/logs.sh` | Stream log messages from the `com.ethankawley.Domine` subsystem |
+| `./scripts/xcode.sh` | Open the project in Xcode for breakpoints |
+| `./scripts/reset-permissions.sh` | Forget the audio capture and microphone grants so macOS asks again |
+| `./scripts/clean.sh` | Delete `build/` and the generated project |
+
+A typical loop: edit, `./scripts/test.sh`, then `./scripts/run.sh --logs` to try it.
+
+While Domine is running, it mutes system audio everywhere except the two speakers. If the app hangs, `./scripts/stop.sh` brings the sound back: Core Audio removes a quit process's tap and private aggregate device.
+
+The first time the engine starts, macOS asks for permission to capture system audio. Dev builds are ad-hoc signed, so a rebuild can leave a stale grant that makes the tap return silence. If the speakers go quiet after a rebuild, run `./scripts/reset-permissions.sh` and allow access again.
+
+The same commands without the scripts:
 
 ```sh
 xcodegen generate
