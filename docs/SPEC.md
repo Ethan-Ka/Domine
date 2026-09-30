@@ -208,7 +208,9 @@ Domine/
       Input/
         VolumeKeyTap.swift  CGEventTap for media volume keys
       State/
-        Settings.swift      per-pair settings keyed by "uidA|uidB", stored in UserDefaults
+        Settings.swift      per-pair settings keyed by the two UIDs in sorted order ("uid1|uid2"), stored in UserDefaults.
+                            Delay and balance describe the physical speakers, so when Front Left is the second
+                            UID the stored delay and balance are read and written with their sign flipped.
         AppModel.swift      @Observable model the UI binds to
     DomineDSP/              C target: kernel.c, include/DomineDSP.h, module.modulemap
   Tests/
