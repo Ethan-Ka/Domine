@@ -10,6 +10,22 @@ struct GeneralSettingsState: Equatable, Sendable {
             case .stopPlaying: "Stop playing"
             }
         }
+
+        var caption: String {
+            switch self {
+            case .keepPlaying: "Audio keeps playing. Click Domine in the Dock to open the window again."
+            case .stopPlaying: "Closing the window turns Domine off."
+            }
+        }
+    }
+
+    static let volumeKeysCaption = "Volume up, down, and mute change both speakers together while Domine is playing."
+    static let accessibilityMissingCaption = "Domine does not have Accessibility access, so the keys still control the Mac. If Domine is already on in the Accessibility list, remove it and add it again."
+    static let autoStartCaption = "Works even if the window is closed."
+
+    var restoreCaption: String {
+        guard let previousOutputName else { return "Also happens on Quit." }
+        return "Also happens on Quit. Previous output: \(previousOutputName)."
     }
 
     var volumeKeysEnabled = false
