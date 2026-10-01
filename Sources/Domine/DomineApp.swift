@@ -30,5 +30,22 @@ struct DomineApp: App {
             AppSettingsView()
                 .environment(model)
         }
+
+        // Only in background mode, and never in the test host (SPEC 6a).
+        MenuBarExtra("Domine", systemImage: "hifispeaker.2.fill", isInserted: menuBarItemInserted) {
+            BackgroundMenu()
+                .environment(model)
+        }
+        .menuBarExtraStyle(.window)
+    }
+
+    /// If the user removes the item from the menu bar, the window comes back,
+    /// so Domine is never left running with no way to reach it.
+    private var menuBarItemInserted: Binding<Bool> {
+        Binding(
+            get: { !Self.isTestHost && model.isInBackground },
+            set: { [model] inserted in
+                if !inserted && model.isInBackground { model.showMainWindow() }
+            })
     }
 }

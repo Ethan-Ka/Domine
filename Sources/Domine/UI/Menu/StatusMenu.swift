@@ -50,7 +50,7 @@ struct StatusMenu: View {
             Button { actions.openMainWindow() } label: {
                 StatusMenuItemLabel(title: "Open Domine")
             }
-            SettingsLink {
+            Button { actions.openSettings() } label: {
                 StatusMenuItemLabel(title: "Settings…", shortcut: "⌘,")
             }
             .keyboardShortcut(",", modifiers: .command)
