@@ -49,16 +49,22 @@ extension AppModel {
         }
     }
 
-    /// Test tones are positional: left is position A, the Front Left card.
+    /// The side whose test tone is sounding. The kernel tone is positional
+    /// (`.left` is position A, the Front Left card), so it is mapped back
+    /// through the swap.
     private var testToneSide: StereoSide? {
+        let onA: Bool
         if engine.state != .running, let playing = tones.playingUID {
-            return playing == leftUID ? .left : playing == rightUID ? .right : nil
+            guard playing == leftUID || playing == rightUID else { return nil }
+            onA = playing == leftUID
+        } else {
+            switch engine.testTone {
+            case .off: return nil
+            case .left: onA = true
+            case .right: onA = false
+            }
         }
-        return switch engine.testTone {
-        case .off: nil
-        case .left: .left
-        case .right: .right
-        }
+        return onA != engine.swapSides ? .left : .right
     }
 
     /// A front card. Front Left is always position A (the `leftUID` device);

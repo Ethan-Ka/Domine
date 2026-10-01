@@ -199,17 +199,19 @@ final class AppModel {
 
     // MARK: - Test tones
 
-    /// One short tone on that side: through the engine while routing (which
-    /// also checks the routing), otherwise directly on that side's speaker.
+    /// One short tone on the speaker that plays that side: through the engine
+    /// while routing (which also checks the routing), otherwise directly on
+    /// that speaker. While swapped, the left side is position B.
     func playTestTone(_ side: StereoSide) {
+        let onA = (side == .left) != engine.swapSides
         guard engine.state == .running else {
-            if let uid = side == .left ? leftUID : rightUID, catalog.device(uid: uid) != nil {
+            if let uid = onA ? leftUID : rightUID, catalog.device(uid: uid) != nil {
                 tones.play(uid: uid)
             }
             return
         }
         tones.stop()
-        playTones([(side == .left ? .left : .right, DeviceTonePlayer.duration)])
+        playTones([(onA ? .left : .right, DeviceTonePlayer.duration)])
     }
 
     /// Plays each tone for its duration, then turns the tone off. Only while running.
