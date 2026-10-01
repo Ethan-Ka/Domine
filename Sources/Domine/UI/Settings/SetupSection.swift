@@ -15,9 +15,9 @@ struct SetupSection: View {
 
             LabeledContent("Audio capture:") {
                 row(state.captureText, ok: state.captureStatus == .working) {
-                    Button("Request Access") { actions.requestCapture() }
-                        .disabled(state.isCheckingCapture)
                     if state.captureStatus != .working {
+                        Button("Request Access") { actions.requestCapture() }
+                            .disabled(state.isCheckingCapture)
                         Button("Open Privacy Settings") { actions.openPrivacySettings() }
                     }
                 }
@@ -33,7 +33,9 @@ struct SetupSection: View {
 
             LabeledContent("Speakers:") {
                 row(state.speakersText, ok: state.connectedGrips >= 2) {
-                    Button("Open Bluetooth Settings") { actions.openBluetoothSettings() }
+                    if state.connectedGrips < 2 {
+                        Button("Open Bluetooth Settings") { actions.openBluetoothSettings() }
+                    }
                 }
             }
 

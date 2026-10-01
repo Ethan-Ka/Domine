@@ -53,11 +53,20 @@ struct TuningSheet: View {
                     .toggleStyle(.checkbox)
                     .fixedSize()
                 Spacer(minLength: 8)
-                Button("Play Click Test", action: actions.playClickTest)
+                Button(state.isClickTestPlaying ? "Stop Click Test" : "Play Click Test",
+                       action: actions.playClickTest)
                     .disabled(!state.isClickTestAvailable)
                 Button("Auto-calibrate") { actions.autoCalibrate?() }
                     .disabled(actions.autoCalibrate == nil)
                     .help(actions.autoCalibrate == nil ? "Coming in a later version" : "")
+            }
+            if let message = state.clickTestMessage {
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(.red)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .help(message)
             }
             if let latencies = state.reportedLatencies {
                 Text(latencies)

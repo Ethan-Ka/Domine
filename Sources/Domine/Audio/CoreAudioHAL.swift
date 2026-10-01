@@ -107,6 +107,49 @@ final class CoreAudioHAL: AudioHAL {
         try readScalar(device, address(kAudioDevicePropertyTransportType), as: UInt32.self)
     }
 
+    // MARK: - Hardware volume
+
+    func volumeElements(of device: AudioObjectID) throws(HALError) -> [AudioObjectPropertyElement] {
+        if try isVolumeSettable(device, element: kAudioObjectPropertyElementMain) {
+            return [kAudioObjectPropertyElementMain]
+        }
+        let channels = try outputChannelCount(of: device)
+        guard channels > 0 else { return [] }
+        var elements: [AudioObjectPropertyElement] = []
+        for channel in 1...AudioObjectPropertyElement(channels) where try isVolumeSettable(device, element: channel) {
+            elements.append(channel)
+        }
+        return elements
+    }
+
+    func volume(of device: AudioObjectID, element: AudioObjectPropertyElement) throws(HALError) -> Float {
+        try readScalar(device, volumeAddress(element), as: Float32.self)
+    }
+
+    func setVolume(_ volume: Float, of device: AudioObjectID, element: AudioObjectPropertyElement) throws(HALError) {
+        try writeScalar(device, volumeAddress(element), Float32(min(max(volume, 0), 1)))
+    }
+
+    private func volumeAddress(_ element: AudioObjectPropertyElement) -> AudioObjectPropertyAddress {
+        AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyVolumeScalar,
+            mScope: kAudioObjectPropertyScopeOutput,
+            mElement: element)
+    }
+
+    /// True when the element has an output volume and it can be set.
+    private func isVolumeSettable(_ device: AudioObjectID, element: AudioObjectPropertyElement) throws(HALError) -> Bool {
+        var addr = volumeAddress(element)
+        guard AudioObjectHasProperty(device, &addr) else { return false }
+        var settable: DarwinBoolean = false
+        try HALError.check(
+            AudioObjectIsPropertySettable(device, &addr, &settable),
+            "AudioObjectIsPropertySettable", selector: addr.mSelector)
+        return settable.boolValue
+    }
+
+    // MARK: - Default output
+
     func defaultOutputDevice() throws(HALError) -> AudioObjectID {
         try readScalar(system, address(kAudioHardwarePropertyDefaultOutputDevice), as: AudioObjectID.self)
     }

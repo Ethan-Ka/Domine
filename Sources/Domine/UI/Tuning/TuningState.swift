@@ -8,8 +8,12 @@ struct TuningState: Equatable, Sendable {
     var balance: Double
     /// e.g. "Reported latency: left 182 ms, right 176 ms".
     var reportedLatencies: String?
-    /// Play Click Test needs a running engine.
+    /// Clicks are playing; the button reads Stop Click Test.
+    var isClickTestPlaying = false
+    /// False while routing is starting or stopping.
     var isClickTestAvailable = true
+    /// Why the click test could not start, in one short line.
+    var clickTestMessage: String?
 
     static let normalRange = -50...50
     static let extendedRange = -300...300

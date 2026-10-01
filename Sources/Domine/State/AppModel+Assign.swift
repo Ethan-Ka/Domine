@@ -50,7 +50,7 @@ extension AppModel {
         }
         return AssignSheetState(
             position: position, note: nil, rows: rows,
-            footnote: catalog.showsGripPairingHint ? Self.gripPairingHint : nil)
+            footnote: showsGripPairingHint ? Self.gripPairingHint : nil)
     }
 
     func assignSheetActions(for position: SpeakerPosition) -> AssignSheetActions {

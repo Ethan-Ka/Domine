@@ -1,20 +1,15 @@
 /// The Sync & Balance sheet (docs/mockups/Tuning.dc.html). Every change is
 /// saved for the current pair and reaches the kernel at once.
 extension AppModel {
-    /// Click test: left, a short gap, then right.
-    static let clickTestSteps: [(TestTone, Duration)] = [
-        (.left, .milliseconds(300)),
-        (.off, .milliseconds(200)),
-        (.right, .milliseconds(300)),
-    ]
-
     var tuningState: TuningState {
         TuningState(
             delayMs: Int(pairSettings.delayMs.rounded()),
             isExtendedRange: pairSettings.extendedRange,
             balance: Double(pairSettings.balance),
             reportedLatencies: reportedLatencyText,
-            isClickTestAvailable: engine.state == .running)
+            isClickTestPlaying: engine.clickTest,
+            isClickTestAvailable: engine.state != .starting && engine.state != .stopping,
+            clickTestMessage: clickTestMessage)
     }
 
     var tuningActions: TuningActions {
@@ -22,7 +17,7 @@ extension AppModel {
             setDelayMs: { [weak self] in self?.setDelayMs($0) },
             setExtendedRange: { [weak self] in self?.setExtendedRange($0) },
             setBalance: { [weak self] in self?.setBalance($0) },
-            playClickTest: { [weak self] in self?.playTones(Self.clickTestSteps) },
+            playClickTest: { [weak self] in self?.toggleClickTest() },
             autoCalibrate: nil,
             reset: { [weak self] in self?.resetTuning() },
             done: { [weak self] in self?.showsTuning = false })
@@ -30,7 +25,50 @@ extension AppModel {
 
     func openTuning() {
         reportedLatencyText = readReportedLatencies()
+        clickTestMessage = nil
         showsTuning = true
+    }
+
+    /// Clicks on both speakers at once, through the delay line, so moving the
+    /// delay slider moves one speaker's click against the other's. Starts
+    /// routing first when it is off, since only the real path can be aligned.
+    func toggleClickTest() {
+        if engine.clickTest || clickTestTask != nil {
+            stopClickTest()
+            return
+        }
+        clickTestMessage = nil
+        if engine.state == .running {
+            cancelTone()
+            engine.clickTest = true
+            return
+        }
+        guard !engine.state.isActive else { return }
+        clickTestTask = Task { [weak self] in
+            guard let self else { return }
+            await self.startRouting()
+            defer { self.clickTestTask = nil }
+            guard !Task.isCancelled, self.showsTuning else { return }
+            guard self.engine.state == .running else {
+                self.clickTestMessage = self.routingFailureText
+                return
+            }
+            self.cancelTone()
+            self.engine.clickTest = true
+        }
+    }
+
+    func stopClickTest() {
+        clickTestTask?.cancel()
+        clickTestTask = nil
+        if engine.clickTest { engine.clickTest = false }
+    }
+
+    /// One short line on why routing did not start.
+    private var routingFailureText: String {
+        if let refusal = routingRefusal { return refusal }
+        if let reason = engine.idleReason { return reason.description }
+        return Self.routingErrorMessage
     }
 
     func setDelayMs(_ ms: Int) {

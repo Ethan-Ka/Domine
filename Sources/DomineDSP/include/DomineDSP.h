@@ -40,6 +40,13 @@ typedef struct DomineKernel DomineKernel;
 /// Length of the test tone's linear fade in and fade out.
 #define DOMINE_TONE_FADE_MS 40.0
 
+/// Click test (domine_kernel_set_click_test): a Hann-windowed 2 kHz burst,
+/// 2 ms long, peak amplitude 0.5, once every 1000 ms.
+#define DOMINE_CLICK_HZ 2000.0
+#define DOMINE_CLICK_AMPLITUDE 0.5
+#define DOMINE_CLICK_MS 2.0
+#define DOMINE_CLICK_PERIOD_MS 1000.0
+
 /// Length of the mute and unmute fade.
 #define DOMINE_FADE_MS 50.0
 
@@ -102,6 +109,29 @@ void domine_kernel_set_mode(DomineKernel *k, int monoPerSpeaker, int swapSides, 
 /// position, first fades the current tone out; once p reaches 0 the new
 /// request takes over (program alone, or the new position from phase 0).
 void domine_kernel_set_test_tone(DomineKernel *k, int side);
+
+/// Click test mode: 0 off, 1 clicks. Other values are treated as 0 (reserved
+/// for later modes). Used to line the two speakers up by ear. While mode 1 is
+/// on, the same click is fed to both positions in place of program
+/// audio, before the delay line, so each position's delay and trim gain apply
+/// to it exactly as to program audio (and swapSides and monoFallback do not
+/// change it). With a delay of d samples the delayed position plays each
+/// click d samples after the other.
+///
+/// Program audio crossfades with the click source over the test tone's fade,
+/// L = round(0.04 * sampleRate) samples, with level c stepping like the tone's
+/// level: each sample uses e = c / L, then c steps by one toward L (on) or 0
+/// (off). The source on each position is program * (1 - e) plus the click
+/// sample, which is nonzero only while c == L and the click test is on.
+///
+/// The click generator counts samples n from the first sample at which c == L
+/// with the click test on, wrapping every P = round(sampleRate * 1.0) samples.
+/// For n < N = round(0.002 * sampleRate) the click sample is
+///     0.5 * (0.5 - 0.5 * cos(2 pi n / N)) * sin(2 pi * 2000 * n / sampleRate)
+/// computed in double and converted to float; otherwise 0. Turning the click
+/// test off stops the generator at once (n resets to 0) and fades program
+/// audio back in. The test tone, when on, still overrides the delayed output.
+void domine_kernel_set_click_test(DomineKernel *k, int mode);
 
 /// Muted (nonzero) or unmuted (0). The output gain ramps linearly toward the
 /// target over 50 ms of samples (round(0.05 * sampleRate)). A new kernel

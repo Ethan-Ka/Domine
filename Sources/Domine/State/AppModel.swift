@@ -1,4 +1,5 @@
 import AppKit
+import CoreAudio
 import Observation
 import os
 
@@ -14,6 +15,21 @@ final class AppModel {
     /// Identification tones on a single device while routing is off.
     let tones: DeviceTonePlayer
     @ObservationIgnored let store: SettingsStore
+    /// The selected speakers' hardware volumes, kept linked (SPEC 4a).
+    @ObservationIgnored let volumeLink: SpeakerVolumeLink
+    /// Moves the default output off the pair and back (SPEC 4c).
+    @ObservationIgnored let outputRestorer: OutputRestorer
+
+    /// Why the last start request did not route, when the engine was never
+    /// asked to start. Shown as the status line while idle.
+    private(set) var routingRefusal: String?
+    /// The user turned routing off this session. Blocks auto-start until a
+    /// selected speaker disconnects and comes back (SPEC 6a).
+    @ObservationIgnored var userTurnedRoutingOff = false
+    /// Both selected speakers were present at the last catalog sync.
+    @ObservationIgnored var bothSpeakersWerePresent = false
+    /// The pending auto-start, so tests can wait for it.
+    @ObservationIgnored var autoStartTask: Task<Void, Never>?
 
     /// Selected speakers, by UID. `leftUID` is the Front Left device, which is
     /// always kernel position A. Change them with `setSpeakers(left:right:)`.
@@ -26,9 +42,16 @@ final class AppModel {
     var assignPosition: SpeakerPosition?
     /// The radio selection in that sheet.
     var assignSelection: String?
-    var showsTuning = false
+    /// Closing the tuning sheet stops the click test.
+    var showsTuning = false {
+        didSet { if !showsTuning { stopClickTest() } }
+    }
     /// Read from the HAL each time the tuning sheet opens.
     var reportedLatencyText: String?
+    /// Why the click test could not start routing, shown in the tuning sheet.
+    var clickTestMessage: String?
+    /// Starting routing for the click test. Tests await it.
+    @ObservationIgnored var clickTestTask: Task<Void, Never>?
 
     /// First-run checklist sheet.
     var showsWelcome: Bool
@@ -49,6 +72,9 @@ final class AppModel {
         didSet { exclusionsDidChange(from: oldValue) }
     }
     @ObservationIgnored let services: SystemServices
+    /// The login item waits for approval in System Settings. Re-read with
+    /// Accessibility trust in `refreshSystemStatus`.
+    var loginItemNeedsApproval = false
     @ObservationIgnored var isRefreshingSystemStatus = false
 
     static let log = Logger(subsystem: "com.ethankawley.Domine", category: "AppModel")
@@ -66,11 +92,18 @@ final class AppModel {
         VolumeHUDPanel.shared.show(volume: volume, isMuted: muted)
     }
     @ObservationIgnored var activationObserver: (any NSObjectProtocol)?
+    /// Re-checks Accessibility while volume keys wait for it (AppModel+VolumeKeys).
+    @ObservationIgnored var trustPollTask: Task<Void, Never>?
+    /// Last reason the volume key tap was not running, so it is logged once.
+    @ObservationIgnored var lastVolumeKeyTapBlock: String?
 
     init(hal: any AudioHAL = CoreAudioHAL(), defaults: UserDefaults = .standard,
          services: SystemServices = .live) {
         let store = SettingsStore(defaults: defaults)
-        catalog = DeviceCatalog(hal: hal)
+        let catalog = DeviceCatalog(hal: hal)
+        self.catalog = catalog
+        volumeLink = SpeakerVolumeLink(hal: hal)
+        outputRestorer = OutputRestorer(hal: hal, store: store, outputs: { catalog.outputs })
         engine = Engine(hal: hal)
         captureAccess = AudioCapturePermission(hal: hal, store: store)
         tones = DeviceTonePlayer(hal: hal)
@@ -79,14 +112,19 @@ final class AppModel {
         showsWelcome = !store.hasCompletedWelcome
         generalSettings = Self.makeGeneralSettings(store: store, services: services)
         exclusionsSettings = Self.makeExclusionsSettings(store: store, services: services)
+        loginItemNeedsApproval = services.launchAtLoginRequiresApproval()
         leftUID = store.lastLeftUID
         rightUID = store.lastRightUID
         pairSettings = Self.loadPairSettings(store: store, left: leftUID, right: rightUID)
         applyPairSettingsToEngine()
+        volumeLink.onExternalChange = { [weak self] volume in self?.adoptHardwareVolume(volume) }
     }
 
     func start() {
         catalog.start()
+        if !engine.state.isActive {
+            outputRestorer.recoverAfterCrash(enabled: store.restorePreviousOutput)
+        }
         syncWithCatalog()
         syncWithEngine()
         guard terminationObserver == nil else { return }
@@ -120,9 +158,13 @@ final class AppModel {
         if wasActive { stopRouting() }
         leftUID = left
         rightUID = right
+        routingRefusal = nil
         store.lastLeftUID = left
         store.lastRightUID = right
         pairSettings = Self.loadPairSettings(store: store, left: left, right: right)
+        // A new pair is not a speaker connecting, so it never auto-starts.
+        bothSpeakersWerePresent = bothSelectedSpeakersPresent
+        syncVolumeLink()
         applyPairSettingsToEngine()
         if wasActive {
             Task { await startRouting() }
@@ -139,7 +181,9 @@ final class AppModel {
 
     // MARK: - Routing
 
+    /// The user's on/off switch.
     func setRouting(_ on: Bool) {
+        userTurnedRoutingOff = !on
         if on {
             Task { await startRouting() }
         } else {
@@ -147,16 +191,52 @@ final class AppModel {
         }
     }
 
+    /// Moves the default output off the pair, links the speaker volumes,
+    /// and starts the engine. A start that does not end up routing puts the
+    /// previous output back.
     func startRouting() async {
+        guard !engine.state.isActive else { return }
         tones.stop()
+        routingRefusal = nil
+        if let left = leftUID, let right = rightUID, left != right,
+           catalog.device(uid: left) != nil, catalog.device(uid: right) != nil {
+            do throws(OutputRestorer.Failure) {
+                try outputRestorer.prepareForRouting(
+                    pair: [left, right], playThroughUID: store.excludedAppsPlayThroughUID)
+            } catch .noOtherOutput {
+                routingRefusal = Self.noOtherOutputMessage
+                syncWithEngine()
+                return
+            } catch {
+                Self.log.error("Could not check the default output: \(String(describing: error), privacy: .public)")
+            }
+            syncSettingsWithCatalog()
+            syncVolumeLink()
+            if let volume = volumeLink.relink() { adoptHardwareVolume(volume) }
+        }
         applyPairSettingsToEngine()
         await engine.start(left: leftUID, right: rightUID)
+        if !engine.state.isActive {
+            outputRestorer.restore(enabled: store.restorePreviousOutput)
+        }
         syncWithEngine()
     }
 
+    static let noOtherOutputMessage = "No other output for the Mac's own sound; connect one"
+
+    /// The only refusal is `noOtherOutputMessage`; it goes away as soon as
+    /// an output outside the pair appears.
+    private func clearRefusalIfResolved() {
+        guard routingRefusal != nil,
+              catalog.outputs.contains(where: { $0.uid != leftUID && $0.uid != rightUID }) else { return }
+        routingRefusal = nil
+    }
+
     func stopRouting() {
+        stopClickTest()
         cancelTone()
         engine.stop()
+        outputRestorer.restore(enabled: store.restorePreviousOutput)
         syncWithEngine()
     }
 
@@ -166,10 +246,47 @@ final class AppModel {
 
     // MARK: - Tuning and volume
 
-    /// Master volume, 0...1. For now a kernel gain on both positions; hardware
-    /// volume linking (SPEC section 4a) replaces what this applies, not its callers.
+    /// Master volume, 0...1: the hardware volume of both speakers (SPEC 4a).
+    /// A speaker without a settable volume gets it as a kernel gain instead.
     func setMasterVolume(_ volume: Double) {
-        updatePairSettings { $0.masterVolume = Float(volume) }
+        let value = min(max(Float(volume), 0), 1)
+        if volumeLink.volume != nil { volumeLink.set(value) }
+        updatePairSettings { $0.masterVolume = value }
+    }
+
+    /// Shows a volume read from the speakers as the master value, without
+    /// writing it back to them.
+    func adoptHardwareVolume(_ volume: Float) {
+        updatePairSettings { $0.masterVolume = volume }
+    }
+
+    /// Selected speakers that are present, with their current device IDs.
+    private var presentSpeakers: [(uid: String, id: AudioObjectID)] {
+        var seen = Set<String>()
+        return [leftUID, rightUID].compactMap { uid in
+            guard let uid, seen.insert(uid).inserted, let device = catalog.device(uid: uid) else { return nil }
+            return (uid, device.id)
+        }
+    }
+
+    var bothSelectedSpeakersPresent: Bool {
+        guard let left = leftUID, let right = rightUID, left != right else { return false }
+        return catalog.device(uid: left) != nil && catalog.device(uid: right) != nil
+    }
+
+    /// Re-attaches the volume link when the present speakers or their IDs
+    /// changed. Attaching links both speakers to the lower volume, which
+    /// becomes the master value.
+    func syncVolumeLink() {
+        let present = presentSpeakers
+        let current = Dictionary(present.map { ($0.uid, $0.id) }, uniquingKeysWith: { first, _ in first })
+        guard current != volumeLink.attachedDevices else { return }
+        if present.isEmpty {
+            volumeLink.detach()
+        } else if let volume = volumeLink.attach(present) {
+            adoptHardwareVolume(volume)
+        }
+        applyPairSettingsToEngine()
     }
 
     /// Edits the current pair's tuning, saves it, and pushes it to the kernel.
@@ -186,10 +303,17 @@ final class AppModel {
         applyPairSettingsToEngine()
     }
 
-    private func applyPairSettingsToEngine() {
-        engine.leftGain = pairSettings.leftGain * pairSettings.masterVolume
-        engine.rightGain = pairSettings.rightGain * pairSettings.masterVolume
+    /// Balance is always a kernel gain. Master volume is a kernel gain only
+    /// for a speaker whose hardware volume Domine cannot set.
+    func applyPairSettingsToEngine() {
+        engine.leftGain = pairSettings.leftGain * kernelVolume(for: leftUID)
+        engine.rightGain = pairSettings.rightGain * kernelVolume(for: rightUID)
         engine.delayMs = pairSettings.delayMs
+    }
+
+    private func kernelVolume(for uid: String?) -> Float {
+        if let uid, volumeLink.hasHardwareVolume(uid: uid) { return 1 }
+        return pairSettings.masterVolume
     }
 
     private static func loadPairSettings(store: SettingsStore, left: String?, right: String?) -> PairSettings {
@@ -240,8 +364,32 @@ final class AppModel {
     /// Called whenever the output list changes.
     func syncWithCatalog() {
         for device in catalog.outputs { knownNames[device.uid] = device.name }
+        clearRefusalIfResolved()
         chooseDefaultSpeakers()
         syncSettingsWithCatalog()
+        syncVolumeLink()
+        autoStartIfSpeakersConnected()
+    }
+
+    /// "Start routing when both speakers connect" (SPEC 6a): starts when both
+    /// selected speakers become present while routing is off. After the user
+    /// turned routing off, it waits until a speaker disconnects and returns.
+    func autoStartIfSpeakersConnected() {
+        let present = bothSelectedSpeakersPresent
+        let connected = present && !bothSpeakersWerePresent
+        bothSpeakersWerePresent = present
+        if !present, leftUID != nil, rightUID != nil { userTurnedRoutingOff = false }
+        guard connected, store.startWhenBothConnect, !userTurnedRoutingOff, !engine.state.isActive else { return }
+        Self.log.info("Both speakers connected; starting routing")
+        autoStartTask = Task { [weak self] in await self?.startRouting() }
+    }
+
+    /// The main window closed. With "Stop playing" routing stops; with "Keep
+    /// playing" it continues and the Dock icon brings the window back.
+    func mainWindowDidClose() {
+        guard store.closeBehavior == .stopPlaying, engine.state.isActive else { return }
+        userTurnedRoutingOff = true
+        stopRouting()
     }
 
     /// Called whenever the engine state changes: meters poll only while running.
@@ -254,6 +402,7 @@ final class AppModel {
         } else if meters.isRunning {
             meters.stop()
         }
+        if engine.state != .running && engine.clickTest { engine.clickTest = false }
         updateVolumeKeyTap()
     }
 

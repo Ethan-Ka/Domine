@@ -2,8 +2,11 @@ import ServiceManagement
 
 /// Thin wrapper over `SMAppService.mainApp` for the launch at login setting.
 enum LaunchAtLogin {
+    /// Registered, including a registration that still waits for approval in
+    /// System Settings; the Setup section shows that case separately.
     static var isEnabled: Bool {
-        SMAppService.mainApp.status == .enabled
+        let status = SMAppService.mainApp.status
+        return status == .enabled || status == .requiresApproval
     }
 
     /// True when the user must approve the login item in System Settings.

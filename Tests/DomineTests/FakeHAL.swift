@@ -22,6 +22,10 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
         var actualSampleRate: Double? = nil
         var availableSampleRates: [ClosedRange<Double>] = [44_100...44_100, 48_000...48_000]
         var bufferFrameSize: UInt32 = 512
+        /// Settable output volume per element. The default matches a JBL
+        /// Grip: no main element, channels 1 and 2 only. Empty means the
+        /// device has no settable volume.
+        var volumes: [AudioObjectPropertyElement: Float] = [1: 0.5, 2: 0.5]
 
         var outputLayout: [Int] { outputStreams ?? (outputChannels > 0 ? [outputChannels] : []) }
     }
@@ -63,6 +67,14 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
     private var ioProcs: [IOProcHandle: IOProc] = [:]
     private var running: Set<IOProcHandle> = []
     private var aggregateStreamReads = 0
+    private var _volumeWrites: [VolumeWrite] = []
+    private var _defaultOutputWrites: [String] = []
+
+    struct VolumeWrite: Equatable {
+        let uid: String
+        let element: AudioObjectPropertyElement
+        let volume: Float
+    }
 
     /// Status returned by the next read of any device property. Cleared after use.
     var failNextRead: OSStatus?
@@ -120,6 +132,36 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
             defaultOutput = devices.first { $0.value.uid == uid }?.key ?? kAudioObjectUnknown
         }
         fire(.defaultOutputDevice)
+    }
+
+    /// Changes a device's volume from outside Domine, like the + button on a
+    /// Grip, and notifies listeners for every element unless `notify` is false.
+    @MainActor
+    func pressVolume(uid: String, to volume: Float, notify: Bool = true) {
+        let changed: (AudioObjectID, [AudioObjectPropertyElement])? = lock.withLock {
+            guard let id = devices.first(where: { $0.value.uid == uid })?.key,
+                  let elements = devices[id]?.volumes.keys else { return nil }
+            for element in elements { devices[id]?.volumes[element] = volume }
+            return (id, elements.sorted())
+        }
+        guard notify, let (id, elements) = changed else { return }
+        elements.forEach { fire(.volume(id, element: $0)) }
+    }
+
+    /// The device's volume on each element, keyed by element.
+    func volumes(uid: String) -> [AudioObjectPropertyElement: Float] {
+        lock.withLock { devices.values.first { $0.uid == uid }?.volumes ?? [:] }
+    }
+
+    /// Every volume write Domine made, in order.
+    var volumeWrites: [VolumeWrite] { lock.withLock { _volumeWrites } }
+    func clearVolumeWrites() { lock.withLock { _volumeWrites = [] } }
+
+    /// UIDs Domine made the default output, in order.
+    var defaultOutputWrites: [String] { lock.withLock { _defaultOutputWrites } }
+
+    var defaultOutputUID: String? {
+        lock.withLock { devices[defaultOutput]?.uid }
     }
 
     func id(forUID uid: String) -> AudioObjectID? {
@@ -285,9 +327,40 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
         }
     }
 
+    func volumeElements(of device: AudioObjectID) throws(HALError) -> [AudioObjectPropertyElement] {
+        try self.device(device, kAudioDevicePropertyVolumeScalar).volumes.keys.sorted()
+    }
+
+    func volume(of device: AudioObjectID, element: AudioObjectPropertyElement) throws(HALError) -> Float {
+        let d = try self.device(device, kAudioDevicePropertyVolumeScalar)
+        guard let volume = d.volumes[element] else {
+            throw HALError(kAudioHardwareUnknownPropertyError, "AudioObjectGetPropertyData", selector: kAudioDevicePropertyVolumeScalar)
+        }
+        return volume
+    }
+
+    /// Like the real HAL, a write notifies listeners, including Domine's own.
+    func setVolume(_ volume: Float, of device: AudioObjectID, element: AudioObjectPropertyElement) throws(HALError) {
+        try locked { () throws(HALError) in
+            guard let d = devices[device], d.volumes[element] != nil else {
+                throw HALError(kAudioHardwareUnknownPropertyError, "AudioObjectSetPropertyData", selector: kAudioDevicePropertyVolumeScalar)
+            }
+            devices[device]?.volumes[element] = volume
+            _volumeWrites.append(VolumeWrite(uid: d.uid, element: element, volume: volume))
+        }
+        MainActor.assumeIsolated { fire(.volume(device, element: element)) }
+    }
+
     func defaultOutputDevice() throws(HALError) -> AudioObjectID { lock.withLock { defaultOutput } }
     func setDefaultOutputDevice(_ device: AudioObjectID) throws(HALError) {
-        lock.withLock { defaultOutput = device }
+        try locked { () throws(HALError) in
+            guard let d = devices[device] else {
+                throw HALError(kAudioHardwareBadDeviceError, "AudioObjectSetPropertyData", selector: kAudioHardwarePropertyDefaultOutputDevice)
+            }
+            defaultOutput = device
+            _defaultOutputWrites.append(d.uid)
+        }
+        MainActor.assumeIsolated { fire(.defaultOutputDevice) }
     }
 
     func addListener(

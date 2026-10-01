@@ -224,12 +224,15 @@ final class AppModelTests {
         #expect(model.engine.peaks() == (0, 0))
     }
 
-    @Test func masterVolumeIsSavedAndScalesKernelGains() {
+    @Test func masterVolumeIsSavedAndSetsBothSpeakers() {
         addGripsAndStart()
         model.setMasterVolume(0.8)
         #expect(model.mainWindowState.masterVolumePercent == 80)
-        #expect(model.engine.leftGain == 0.8)
-        #expect(model.engine.rightGain == 0.8)
+        // Hardware volume carries master; the kernel gain stays at unity.
+        #expect(model.engine.leftGain == 1)
+        #expect(model.engine.rightGain == 1)
+        #expect(hal.volumes(uid: Self.gripA.uid) == [1: 0.8, 2: 0.8])
+        #expect(hal.volumes(uid: Self.gripB.uid) == [1: 0.8, 2: 0.8])
         #expect(model.store.pairSettings(leftUID: Self.gripA.uid, rightUID: Self.gripB.uid).masterVolume == 0.8)
     }
 
@@ -282,8 +285,8 @@ final class AppModelTests {
         model.setBalance(0.5)
         model.setMasterVolume(0.8)
         #expect(model.engine.delayMs == 12)
-        #expect(abs(model.engine.leftGain - 0.4) < 1e-6)
-        #expect(model.engine.rightGain == 0.8)
+        #expect(model.engine.leftGain == 0.5)
+        #expect(model.engine.rightGain == 1)
         let stored = model.store.pairSettings(leftUID: Self.gripA.uid, rightUID: Self.gripB.uid)
         #expect(stored == PairSettings(delayMs: 12, balance: 0.5, masterVolume: 0.8))
         #expect(model.tuningState.delayMs == 12)
@@ -292,8 +295,8 @@ final class AppModelTests {
         // Swapping the pair flips the same physical tuning.
         model.assign(Self.gripB.uid, to: .frontLeft)
         #expect(model.engine.delayMs == -12)
-        #expect(model.engine.leftGain == 0.8)
-        #expect(abs(model.engine.rightGain - 0.4) < 1e-6)
+        #expect(model.engine.leftGain == 1)
+        #expect(model.engine.rightGain == 0.5)
 
         // A fresh model loads it back.
         let reloaded = newModel()
@@ -333,17 +336,64 @@ final class AppModelTests {
         model.openTuning()
         #expect(model.showsTuning)
         #expect(model.tuningState.reportedLatencies == "Reported latency: left 182 ms, right 176 ms")
-        #expect(!model.tuningState.isClickTestAvailable)
+        #expect(model.tuningState.isClickTestAvailable)
+        #expect(!model.tuningState.isClickTestPlaying)
     }
 
-    @Test func clickTestStartsOnTheLeft() async {
+    @Test func clickTestTogglesWhileRouting() async {
         addGripsAndStart()
         await model.startRouting()
-        #expect(model.tuningState.isClickTestAvailable)
+        model.openTuning()
         model.tuningActions.playClickTest()
-        #expect(model.engine.testTone == .left)
-        model.cancelTone()
+        #expect(model.engine.clickTest)
         #expect(model.engine.testTone == .off)
+        #expect(model.tuningState.isClickTestPlaying)
+        model.tuningActions.setDelayMs(7)
+        #expect(model.engine.delayMs == 7)
+        #expect(model.engine.clickTest)
+        model.tuningActions.playClickTest()
+        #expect(!model.engine.clickTest)
+        #expect(!model.tuningState.isClickTestPlaying)
+        #expect(model.engine.state == .running)
+    }
+
+    @Test func clickTestStartsRoutingWhenOff() async {
+        addGripsAndStart()
+        model.openTuning()
+        model.tuningActions.playClickTest()
+        await model.clickTestTask?.value
+        #expect(model.engine.state == .running)
+        #expect(model.engine.clickTest)
+        #expect(model.tuningState.clickTestMessage == nil)
+    }
+
+    @Test func clickTestShowsWhyRoutingCouldNotStart() async {
+        hal.add(Self.gripA)
+        model.start()
+        model.openTuning()
+        model.tuningActions.playClickTest()
+        await model.clickTestTask?.value
+        #expect(!model.engine.clickTest)
+        #expect(model.tuningState.clickTestMessage == "Choose a left speaker")
+        model.openTuning()
+        #expect(model.tuningState.clickTestMessage == nil)
+    }
+
+    @Test func clickTestStopsWithTheSheetOrRouting() async {
+        addGripsAndStart()
+        await model.startRouting()
+        model.openTuning()
+        model.tuningActions.playClickTest()
+        model.tuningActions.done()
+        #expect(!model.engine.clickTest)
+
+        model.openTuning()
+        model.tuningActions.playClickTest()
+        #expect(model.engine.clickTest)
+        model.setRouting(false)
+        #expect(!model.engine.clickTest)
+        await model.startRouting()
+        #expect(!model.engine.clickTest)
     }
 
     // MARK: Settings

@@ -63,6 +63,7 @@ final class SetupTests {
     @Test func loginItemRowOnlyWhenApprovalNeeded() {
         #expect(!model.setupState.loginItemNeedsApproval)
         system.loginItemNeedsApproval = true
+        model.refreshSystemStatus()
         #expect(model.setupState.loginItemNeedsApproval)
         model.setupActions().openLoginItems()
         #expect(system.loginItemsOpened == 1)

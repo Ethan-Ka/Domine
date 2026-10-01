@@ -11,7 +11,7 @@ final class SettingsStore {
     private enum Key: String {
         case lastLeftUID, lastRightUID
         case volumeKeysEnabled, restorePreviousOutput, closeBehavior, startWhenBothConnect
-        case previousOutputUID, excludedAppsPlayThroughUID, exclusions
+        case previousOutputUID, outputNeedsRestore, excludedAppsPlayThroughUID, exclusions
         case hasCompletedWelcome, audioCaptureWorking
 
         var name: String { SettingsStore.keyPrefix + rawValue }
@@ -90,6 +90,13 @@ final class SettingsStore {
     var previousOutputUID: String? {
         get { string(.previousOutputUID) }
         set { set(newValue, .previousOutputUID) }
+    }
+
+    /// Routing started and the previous output has not been restored yet. Still
+    /// true at launch means Domine did not stop cleanly (SPEC section 4c).
+    var outputNeedsRestore: Bool {
+        get { bool(.outputNeedsRestore, default: false) }
+        set { defaults.set(newValue, forKey: Key.outputNeedsRestore.name) }
     }
 
     /// Where excluded apps play (SPEC section 3b). nil means the previous output.

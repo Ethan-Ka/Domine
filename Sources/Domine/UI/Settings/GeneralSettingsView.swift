@@ -11,8 +11,14 @@ struct GeneralSettingsView: View {
         Form {
             LabeledContent("Volume keys:") {
                 VStack(alignment: .leading, spacing: 6) {
-                    Toggle("Control Domine with the keyboard volume keys", isOn: $state.volumeKeysEnabled)
-                    if !state.accessibilityGranted {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Toggle("Control Domine with the keyboard volume keys", isOn: $state.volumeKeysEnabled)
+                        caption(GeneralSettingsState.volumeKeysCaption)
+                        if state.showsAccessibilityPrompt {
+                            caption(GeneralSettingsState.accessibilityMissingCaption)
+                        }
+                    }
+                    if state.showsAccessibilityPrompt {
                         Button("Grant access") { actions.grantAccessibility() }
                     }
                 }
@@ -23,27 +29,33 @@ struct GeneralSettingsView: View {
             LabeledContent("When Domine stops:") {
                 VStack(alignment: .leading, spacing: 2) {
                     Toggle("Switch back to the previous output", isOn: $state.restorePreviousOutput)
-                    if let name = state.previousOutputName {
-                        Text("Also happens on Quit. Previous output: \(name).")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.leading, 20)
-                    }
+                    caption(state.restoreCaption)
                 }
             }
 
             Divider()
 
-            Picker("Closing the window:", selection: $state.closeBehavior) {
-                ForEach(GeneralSettingsState.CloseBehavior.allCases, id: \.self) { behavior in
-                    Text(behavior.title).tag(behavior)
+            LabeledContent("Closing the window:") {
+                VStack(alignment: .leading, spacing: 2) {
+                    Picker("Closing the window:", selection: $state.closeBehavior) {
+                        ForEach(GeneralSettingsState.CloseBehavior.allCases, id: \.self) { behavior in
+                            Text(behavior.title).tag(behavior)
+                        }
+                    }
+                    .pickerStyle(.radioGroup)
+                    .labelsHidden()
+                    if let caption = state.closeBehavior.caption {
+                        self.caption(caption)
+                    }
                 }
             }
-            .pickerStyle(.radioGroup)
 
             LabeledContent {
                 VStack(alignment: .leading, spacing: 6) {
-                    Toggle("Start routing when both speakers connect", isOn: $state.startWhenBothConnect)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Toggle("Start routing when both speakers connect", isOn: $state.startWhenBothConnect)
+                        caption(GeneralSettingsState.autoStartCaption)
+                    }
                     Toggle("Launch at login", isOn: $state.launchAtLogin)
                 }
             } label: {
@@ -58,6 +70,15 @@ struct GeneralSettingsView: View {
         .padding(.horizontal, 32)
         .padding(.vertical, 24)
         .frame(width: 560, alignment: .top)
+    }
+
+    /// Secondary text under a checkbox, aligned with its title.
+    private func caption(_ text: String) -> some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.leading, 20)
     }
 }
 

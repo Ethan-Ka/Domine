@@ -33,6 +33,9 @@ final class Engine {
         }
     }
     var testTone: TestTone = .off { didSet { applyControls() } }
+    /// Clicks on both speakers through the delay line, to line them up by
+    /// ear. Every stop turns it off.
+    var clickTest = false { didSet { if clickTest != oldValue { applyControls() } } }
     var leftGain: Float = 1 { didSet { applyControls() } }
     var rightGain: Float = 1 { didSet { applyControls() } }
     /// Positive delays the right speaker, negative the left (SPEC section 4).
@@ -40,6 +43,9 @@ final class Engine {
     /// Fades the output out (or back in) over 50 ms in the kernel.
     var muted = false { didSet { applyControls() } }
     let monoPerSpeaker = true
+    /// Process objects the next tap leaves out besides Domine itself
+    /// (SPEC 3b). Empty until excluded apps are resolved to processes.
+    var excludedProcesses: [AudioObjectID] = []
 
     var isKernelAllocated: Bool { resources.kernel != nil }
 
@@ -159,6 +165,7 @@ final class Engine {
     }
 
     func stop() {
+        clickTest = false
         formatCheck?.cancel()
         formatCheck = nil
         formatRebuilds = 0
@@ -210,7 +217,7 @@ final class Engine {
     }
 
     private func createTapAndAggregate(a: SubDevice, b: SubDevice) throws(EngineError) {
-        let tap = try taps.create()
+        let tap = try taps.create(alsoExcluding: excludedProcesses)
         resources.tap = tap
         let format = try EngineError.hal { () throws(HALError) in try hal.tapFormat(of: tap.id) }
         Self.log.info("Tap \(tap.uid, privacy: .public): \(format.mChannelsPerFrame) ch at \(format.mSampleRate) Hz")
@@ -506,6 +513,7 @@ final class Engine {
         guard let kernel = resources.kernel else { return }
         domine_kernel_set_mode(kernel, monoPerSpeaker ? 1 : 0, swapSides ? 1 : 0, 0)
         domine_kernel_set_test_tone(kernel, testTone.rawValue)
+        domine_kernel_set_click_test(kernel, clickTest ? 1 : 0)
         domine_kernel_set_gains(kernel, leftGain, rightGain)
         domine_kernel_set_delay_ms(kernel, delayMs)
         domine_kernel_set_muted(kernel, muted ? 1 : 0)

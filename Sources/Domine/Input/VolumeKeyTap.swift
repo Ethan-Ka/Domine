@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import CoreGraphics
+import os
 
 /// Intercepts the hardware volume keys while Domine is routing (SPEC 4b).
 ///
@@ -17,6 +18,7 @@ final class VolumeKeyTap {
 
     /// `NX_SYSDEFINED` as a `CGEventType` raw value.
     nonisolated static let systemDefinedEventType: UInt32 = 14
+    nonisolated static let log = Logger(subsystem: "com.ethankawley.Domine", category: "VolumeKeys")
 
     private var port: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -38,12 +40,19 @@ final class VolumeKeyTap {
         AXIsProcessTrusted()
     }
 
-    /// Asks the system to show the Accessibility permission prompt.
+    static let accessibilitySettingsURL = URL(
+        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
+
+    /// Adds Domine to the Accessibility list with the system prompt, then
+    /// opens that list. The prompt does not appear when an entry already
+    /// exists, including a stale one from an earlier build, so the list is
+    /// opened either way.
     static func requestAccess() {
         // Literal value of kAXTrustedCheckOptionPrompt; the imported global is
         // a mutable var, which Swift 6 rejects as not concurrency safe.
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(options)
+        NSWorkspace.shared.open(accessibilitySettingsURL)
     }
 
     // MARK: Lifecycle
@@ -58,7 +67,10 @@ final class VolumeKeyTap {
             context.takeUnretainedValue().handler = handler
             return true
         }
-        guard Self.isTrusted else { return false }
+        guard Self.isTrusted else {
+            Self.log.error("Not starting the tap: AXIsProcessTrusted is false")
+            return false
+        }
 
         let box = VolumeKeyTapContext(handler: handler)
         let retained = Unmanaged.passRetained(box)
@@ -72,6 +84,7 @@ final class VolumeKeyTap {
             userInfo: retained.toOpaque())
         else {
             retained.release()
+            Self.log.error("CGEvent.tapCreate returned nil for the session event tap")
             return false
         }
         box.port = port

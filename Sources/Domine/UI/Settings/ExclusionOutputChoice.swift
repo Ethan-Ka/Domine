@@ -6,8 +6,11 @@ struct ExclusionOutputChoice: Identifiable, Equatable, Sendable {
 
     var id: String { uid }
 
-    init(uid: String, name: String) {
+    /// A saved choice whose device is not connected keeps its place in the
+    /// popup, marked as such, so the saved setting is shown and not lost.
+    init(uid: String, name: String, isConnected: Bool = true) {
         self.uid = uid
-        self.label = OutputDevice.menuLabel(name: name, uid: uid)
+        let label = OutputDevice.menuLabel(name: name, uid: uid)
+        self.label = isConnected ? label : "\(label), not connected"
     }
 }

@@ -11,7 +11,7 @@ extension AppModel {
             isCheckingCapture: captureAccess.isProbing,
             accessibilityGranted: generalSettings.accessibilityGranted,
             connectedGrips: connectedGripCount,
-            loginItemNeedsApproval: services.launchAtLoginRequiresApproval())
+            loginItemNeedsApproval: loginItemNeedsApproval)
     }
 
     /// `showMainWindow` brings the main window forward; it needs the SwiftUI

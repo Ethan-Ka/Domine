@@ -31,6 +31,7 @@ struct DomineKernel {
     _Atomic int monoFallback;
     _Atomic int toneSide;
     _Atomic int muted;
+    _Atomic int clickTest; // click test mode: 0 off, 1 clicks
     _Atomic uint32_t layoutInFirstBuffer;
     _Atomic uint32_t layoutOutA;
     _Atomic uint32_t layoutOutB;
@@ -74,6 +75,12 @@ struct DomineKernel {
     int prevOutputSampleValid;
     double prevOutputSampleTime;
     uint32_t prevFrames;
+
+    // Click test, render thread state only (see domine_kernel_set_click_test).
+    uint32_t clickLevel;   // 0 = program only, toneFadeLength = clicks only
+    uint32_t clickCounter; // samples since the current click started
+    uint32_t clickLength;  // samples in one click
+    uint32_t clickPeriod;  // samples from one click to the next
 };
 
 // A resolved output channel: base pointer, stride in floats, usable frames.
@@ -221,6 +228,10 @@ DomineKernel *domine_kernel_create(double sampleRate, uint32_t maxFrames) {
     k->tonePhaseStep = DOMINE_TONE_HZ / sampleRate;
     uint32_t toneFade = (uint32_t)lround(sampleRate * DOMINE_TONE_FADE_MS / 1000.0);
     k->toneFadeLength = toneFade > 0 ? toneFade : 1;
+    uint32_t clickLength = (uint32_t)lround(sampleRate * DOMINE_CLICK_MS / 1000.0);
+    k->clickLength = clickLength > 0 ? clickLength : 1;
+    uint32_t clickPeriod = (uint32_t)lround(sampleRate * DOMINE_CLICK_PERIOD_MS / 1000.0);
+    k->clickPeriod = clickPeriod > k->clickLength ? clickPeriod : k->clickLength + 1;
 
     atomic_init(&k->gainABits, float_bits(1.0f));
     atomic_init(&k->gainBBits, float_bits(1.0f));
@@ -230,6 +241,7 @@ DomineKernel *domine_kernel_create(double sampleRate, uint32_t maxFrames) {
     atomic_init(&k->monoFallback, 0);
     atomic_init(&k->toneSide, 0);
     atomic_init(&k->muted, 0);
+    atomic_init(&k->clickTest, 0);
     atomic_init(&k->layoutInFirstBuffer, 0);
     atomic_init(&k->layoutOutA, 0);
     atomic_init(&k->layoutOutB, 2);
@@ -281,6 +293,11 @@ void domine_kernel_set_test_tone(DomineKernel *k, int side) {
     atomic_store_explicit(&k->toneSide, (side == 1 || side == 2) ? side : 0, memory_order_relaxed);
 }
 
+void domine_kernel_set_click_test(DomineKernel *k, int mode) {
+    if (k == NULL) return;
+    atomic_store_explicit(&k->clickTest, mode == 1 ? 1 : 0, memory_order_relaxed);
+}
+
 void domine_kernel_set_muted(DomineKernel *k, int muted) {
     if (k == NULL) return;
     atomic_store_explicit(&k->muted, muted != 0, memory_order_relaxed);
@@ -301,6 +318,35 @@ void domine_kernel_set_layout(DomineKernel *k,
     atomic_store_explicit(&k->layoutInFirstBuffer, inFirstBuffer, memory_order_relaxed);
     atomic_store_explicit(&k->layoutOutA, outAChannelOffset, memory_order_relaxed);
     atomic_store_explicit(&k->layoutOutB, outBChannelOffset, memory_order_relaxed);
+}
+
+// Click test, one frame. Mixes the click into both positions' sources (which
+// then feed the delay line) and steps the click level. Call once per frame.
+static inline void click_mix(DomineKernel *k, int on, float *srcA, float *srcB) {
+    const uint32_t full = k->toneFadeLength;
+    float click = 0.0f;
+    if (on && k->clickLevel == full) {
+        const uint32_t n = k->clickCounter;
+        if (n < k->clickLength) {
+            const double window = 0.5 - 0.5 * cos(2.0 * M_PI * (double)n / (double)k->clickLength);
+            click = (float)(DOMINE_CLICK_AMPLITUDE * window
+                            * sin(2.0 * M_PI * DOMINE_CLICK_HZ * (double)n / k->sampleRate));
+        }
+        k->clickCounter = n + 1 < k->clickPeriod ? n + 1 : 0;
+    } else {
+        k->clickCounter = 0;
+    }
+    if (k->clickLevel == full) {
+        *srcA = click;
+        *srcB = click;
+    } else {
+        const float keep = 1.0f - (float)k->clickLevel / (float)full;
+        *srcA = *srcA * keep + click;
+        *srcB = *srcB * keep + click;
+    }
+    const uint32_t target = on ? full : 0;
+    if (k->clickLevel < target) k->clickLevel++;
+    else if (k->clickLevel > target) k->clickLevel--;
 }
 
 void domine_kernel_set_input_format(DomineKernel *k, uint32_t channelsPerFrame, int nonInterleaved) {
@@ -381,6 +427,7 @@ static RenderResult render(DomineKernel *k,
     const int monoFallback = atomic_load_explicit(&k->monoFallback, memory_order_relaxed);
     const int toneSide = atomic_load_explicit(&k->toneSide, memory_order_relaxed);
     const int muted = atomic_load_explicit(&k->muted, memory_order_relaxed);
+    const int clickTest = atomic_load_explicit(&k->clickTest, memory_order_relaxed);
 
     const uint32_t delayA = delay < 0 ? (uint32_t)(-delay) : 0;
     const uint32_t delayB = delay > 0 ? (uint32_t)delay : 0;
@@ -436,6 +483,9 @@ static RenderResult render(DomineKernel *k,
             srcA = l;
             srcB = r;
         }
+
+        // Click test: replaces the source before the delay line.
+        if (clickTest || k->clickLevel != 0) click_mix(k, clickTest, &srcA, &srcB);
 
         const uint32_t w = k->ringWrite;
         k->ringA[w] = srcA;

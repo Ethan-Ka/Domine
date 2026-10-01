@@ -30,6 +30,16 @@ protocol AudioHAL: AnyObject, Sendable {
     /// `kAudioStreamPropertyVirtualFormat` of each stream in `scope`, in stream order.
     func streamFormats(of device: AudioObjectID, scope: StreamScope) throws(HALError) -> [AudioStreamBasicDescription]
 
+    // MARK: Hardware volume (SPEC section 4a)
+
+    /// Output-scope elements whose `kAudioDevicePropertyVolumeScalar` can be
+    /// set: the main element when it is settable, else every settable channel
+    /// element. Empty when the device has no settable volume.
+    func volumeElements(of device: AudioObjectID) throws(HALError) -> [AudioObjectPropertyElement]
+    /// `kAudioDevicePropertyVolumeScalar`, output scope, 0...1.
+    func volume(of device: AudioObjectID, element: AudioObjectPropertyElement) throws(HALError) -> Float
+    func setVolume(_ volume: Float, of device: AudioObjectID, element: AudioObjectPropertyElement) throws(HALError)
+
     func defaultOutputDevice() throws(HALError) -> AudioObjectID
     func setDefaultOutputDevice(_ device: AudioObjectID) throws(HALError)
 
