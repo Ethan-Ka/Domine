@@ -37,7 +37,10 @@ final class AppModel {
 
     /// Settings > General and Exclusions. Edits are written to `store`.
     var generalSettings: GeneralSettingsState {
-        didSet { generalSettingsDidChange(from: oldValue) }
+        didSet {
+            generalSettingsDidChange(from: oldValue)
+            updateVolumeKeyTap()
+        }
     }
     var exclusionsSettings: ExclusionsState {
         didSet { exclusionsDidChange(from: oldValue) }
@@ -51,6 +54,15 @@ final class AppModel {
     @ObservationIgnored private(set) var knownNames: [String: String] = [:]
     @ObservationIgnored var toneTask: Task<Void, Never>?
     @ObservationIgnored private var terminationObserver: (any NSObjectProtocol)?
+
+    /// Set by the mute key (AppModel+VolumeKeys). Not saved.
+    var isMuted = false
+    /// The volume key tap and its HUD. Tests replace both.
+    @ObservationIgnored var volumeKeyTap: any VolumeKeyTapping = VolumeKeyTap()
+    @ObservationIgnored var showVolumeHUD: @MainActor (_ volume: Double, _ isMuted: Bool) -> Void = { volume, muted in
+        VolumeHUDPanel.shared.show(volume: volume, isMuted: muted)
+    }
+    @ObservationIgnored var activationObserver: (any NSObjectProtocol)?
 
     init(hal: any AudioHAL = CoreAudioHAL(), defaults: UserDefaults = .standard,
          services: SystemServices = .live) {
@@ -75,6 +87,7 @@ final class AppModel {
         guard terminationObserver == nil else { return }
         observeCatalog()
         observeEngine()
+        observeActivationForVolumeKeys()
         // Never leave a muting tap behind on quit. AppKit posts this on the
         // main thread; a nil queue runs the block before termination continues.
         terminationObserver = NotificationCenter.default.addObserver(
@@ -228,6 +241,7 @@ final class AppModel {
         } else if meters.isRunning {
             meters.stop()
         }
+        updateVolumeKeyTap()
     }
 
     private func observeCatalog() {

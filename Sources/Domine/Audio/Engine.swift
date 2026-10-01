@@ -31,6 +31,8 @@ final class Engine {
     var rightGain: Float = 1 { didSet { applyControls() } }
     /// Positive delays the right speaker, negative the left (SPEC section 4).
     var delayMs: Float = 0 { didSet { applyControls() } }
+    /// Fades the output out (or back in) over 50 ms in the kernel.
+    var muted = false { didSet { applyControls() } }
     let monoPerSpeaker = true
 
     var isKernelAllocated: Bool { resources.kernel != nil }
@@ -299,5 +301,6 @@ final class Engine {
         domine_kernel_set_test_tone(kernel, testTone.rawValue)
         domine_kernel_set_gains(kernel, leftGain, rightGain)
         domine_kernel_set_delay_ms(kernel, delayMs)
+        domine_kernel_set_muted(kernel, muted ? 1 : 0)
     }
 }

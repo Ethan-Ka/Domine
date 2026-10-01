@@ -14,6 +14,7 @@ extension AppModel {
                 .placeholder(.rearRight),
             ],
             masterVolume: Double(pairSettings.masterVolume),
+            isMuted: isMuted,
             testToneSide: testToneSide,
             canPlayTestTones: engine.state == .running,
             bannerMessage: catalog.showsGripPairingHint ? Self.gripPairingHint : nil)
@@ -24,7 +25,11 @@ extension AppModel {
             setOn: { [weak self] in self?.setRouting($0) },
             setMode: { _ in },
             swap: { [weak self] in self?.swapSides() },
-            setMasterVolume: { [weak self] in self?.setMasterVolume($0) },
+            setMasterVolume: { [weak self] volume in
+                // Moving the slider unmutes, as the system volume slider does.
+                self?.setMasterVolume(volume)
+                self?.setMuted(false)
+            },
             toggleTestTone: { [weak self] in self?.toggleTestTone($0) },
             selectSpeaker: { [weak self] in self?.openAssign($0) },
             openTuning: { [weak self] in self?.openTuning() })
