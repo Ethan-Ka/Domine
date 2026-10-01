@@ -66,7 +66,7 @@ struct ClickTestTests {
         Self.expectClose(a, expected)
         #expect(a == b)
         #expect(a[Self.fade] == 0) // the Hann window starts at 0
-        #expect(abs(a[Self.fade + 6]) > 0.1)
+        #expect(a[Self.fade + 42] < -0.45) // near the window's center, sine at -1
         #expect(a[(Self.fade + Self.length)..<(Self.fade + Self.period)].allSatisfy { $0 == 0 })
     }
 

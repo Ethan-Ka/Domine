@@ -66,6 +66,7 @@ extension AppModel {
 
     /// One short line on why routing did not start.
     private var routingFailureText: String {
+        if let refusal = routingRefusal { return refusal }
         if let reason = engine.idleReason { return reason.description }
         if case .error(let message) = engine.state { return "Could not start routing: \(message)" }
         return "Could not start routing"
