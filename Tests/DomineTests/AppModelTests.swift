@@ -336,17 +336,64 @@ final class AppModelTests {
         model.openTuning()
         #expect(model.showsTuning)
         #expect(model.tuningState.reportedLatencies == "Reported latency: left 182 ms, right 176 ms")
-        #expect(!model.tuningState.isClickTestAvailable)
+        #expect(model.tuningState.isClickTestAvailable)
+        #expect(!model.tuningState.isClickTestPlaying)
     }
 
-    @Test func clickTestStartsOnTheLeft() async {
+    @Test func clickTestTogglesWhileRouting() async {
         addGripsAndStart()
         await model.startRouting()
-        #expect(model.tuningState.isClickTestAvailable)
+        model.openTuning()
         model.tuningActions.playClickTest()
-        #expect(model.engine.testTone == .left)
-        model.cancelTone()
+        #expect(model.engine.clickTest)
         #expect(model.engine.testTone == .off)
+        #expect(model.tuningState.isClickTestPlaying)
+        model.tuningActions.setDelayMs(7)
+        #expect(model.engine.delayMs == 7)
+        #expect(model.engine.clickTest)
+        model.tuningActions.playClickTest()
+        #expect(!model.engine.clickTest)
+        #expect(!model.tuningState.isClickTestPlaying)
+        #expect(model.engine.state == .running)
+    }
+
+    @Test func clickTestStartsRoutingWhenOff() async {
+        addGripsAndStart()
+        model.openTuning()
+        model.tuningActions.playClickTest()
+        await model.clickTestTask?.value
+        #expect(model.engine.state == .running)
+        #expect(model.engine.clickTest)
+        #expect(model.tuningState.clickTestMessage == nil)
+    }
+
+    @Test func clickTestShowsWhyRoutingCouldNotStart() async {
+        hal.add(Self.gripA)
+        model.start()
+        model.openTuning()
+        model.tuningActions.playClickTest()
+        await model.clickTestTask?.value
+        #expect(!model.engine.clickTest)
+        #expect(model.tuningState.clickTestMessage == "Choose a left speaker")
+        model.openTuning()
+        #expect(model.tuningState.clickTestMessage == nil)
+    }
+
+    @Test func clickTestStopsWithTheSheetOrRouting() async {
+        addGripsAndStart()
+        await model.startRouting()
+        model.openTuning()
+        model.tuningActions.playClickTest()
+        model.tuningActions.done()
+        #expect(!model.engine.clickTest)
+
+        model.openTuning()
+        model.tuningActions.playClickTest()
+        #expect(model.engine.clickTest)
+        model.setRouting(false)
+        #expect(!model.engine.clickTest)
+        await model.startRouting()
+        #expect(!model.engine.clickTest)
     }
 
     // MARK: Settings

@@ -42,9 +42,16 @@ final class AppModel {
     var assignPosition: SpeakerPosition?
     /// The radio selection in that sheet.
     var assignSelection: String?
-    var showsTuning = false
+    /// Closing the tuning sheet stops the click test.
+    var showsTuning = false {
+        didSet { if !showsTuning { stopClickTest() } }
+    }
     /// Read from the HAL each time the tuning sheet opens.
     var reportedLatencyText: String?
+    /// Why the click test could not start routing, shown in the tuning sheet.
+    var clickTestMessage: String?
+    /// Starting routing for the click test. Tests await it.
+    @ObservationIgnored var clickTestTask: Task<Void, Never>?
 
     /// First-run checklist sheet.
     var showsWelcome: Bool
@@ -213,6 +220,7 @@ final class AppModel {
     static let noOtherOutputMessage = "No other output for the Mac's own sound"
 
     func stopRouting() {
+        stopClickTest()
         cancelTone()
         engine.stop()
         outputRestorer.restore(enabled: store.restorePreviousOutput)
@@ -380,6 +388,7 @@ final class AppModel {
         } else if meters.isRunning {
             meters.stop()
         }
+        if engine.state != .running && engine.clickTest { engine.clickTest = false }
         updateVolumeKeyTap()
     }
 

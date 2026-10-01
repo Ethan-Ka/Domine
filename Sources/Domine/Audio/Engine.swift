@@ -33,6 +33,9 @@ final class Engine {
         }
     }
     var testTone: TestTone = .off { didSet { applyControls() } }
+    /// Clicks on both speakers through the delay line, to line them up by
+    /// ear. Every stop turns it off.
+    var clickTest = false { didSet { if clickTest != oldValue { applyControls() } } }
     var leftGain: Float = 1 { didSet { applyControls() } }
     var rightGain: Float = 1 { didSet { applyControls() } }
     /// Positive delays the right speaker, negative the left (SPEC section 4).
@@ -128,6 +131,7 @@ final class Engine {
     }
 
     func stop() {
+        clickTest = false
         if state == .idle && isEmpty(resources) { return }
         generation &+= 1
         state = .stopping
@@ -308,6 +312,7 @@ final class Engine {
         guard let kernel = resources.kernel else { return }
         domine_kernel_set_mode(kernel, monoPerSpeaker ? 1 : 0, swapSides ? 1 : 0, 0)
         domine_kernel_set_test_tone(kernel, testTone.rawValue)
+        domine_kernel_set_click_test(kernel, clickTest ? 1 : 0)
         domine_kernel_set_gains(kernel, leftGain, rightGain)
         domine_kernel_set_delay_ms(kernel, delayMs)
         domine_kernel_set_muted(kernel, muted ? 1 : 0)
