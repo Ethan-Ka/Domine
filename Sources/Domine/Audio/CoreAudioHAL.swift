@@ -88,6 +88,13 @@ final class CoreAudioHAL: AudioHAL {
             .map { min($0.mMinimum, $0.mMaximum)...max($0.mMinimum, $0.mMaximum) }
     }
 
+    func currentTime(of device: AudioObjectID) throws(HALError) -> AudioTimeStamp {
+        var time = AudioTimeStamp()
+        time.mFlags = [.sampleTimeValid, .hostTimeValid]
+        try HALError.check(AudioDeviceGetCurrentTime(device, &time), "AudioDeviceGetCurrentTime")
+        return time
+    }
+
     func bufferFrameSize(of device: AudioObjectID) throws(HALError) -> UInt32 {
         try readScalar(device, address(kAudioDevicePropertyBufferFrameSize), as: UInt32.self)
     }

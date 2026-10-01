@@ -33,6 +33,9 @@ final class EngineDiagnostics {
     private var task: Task<Void, Never>?
     private var overloadToken: HALListenerToken?
     private var overloadsAtLastSample = 0
+    private var clockReadings: [AudioObjectID: AudioTimeStamp] = [:]
+    /// Rates measured with AudioDeviceGetCurrentTime, by device, for tests.
+    private(set) var lastMeasuredRates: [AudioObjectID: Double] = [:]
 
     /// Processor overloads reported on the aggregate since `start`.
     private(set) var overloads = 0
@@ -154,12 +157,32 @@ final class EngineDiagnostics {
             let actual = read { () throws(HALError) in try self.hal.actualSampleRate(of: device.id) }
             let latency = read { () throws(HALError) in try self.hal.latency(of: device.id, scope: .output) }
             let buffer = read { () throws(HALError) in try self.hal.bufferFrameSize(of: device.id) }
+            let measured = measureClock(device.id)
             Self.log.info("""
                 Device \(device.label, privacy: .public) \(device.uid, privacy: .public): nominal \(Self.text(nominal), privacy: .public) Hz, \
-                actual \(Self.text(actual), privacy: .public) Hz, buffer \(Self.text(buffer), privacy: .public) frames, \
-                output latency \(Self.text(latency), privacy: .public)
+                actual \(Self.text(actual), privacy: .public) Hz, measured clock \(measured, privacy: .public), \
+                buffer \(Self.text(buffer), privacy: .public) frames, output latency \(Self.text(latency), privacy: .public)
                 """)
         }
+        Self.log.info("Aggregate measured clock \(self.measureClock(self.aggregate), privacy: .public)")
+    }
+
+    /// The device's real rate since the previous reading, from
+    /// AudioDeviceGetCurrentTime (sample time over host time).
+    func measureClock(_ device: AudioObjectID) -> String {
+        let now: AudioTimeStamp
+        do {
+            now = try hal.currentTime(of: device)
+        } catch {
+            clockReadings[device] = nil
+            return "error (\(error.description))"
+        }
+        defer { clockReadings[device] = now }
+        guard let previous = clockReadings[device],
+              let rate = DiagnosticsWindow.clockRate(previous: previous, current: now, secondsPerTick: secondsPerTick)
+        else { return "pending" }
+        lastMeasuredRates[device] = rate
+        return Self.f(rate, 1) + " Hz"
     }
 
     // MARK: - Start-up log
@@ -181,7 +204,11 @@ final class EngineDiagnostics {
         }
         for device in devices {
             let formats = read { () throws(HALError) in try hal.streamFormats(of: device.id, scope: .output) }
-            log.info("Device \(device.label, privacy: .public) \(device.uid, privacy: .public) output formats \(text(formats.map { $0.map(describe) }), privacy: .public)")
+            let rates = read { () throws(HALError) in try hal.availableNominalSampleRates(of: device.id) }
+            log.info("""
+                Device \(device.label, privacy: .public) \(device.uid, privacy: .public) output formats \(text(formats.map { $0.map(describe) }), privacy: .public), \
+                available rates \(text(rates), privacy: .public)
+                """)
         }
         let format = read { () throws(HALError) in try hal.tapFormat(of: tap.id) }
         log.info("Tap \(tap.uid, privacy: .public): \(text(format.map(describe)), privacy: .public)")

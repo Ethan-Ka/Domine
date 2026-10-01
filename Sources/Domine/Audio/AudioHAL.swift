@@ -25,6 +25,9 @@ protocol AudioHAL: AnyObject, Sendable {
     func actualSampleRate(of device: AudioObjectID) throws(HALError) -> Double
     /// `kAudioDevicePropertyAvailableNominalSampleRates`, as closed ranges.
     func availableNominalSampleRates(of device: AudioObjectID) throws(HALError) -> [ClosedRange<Double>]
+    /// `AudioDeviceGetCurrentTime`: the device's current sample and host
+    /// time. Fails with `kAudioHardwareNotRunningError` when it is not running.
+    func currentTime(of device: AudioObjectID) throws(HALError) -> AudioTimeStamp
     /// `kAudioDevicePropertyBufferFrameSize`: the IO buffer size in frames.
     func bufferFrameSize(of device: AudioObjectID) throws(HALError) -> UInt32
     /// `kAudioStreamPropertyVirtualFormat` of each stream in `scope`, in stream order.

@@ -6,7 +6,7 @@ import os
 /// Owns the tap, the private aggregate, the IOProc, and the render kernel
 /// (SPEC sections 3.2 and 7).
 ///
-/// Start: validate devices, set 48 kHz where possible, create the tap, create
+/// Start: validate devices, match rates (speakers keep their own; see matchSpeakerRates), create the tap, create
 /// the aggregate, read its stream layout, create the kernel and store the
 /// layout in it, create the IOProc, start the device. Any failure unwinds
 /// what was created, in reverse, and ends in `.error`.
@@ -15,7 +15,6 @@ import os
 @MainActor
 @Observable
 final class Engine {
-    static let preferredSampleRate: Double = 48_000
     static let kernelMaxFrames: UInt32 = 4096
 
     private(set) var state: EngineState = .idle
@@ -48,6 +47,14 @@ final class Engine {
     var excludedProcesses: [AudioObjectID] = []
 
     var isKernelAllocated: Bool { resources.kernel != nil }
+
+    /// The rate the kernel was created with (the aggregate's nominal rate).
+    var kernelSampleRate: Double? {
+        guard let kernel = resources.kernel else { return nil }
+        var stats = DomineKernelStats()
+        _ = domine_kernel_stats(kernel, &stats)
+        return stats.sampleRate
+    }
 
     private struct Resources {
         var tap: ProcessTap?
@@ -143,8 +150,7 @@ final class Engine {
         do throws(EngineError) {
             let a = try inspect(uid: uidA, id: idA)
             let b = try inspect(uid: uidB, id: idB)
-            setPreferredSampleRate(a)
-            setPreferredSampleRate(b)
+            matchSpeakerRates(a: a, b: b)
             matchDefaultOutputRate(a: a, b: b)
             try createTapAndAggregate(a: a, b: b)
             guard let layout = try await readLayout(a: a, b: b, generation: current),
@@ -204,15 +210,23 @@ final class Engine {
         return SubDevice(uid: uid, id: id, output: output, inputBuffers: input.count)
     }
 
-    /// Best effort: a device that refuses 48 kHz is left to the aggregate's
-    /// rate conversion (SPEC section 4a).
-    private func setPreferredSampleRate(_ device: SubDevice) {
-        do {
-            if try hal.nominalSampleRate(of: device.id) != Self.preferredSampleRate {
-                try hal.setNominalSampleRate(Self.preferredSampleRate, of: device.id)
+    /// The speakers keep the rate they report and Domine never sets it
+    /// (SPEC section 4a): forcing a Bluetooth speaker's nominal rate can
+    /// leave it reporting one rate while its codec runs at another, which
+    /// plays everything slow and low. The aggregate runs at Device A's rate
+    /// (the main sub-device); if B differs, the aggregate's drift
+    /// compensation converts it. This only logs.
+    private func matchSpeakerRates(a: SubDevice, b: SubDevice) {
+        do throws(HALError) {
+            let rateA = try hal.nominalSampleRate(of: a.id)
+            let rateB = try hal.nominalSampleRate(of: b.id)
+            if rateA == rateB {
+                Self.log.info("Speakers both run at \(rateA, privacy: .public) Hz")
+            } else {
+                Self.log.warning("Speakers run at different rates (A \(a.uid, privacy: .public) \(rateA, privacy: .public) Hz, B \(b.uid, privacy: .public) \(rateB, privacy: .public) Hz); the aggregate runs at A's rate and converts B")
             }
         } catch {
-            Self.log.warning("Could not set 48 kHz on \(device.uid, privacy: .public): \(error.description, privacy: .public)")
+            Self.log.warning("Could not read the speakers' rates: \(error.description, privacy: .public)")
         }
     }
 
@@ -321,6 +335,8 @@ final class Engine {
             let target = try hal.nominalSampleRate(of: a.id)
             let device = try hal.defaultOutputDevice()
             guard device != kAudioObjectUnknown, device != a.id, device != b.id else { return }
+            // Never set a Bluetooth device's rate (see matchSpeakerRates).
+            guard !OutputDevice.isBluetooth(transportType: try hal.transportType(of: device)) else { return }
             let uid = try hal.uid(of: device)
             let current = try hal.nominalSampleRate(of: device)
             guard current != target else { return }

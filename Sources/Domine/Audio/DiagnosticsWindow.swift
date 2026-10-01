@@ -1,3 +1,4 @@
+import CoreAudio
 import DomineDSP
 
 /// Rates and counts over one diagnostics window, from two kernel stats
@@ -31,6 +32,15 @@ struct DiagnosticsWindow: Equatable, Sendable {
     /// How far behind "now" the input was captured, ms.
     var inputLagMs: Double?
     var maxCycleIntervalMs: Double?
+
+    /// A device's real clock rate from two `AudioDeviceGetCurrentTime`
+    /// readings: sample time advance over host time advance. nil unless both
+    /// readings have valid sample and host times and host time moved forward.
+    static func clockRate(previous p: AudioTimeStamp, current c: AudioTimeStamp, secondsPerTick: Double) -> Double? {
+        let needed: AudioTimeStampFlags = [.sampleTimeValid, .hostTimeValid]
+        guard p.mFlags.contains(needed), c.mFlags.contains(needed), c.mHostTime > p.mHostTime else { return nil }
+        return (c.mSampleTime - p.mSampleTime) / (Double(c.mHostTime - p.mHostTime) * secondsPerTick)
+    }
 
     /// `secondsPerTick` converts host ticks (mach_absolute_time) to seconds.
     static func compute(previous p: DomineKernelStats, current c: DomineKernelStats, secondsPerTick: Double) -> DiagnosticsWindow {

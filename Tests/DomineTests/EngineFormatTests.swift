@@ -83,6 +83,53 @@ struct EngineFormatTests {
         #expect(out.channel(3) == [-0.1, -0.2, -0.3, -0.4])
     }
 
+    @Test func builtInOutputFollowsGripsAt44k() async {
+        var a = Self.gripA, b = Self.gripB
+        a.sampleRate = 44_100
+        a.availableSampleRates = [44_100...44_100]
+        b.sampleRate = 44_100
+        b.availableSampleRates = [44_100...44_100]
+        var builtIn = Self.speakers
+        builtIn.sampleRate = 48_000
+        hal.add(a)
+        hal.add(b)
+        hal.add(builtIn)
+        hal.setDefault(uid: builtIn.uid)
+        await engine.start(left: a.uid, right: b.uid)
+        #expect(engine.state == .running)
+        #expect(engine.kernelSampleRate == 44_100)
+        #expect(hal.sampleRate(uid: builtIn.uid) == 44_100)
+        #expect(engine.inputFormat?.sampleRate == 44_100)
+        #expect(hal.ops.filter { if case .setSampleRate = $0 { true } else { false } } == [.setSampleRate(uid: builtIn.uid)])
+        engine.stop()
+        #expect(hal.sampleRate(uid: builtIn.uid) == 48_000)
+    }
+
+    @Test func bluetoothDefaultOutputRateIsNeverSet() async {
+        let headphones = FakeHAL.Device(uid: "AA-BB:output", name: "Headphones", sampleRate: 44_100)
+        await start(defaultOutput: headphones)
+        #expect(engine.state == .running)
+        #expect(hal.sampleRate(uid: headphones.uid) == 44_100)
+        #expect(!hal.ops.contains(.setSampleRate(uid: headphones.uid)))
+    }
+
+    @Test func measuresEachDeviceClock() async throws {
+        var a = Self.gripA
+        a.clockRate = 44_100
+        hal.add(a)
+        hal.add(Self.gripB)
+        await engine.start(left: a.uid, right: Self.gripB.uid)
+        let diagnostics = try #require(engine.diagnostics)
+        let idA = try #require(hal.id(forUID: a.uid))
+        let idB = try #require(hal.id(forUID: Self.gripB.uid))
+        hal.hostTime = 1_000
+        #expect(diagnostics.measureClock(idA) == "pending")
+        hal.hostTime = 1_000 + UInt64(FakeHAL.ticksPerSecond * 2)
+        _ = diagnostics.measureClock(idA)
+        #expect(abs((diagnostics.lastMeasuredRates[idA] ?? 0) - 44_100) < 0.5)
+        #expect(diagnostics.measureClock(idB).hasPrefix("error"))
+    }
+
     @Test func formatChangeWhileRunningRebuilds() async {
         await start()
         let tapsBefore = hal.ops.filter { if case .createTap = $0 { true } else { false } }.count
@@ -179,6 +226,19 @@ struct DiagnosticsWindowTests {
         #expect(abs((w.inputLagMs ?? 0) - 0.1) < 1e-9)
         #expect(w.maxCycleIntervalMs == 6)
         #expect(w.underrunFrames == 7)
+    }
+
+    @Test func clockRateFromTwoReadings() {
+        var p = AudioTimeStamp(), c = AudioTimeStamp()
+        p.mFlags = [.sampleTimeValid, .hostTimeValid]
+        c.mFlags = p.mFlags
+        p.mHostTime = 1_000_000
+        p.mSampleTime = 100
+        c.mHostTime = 3_000_000
+        c.mSampleTime = 100 + 88_200
+        #expect(DiagnosticsWindow.clockRate(previous: p, current: c, secondsPerTick: 1e-6) == 44_100)
+        c.mFlags = [.sampleTimeValid]
+        #expect(DiagnosticsWindow.clockRate(previous: p, current: c, secondsPerTick: 1e-6) == nil)
     }
 
     @Test func slowClockShowsUp() {

@@ -19,7 +19,6 @@ struct EngineTests {
     }
 
     static let startOps: [FakeHAL.Op] = [
-        .setSampleRate(uid: gripA.uid), .setSampleRate(uid: gripB.uid),
         .createTap(excluding: [42]), .createAggregate, .createIOProc, .start,
     ]
 
@@ -60,7 +59,7 @@ struct EngineTests {
         #expect(hal.ops == Self.startOps)
         #expect(hal.isRunning)
         #expect(engine.isKernelAllocated)
-        #expect(hal.sampleRate(uid: Self.gripA.uid) == 48_000)
+        #expect(hal.sampleRate(uid: Self.gripA.uid) == 44_100)
     }
 
     @Test func stopTearsDownInReverse() async {
@@ -84,18 +83,39 @@ struct EngineTests {
         #expect(hal.ops == Self.startOps)
     }
 
-    @Test func noSampleRateChangeWhenAlready48k() async {
-        var a = Self.gripA, b = Self.gripB
-        a.sampleRate = 48_000
-        b.sampleRate = 48_000
-        await startGrips(a, b)
-        #expect(hal.ops == Array(Self.startOps.dropFirst(2)))
+    @Test func runsAtTheSpeakersOwnRate() async {
+        await startGrips()
+        #expect(engine.kernelSampleRate == 44_100)
+        #expect(!hal.ops.contains { if case .setSampleRate = $0 { true } else { false } })
     }
 
-    @Test func sampleRateFailureIsOnlyAWarning() async {
-        hal.failures[.setSampleRate] = kAudioHardwareIllegalOperationError
-        await startGrips()
+    @Test func mixedRatesRunAtDeviceARateAndTouchNoSpeaker() async {
+        var b = Self.gripB
+        b.sampleRate = 48_000
+        await startGrips(Self.gripA, b)
         #expect(engine.state == .running)
+        #expect(engine.kernelSampleRate == 44_100)
+        #expect(hal.sampleRate(uid: b.uid) == 48_000)
+        #expect(!hal.ops.contains { if case .setSampleRate = $0 { true } else { false } })
+    }
+
+    @Test func mixedRatesTheOtherWay() async {
+        var a = Self.gripA
+        a.sampleRate = 48_000
+        await startGrips(a, Self.gripB)
+        #expect(engine.kernelSampleRate == 48_000)
+        #expect(hal.sampleRate(uid: Self.gripB.uid) == 44_100)
+    }
+
+    @Test func kernelUsesTheAggregateRateForDelay() async {
+        engine.delayMs = 1 // 44.1 samples at 44.1 kHz rounds to 44
+        await startGrips()
+        let n = 50
+        let input = FakeBufferList(channelsPerBuffer: [2], frames: n)
+        input.set(buffer: 0, channel: 1, (0..<n).map { Float($0 + 1) })
+        let out = FakeBufferList(channelsPerBuffer: [2, 2], frames: n, fill: 9)
+        hal.render(input: input, output: out)
+        #expect(out.channel(2) == Array(repeating: 0, count: 44) + (1...6).map(Float.init))
     }
 
     // MARK: - Failure unwinding
@@ -121,7 +141,7 @@ struct EngineTests {
             return
         }
         #expect(message.contains("'what'"))
-        #expect(Array(hal.ops.dropFirst(2)) == expected, "fail point \(point)")
+        #expect(hal.ops == expected, "fail point \(point)")
         expectNothingLive()
     }
 
@@ -131,7 +151,7 @@ struct EngineTests {
         a.inputStreams = [1]
         hal.failures[.setStreamUsage] = kAudioHardwareUnspecifiedError
         await startGrips(a)
-        #expect(Array(hal.ops.dropFirst(2)) == [
+        #expect(hal.ops == [
             .createTap(excluding: [42]), .createAggregate, .createIOProc,
             .destroyIOProc, .destroyAggregate, .destroyTap,
         ])

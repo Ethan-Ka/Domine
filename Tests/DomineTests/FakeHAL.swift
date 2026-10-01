@@ -22,6 +22,8 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
         var actualSampleRate: Double? = nil
         var availableSampleRates: [ClosedRange<Double>] = [44_100...44_100, 48_000...48_000]
         var bufferFrameSize: UInt32 = 512
+        /// The device's real clock for `currentTime`; nil means not running.
+        var clockRate: Double? = nil
         /// Settable output volume per element. The default matches a JBL
         /// Grip: no main element, channels 1 and 2 only. Empty means the
         /// device has no settable volume.
@@ -291,6 +293,30 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
         try self.device(device, kAudioDevicePropertyAvailableNominalSampleRates).availableSampleRates
     }
 
+    /// Host ticks the fake's device clocks read in `currentTime`.
+    var hostTime: UInt64 = 0
+
+    /// Sample time = host ticks * `clockRate` / `ticksPerSecond`. Fails as
+    /// not running when the device has no `clockRate`.
+    func currentTime(of device: AudioObjectID) throws(HALError) -> AudioTimeStamp {
+        let d = try self.device(device, 0)
+        guard let rate = d.clockRate else {
+            throw HALError(kAudioHardwareNotRunningError, "AudioDeviceGetCurrentTime")
+        }
+        let host = lock.withLock { hostTime }
+        var t = AudioTimeStamp()
+        t.mHostTime = host
+        t.mSampleTime = Double(host) * rate / Self.ticksPerSecond
+        t.mFlags = [.sampleTimeValid, .hostTimeValid]
+        return t
+    }
+
+    static var ticksPerSecond: Double {
+        var timebase = mach_timebase_info_data_t()
+        mach_timebase_info(&timebase)
+        return 1e9 * Double(timebase.denom) / Double(timebase.numer)
+    }
+
     func bufferFrameSize(of device: AudioObjectID) throws(HALError) -> UInt32 {
         try self.device(device, kAudioDevicePropertyBufferFrameSize).bufferFrameSize
     }
@@ -431,7 +457,9 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
                 name: description[kAudioAggregateDeviceNameKey] as? String ?? "",
                 transportType: kAudioDeviceTransportTypeAggregate,
                 outputStreams: subs.flatMap(\.outputLayout),
-                inputStreams: subs.flatMap(\.inputStreams) + Array(repeating: tapStreams, count: tapCount).flatMap { $0 })
+                inputStreams: subs.flatMap(\.inputStreams) + Array(repeating: tapStreams, count: tapCount).flatMap { $0 },
+                // Like the real HAL, the aggregate runs at its main sub-device's rate.
+                sampleRate: subs.first?.sampleRate ?? 48_000)
             let id = insert(aggregate)
             aggregates[id] = description
             aggregateStreamReads = 0
