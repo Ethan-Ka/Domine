@@ -230,6 +230,8 @@ Domine/
 - Setting in General: "Keep playing in the background" or "Stop playing" when the window closes.
 - "Start routing when both speakers connect" works in background mode, so with launch at login on, Domine starts on its own when the Grips power up.
 - The menu bar item exists only while running in the background; when the window is open, there is no menu bar item.
+- Background mode starts only if routing is on when the window closes. With routing off there is nothing to keep playing, so Domine stays a normal Dock app with no menu bar item, and the Dock icon reopens the window. Once in the background, Domine stays there until the window opens again, even if routing stops (a speaker powers off, or the menu switch turns it off), so auto-start can resume with no window.
+- Removing the menu bar item (Command-drag out of the menu bar) reopens the window, so Domine is never left running with no way to reach it.
 
 ## 7. Engine state machine
 

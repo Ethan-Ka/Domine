@@ -84,6 +84,13 @@ final class AppModel {
     @ObservationIgnored var toneTask: Task<Void, Never>?
     @ObservationIgnored private var terminationObserver: (any NSObjectProtocol)?
 
+    /// The main window is closed and routing goes on, with a menu bar item
+    /// and no Dock icon (SPEC 6a). Change it only through `enterBackground()`
+    /// and `leaveBackground()` in AppModel+Background, which set the policy.
+    var isInBackground = false
+    /// Opens the main window scene. Set by the views, which hold `openWindow`.
+    @ObservationIgnored var presentMainWindow: @MainActor () -> Void = {}
+
     /// Set by the mute key (AppModel+VolumeKeys). Not saved.
     var isMuted = false
     /// The volume key tap and its HUD. Tests replace both.
@@ -136,7 +143,7 @@ final class AppModel {
         terminationObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification, object: nil, queue: nil
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.stopRouting() }
+            MainActor.assumeIsolated { self?.appWillTerminate() }
         }
     }
 
@@ -382,14 +389,6 @@ final class AppModel {
         guard connected, store.startWhenBothConnect, !userTurnedRoutingOff, !engine.state.isActive else { return }
         Self.log.info("Both speakers connected; starting routing")
         autoStartTask = Task { [weak self] in await self?.startRouting() }
-    }
-
-    /// The main window closed. With "Stop playing" routing stops; with "Keep
-    /// playing" it continues and the Dock icon brings the window back.
-    func mainWindowDidClose() {
-        guard store.closeBehavior == .stopPlaying, engine.state.isActive else { return }
-        userTurnedRoutingOff = true
-        stopRouting()
     }
 
     /// Called whenever the engine state changes: meters poll only while running.
