@@ -302,24 +302,19 @@ final class AppModel {
 
     // MARK: - Test tones
 
-    /// While routing, starts the engine's tone on that side or stops it if it
-    /// is already playing. While off, plays a short tone directly on that
-    /// side's speaker so the user can tell the two apart.
-    func toggleTestTone(_ side: StereoSide) {
+    /// One short tone on the speaker that plays that side: through the engine
+    /// while routing (which also checks the routing), otherwise directly on
+    /// that speaker. While swapped, the left side is position B.
+    func playTestTone(_ side: StereoSide) {
+        let onA = (side == .left) != engine.swapSides
         guard engine.state == .running else {
-            let uid = side == .left ? leftUID : rightUID
-            if let uid, tones.playingUID == uid {
-                tones.stop()
-            } else if let uid, catalog.device(uid: uid) != nil {
+            if let uid = onA ? leftUID : rightUID, catalog.device(uid: uid) != nil {
                 tones.play(uid: uid)
             }
             return
         }
         tones.stop()
-        let tone: TestTone = side == .left ? .left : .right
-        let playing = engine.testTone == tone
-        cancelTone()
-        engine.testTone = playing ? .off : tone
+        playTones([(onA ? .left : .right, DeviceTonePlayer.duration)])
     }
 
     /// Plays each tone for its duration, then turns the tone off. Only while running.

@@ -54,7 +54,7 @@ struct SecondaryUIRenderTests {
         host.appearance = NSAppearance(named: appearance)
         let size = host.fittingSize
         host.frame = CGRect(origin: .zero, size: size)
-        let window = NSWindow(
+        let window = OffscreenWindow(
             contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.contentView = host
         host.layoutSubtreeIfNeeded()

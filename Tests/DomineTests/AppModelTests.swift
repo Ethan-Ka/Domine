@@ -133,26 +133,78 @@ final class AppModelTests {
         #expect(model.engine.swapSides)
     }
 
-    @Test func testToneTogglesOnPositionA() async {
+    /// Renders one cycle through the real IOProc into two stereo Grips.
+    private func renderGrips() -> FakeBufferList {
+        let input = FakeBufferList(channelsPerBuffer: [2], frames: EngineTests.left.count)
+        input.set(buffer: 0, channel: 0, EngineTests.left)
+        input.set(buffer: 0, channel: 1, EngineTests.right)
+        let out = FakeBufferList(channelsPerBuffer: [2, 2], frames: EngineTests.left.count, fill: 9)
+        hal.render(input: input, output: out)
+        return out
+    }
+
+    @Test func swapButtonMovesProgramAndTestTonesToTheOtherSpeaker() async {
         addGripsAndStart()
         await model.startRouting()
-        model.toggleTestTone(.left)
+        let gain = model.engine.leftGain
+        #expect(gain == model.engine.rightGain)
+        var out = renderGrips()
+        #expect(out.channel(0) == EngineTests.left.map { $0 * gain })
+        #expect(out.channel(2) == EngineTests.right.map { $0 * gain })
+
+        model.mainWindowActions.swap()
+        out = renderGrips()
+        // Grip A (Front Left card) now plays the right channel on both of its
+        // channels, Grip B the left.
+        #expect(out.channel(0) == EngineTests.right.map { $0 * gain })
+        #expect(out.channel(1) == EngineTests.right.map { $0 * gain })
+        #expect(out.channel(2) == EngineTests.left.map { $0 * gain })
+        #expect(out.channel(3) == EngineTests.left.map { $0 * gain })
+
+        // Test L must sound on the speaker now playing left: Grip B, position B.
+        model.playTestTone(.left)
+        #expect(model.engine.testTone == .right)
+        #expect(model.mainWindowState.testToneSide == .left)
+        model.cancelTone()
+
+        // Pressing swap again restores the original routing.
+        model.mainWindowActions.swap()
+        #expect(!model.engine.swapSides)
+        out = renderGrips()
+        #expect(out.channel(0) == EngineTests.left.map { $0 * gain })
+        model.playTestTone(.left)
+        #expect(model.engine.testTone == .left)
+    }
+
+    @Test func swappedTestToneWhileOffPlaysOnTheLeftChannelSpeaker() {
+        addGripsAndStart()
+        model.swapSides()
+        model.playTestTone(.left)
+        #expect(model.tones.playingUID == Self.gripB.uid)
+        #expect(model.mainWindowState.testToneSide == .left)
+    }
+
+    @Test func testTonePlaysOnPositionAThroughTheEngine() async {
+        addGripsAndStart()
+        await model.startRouting()
+        model.playTestTone(.left)
         #expect(model.engine.testTone == .left)
         #expect(model.mainWindowState.testToneSide == .left)
-        model.toggleTestTone(.left)
-        #expect(model.engine.testTone == .off)
+        model.playTestTone(.left)  // a second press restarts, it does not stop
+        #expect(model.engine.testTone == .left)
+        model.cancelTone()
         #expect(model.mainWindowState.testToneSide == nil)
     }
 
     @Test func testTonesPlayOnTheDeviceWhileOff() {
         addGripsAndStart()
         #expect(model.mainWindowState.canPlayTestTones)
-        model.toggleTestTone(.right)
+        model.playTestTone(.right)
         #expect(model.tones.playingUID == Self.gripB.uid)
         #expect(model.mainWindowState.testToneSide == .right)
         #expect(model.engine.testTone == .off)
-        model.toggleTestTone(.right)
-        #expect(model.tones.playingUID == nil)
+        model.playTestTone(.right)
+        #expect(model.tones.playingUID == Self.gripB.uid)
     }
 
     @Test func assignToneWorksWithoutRouting() {

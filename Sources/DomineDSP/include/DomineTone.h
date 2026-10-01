@@ -3,7 +3,7 @@
 
 // Identification tone for one output device. Used by the Choose Speaker
 // sheet's "Play tone" button: an IOProc on that device alone writes a short
-// 1 kHz sine to every channel, so the user hears which physical speaker it is
+// 440 Hz sine to every channel, so the user hears which physical speaker it is
 // without the engine running.
 //
 // Threading: domine_tone_ioproc runs on the real-time audio thread. It reads
@@ -23,10 +23,10 @@ extern "C" {
 #pragma clang diagnostic ignored "-Wnullability-extension"
 #pragma clang assume_nonnull begin
 
-#define DOMINE_IDENT_TONE_HZ 1000.0
-#define DOMINE_IDENT_TONE_AMPLITUDE 0.25
+#define DOMINE_IDENT_TONE_HZ 440.0
+#define DOMINE_IDENT_TONE_AMPLITUDE 0.2
 /// Linear fade at each end, so the tone starts and stops without a click.
-#define DOMINE_IDENT_TONE_FADE_MS 10.0
+#define DOMINE_IDENT_TONE_FADE_MS 40.0
 
 typedef struct DomineTone DomineTone;
 

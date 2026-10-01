@@ -55,7 +55,7 @@ struct UIRenderTests {
         for appearance in Self.appearances {
             let controller = NSHostingController(rootView: view)
             controller.sceneBridgingOptions = [.toolbars, .title]
-            let window = NSWindow(contentViewController: controller)
+            let window = OffscreenWindow(contentViewController: controller)
             window.isReleasedWhenClosed = false
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
             window.toolbarStyle = .unified
@@ -78,7 +78,7 @@ struct UIRenderTests {
             let hosting = NSHostingView(
                 rootView: view.background(Color(nsColor: .windowBackgroundColor)))
             hosting.frame = NSRect(origin: .zero, size: hosting.fittingSize)
-            let window = NSWindow(
+            let window = OffscreenWindow(
                 contentRect: hosting.frame, styleMask: [.borderless], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
             window.contentView = hosting

@@ -15,7 +15,7 @@ struct DomineApp: App {
         Window("Domine", id: "main") {
             Group {
                 if Self.isTestHost {
-                    Color.clear
+                    TestHostWindowHider()
                 } else {
                     MainView()
                         .environment(model)

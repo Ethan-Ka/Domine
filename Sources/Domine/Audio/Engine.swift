@@ -25,7 +25,13 @@ final class Engine {
     private(set) var layout: AggregateLayout?
 
     // Kernel controls. They apply immediately while running and to the next start.
-    var swapSides = false { didSet { applyControls() } }
+    var swapSides = false {
+        didSet {
+            guard swapSides != oldValue else { return }
+            Self.log.info("Swap sides \(self.swapSides ? "on" : "off", privacy: .public): left plays on position \(self.swapSides ? "B" : "A", privacy: .public), kernel \(self.resources.kernel != nil ? "live" : "not allocated", privacy: .public)")
+            applyControls()
+        }
+    }
     var testTone: TestTone = .off { didSet { applyControls() } }
     var leftGain: Float = 1 { didSet { applyControls() } }
     var rightGain: Float = 1 { didSet { applyControls() } }

@@ -4,7 +4,6 @@ import Testing
 import DomineDSP
 
 struct IdentToneTests {
-    /// 1 kHz at 8 kHz: eight frames per cycle, easy exact values.
     static let rate = 8000.0
 
     private func run(_ tone: OpaquePointer?, _ out: TestBufferList) {
@@ -15,7 +14,7 @@ struct IdentToneTests {
     }
 
     private func expected(frame: Int, total: Int, fade: Int) -> Float {
-        let s = Float(DOMINE_IDENT_TONE_AMPLITUDE * sin(2.0 * Double.pi * Double(frame) * 1000.0 / Self.rate))
+        let s = Float(DOMINE_IDENT_TONE_AMPLITUDE * sin(2.0 * Double.pi * Double(frame) * DOMINE_IDENT_TONE_HZ / Self.rate))
         let env: Float
         if frame < fade { env = Float(frame) / Float(fade) }
         else if total - frame <= fade { env = Float(total - frame - 1) / Float(fade) }
@@ -24,12 +23,12 @@ struct IdentToneTests {
     }
 
     @Test func writesSameSampleToEveryChannelOfEveryBuffer() {
-        let tone = domine_tone_create(Self.rate, 0.1)  // 800 frames, 80-frame fades
+        let tone = domine_tone_create(Self.rate, 0.1)  // 800 frames, 320-frame fades
         defer { domine_tone_destroy(tone) }
         let out = TestBufferList(channelsPerBuffer: [2, 1], frames: 200)
         run(tone, out)
         for frame in 0..<200 {
-            let want = expected(frame: frame, total: 800, fade: 80)
+            let want = expected(frame: frame, total: 800, fade: 320)
             #expect(abs(out.samples(buffer: 0, channel: 0)[frame] - want) < 1e-6)
             #expect(abs(out.samples(buffer: 0, channel: 1)[frame] - want) < 1e-6)
             #expect(abs(out.samples(buffer: 1, channel: 0)[frame] - want) < 1e-6)
@@ -44,7 +43,7 @@ struct IdentToneTests {
             let out = TestBufferList(channelsPerBuffer: [2], frames: 256)
             run(tone, out)
             for i in 0..<256 {
-                let want: Float = frame < 800 ? expected(frame: frame, total: 800, fade: 80) : 0
+                let want: Float = frame < 800 ? expected(frame: frame, total: 800, fade: 320) : 0
                 #expect(abs(out.samples(buffer: 0, channel: 0)[i] - want) < 1e-6)
                 frame += 1
             }

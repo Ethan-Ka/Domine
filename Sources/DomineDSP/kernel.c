@@ -43,7 +43,9 @@ struct DomineKernel {
     int32_t maxDelaySamples;
     uint32_t fadeLength;   // samples in a full fade
     uint32_t fadePosition; // 0 = silent, fadeLength = full gain
-    int lastToneSide;
+    int playingToneSide;   // side the tone envelope belongs to, 0 = none
+    uint32_t toneFadeLength;
+    uint32_t toneLevel;    // 0 = program only, toneFadeLength = tone only
     double tonePhase;      // cycles, in [0, 1)
     double tonePhaseStep;  // cycles per sample
 };
@@ -164,6 +166,8 @@ DomineKernel *domine_kernel_create(double sampleRate, uint32_t maxFrames) {
     k->fadeLength = fade > 0 ? fade : 1;
     k->fadePosition = k->fadeLength;
     k->tonePhaseStep = DOMINE_TONE_HZ / sampleRate;
+    uint32_t toneFade = (uint32_t)lround(sampleRate * DOMINE_TONE_FADE_MS / 1000.0);
+    k->toneFadeLength = toneFade > 0 ? toneFade : 1;
 
     atomic_init(&k->gainABits, float_bits(1.0f));
     atomic_init(&k->gainBBits, float_bits(1.0f));
@@ -269,9 +273,6 @@ static void render(DomineKernel *k,
     const uint32_t delayB = delay > 0 ? (uint32_t)delay : 0;
     const int bothChannels = monoPerSpeaker || monoFallback;
 
-    if (toneSide != 0 && toneSide != k->lastToneSide) k->tonePhase = 0.0;
-    k->lastToneSide = toneSide;
-
     InChannel inL, inR;
     resolve_input(inBuffers, inCount, &inL, &inR);
 
@@ -310,12 +311,27 @@ static void render(DomineKernel *k,
         float outA = k->ringA[(w - delayA) & mask] * gainA;
         float outB = k->ringB[(w - delayB) & mask] * gainB;
 
-        if (toneSide != 0) {
+        // A new request takes over only once the current tone has faded out.
+        if (k->toneLevel == 0 && k->playingToneSide != toneSide) {
+            k->playingToneSide = toneSide;
+            k->tonePhase = 0.0;
+        }
+        if (k->playingToneSide != 0) {
             const float tone = (float)(DOMINE_TONE_AMPLITUDE * sin(2.0 * M_PI * k->tonePhase));
             k->tonePhase += k->tonePhaseStep;
             if (k->tonePhase >= 1.0) k->tonePhase -= 1.0;
-            outA = toneSide == 1 ? tone : 0.0f;
-            outB = toneSide == 2 ? tone : 0.0f;
+            const uint32_t toneTarget = toneSide == k->playingToneSide ? k->toneFadeLength : 0;
+            if (k->toneLevel == k->toneFadeLength && toneTarget == k->toneFadeLength) {
+                outA = k->playingToneSide == 1 ? tone : 0.0f;
+                outB = k->playingToneSide == 2 ? tone : 0.0f;
+            } else {
+                const float e = (float)k->toneLevel / (float)k->toneFadeLength;
+                const float keep = 1.0f - e;
+                outA = k->playingToneSide == 1 ? tone * e + outA * keep : outA * keep;
+                outB = k->playingToneSide == 2 ? tone * e + outB * keep : outB * keep;
+            }
+            if (k->toneLevel < toneTarget) k->toneLevel++;
+            else if (k->toneLevel > toneTarget) k->toneLevel--;
         }
 
         if (k->fadePosition < fadeTarget) k->fadePosition++;

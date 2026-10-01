@@ -3,39 +3,79 @@ import Foundation
 import Testing
 
 struct ToneTests {
-    static func expectedTone(_ n: Int, sampleRate: Double = 48_000) -> Float {
-        Float(0.25 * sin(2 * Double.pi * 1000 * Double(n) / sampleRate))
+    /// 40 ms at 48 kHz.
+    static let fade = 1920
+
+    /// The bare sine, n samples after the tone (re)started at phase 0.
+    static func tone(_ n: Int, sampleRate: Double = 48_000) -> Float {
+        Float(DOMINE_TONE_AMPLITUDE * sin(2 * Double.pi * DOMINE_TONE_HZ * Double(n) / sampleRate))
     }
 
-    static func expectTone(_ samples: [Float], startingAt n0: Int, sourceLocation: SourceLocation = #_sourceLocation) {
-        for (i, value) in samples.enumerated() {
-            let expected = expectedTone(n0 + i)
-            #expect(abs(value - expected) <= 1e-6, "frame \(n0 + i)", sourceLocation: sourceLocation)
+    /// The playing position at tone level `level` (0...fade) over `program`.
+    static func playing(_ tone: Float, program: Float, level: Int) -> Float {
+        if level == fade { return tone }
+        let e = Float(level) / Float(fade)
+        return tone * e + program * (1 - e)
+    }
+
+    /// The other position at tone level `level` over `program`.
+    static func other(program: Float, level: Int) -> Float {
+        if level == fade { return 0 }
+        return program * (1 - Float(level) / Float(fade))
+    }
+
+    /// Tone level while fading in, n samples after the tone started.
+    static func levelIn(_ n: Int) -> Int { min(n, fade) }
+
+    static func expectClose(_ samples: [Float], _ expected: [Float], sourceLocation: SourceLocation = #_sourceLocation) {
+        #expect(samples.count == expected.count, sourceLocation: sourceLocation)
+        for (i, (value, want)) in zip(samples, expected).enumerated() where abs(value - want) > 1e-6 {
+            Issue.record("sample \(i): got \(value), expected \(want)", sourceLocation: sourceLocation)
+            return
         }
     }
 
-    @Test func toneOnAReplacesProgramAndSilencesB() {
+    /// Runs the kernel in `chunk`-sized calls and returns positions A and B.
+    static func run(_ kernel: Kernel, frames: Int, program: Float, chunk: Int = 512) -> (a: [Float], b: [Float]) {
+        var a: [Float] = [], b: [Float] = []
+        var done = 0
+        while done < frames {
+            let n = min(chunk, frames - done)
+            let input = Array(repeating: program, count: n)
+            let out = TestBufferList(channelsPerBuffer: [4], frames: n)
+            kernel.process(.interleaved(left: input, right: input), out)
+            #expect(out.channel(1) == out.channel(0))
+            #expect(out.channel(3) == out.channel(2))
+            a += out.channel(0)
+            b += out.channel(2)
+            done += n
+        }
+        return (a, b)
+    }
+
+    @Test func fadeLengthIs40Milliseconds() {
+        #expect(Int(lround(48_000 * DOMINE_TONE_FADE_MS / 1000)) == Self.fade)
+    }
+
+    @Test func toneOnAFadesInOverProgramThenReplacesItAndSilencesB() {
         let kernel = Kernel()
         domine_kernel_set_test_tone(kernel.raw, 1)
-        let program = Array(repeating: Float(0.5), count: 100)
-        for call in 0..<3 {
-            let out = TestBufferList(channelsPerBuffer: [4], frames: 100)
-            kernel.process(.interleaved(left: program, right: program), out)
-            Self.expectTone(out.channel(0), startingAt: call * 100)
-            #expect(out.channel(1) == out.channel(0))
-            #expect(out.channel(2) == zeros(100))
-            #expect(out.channel(3) == zeros(100))
-        }
+        let frames = Self.fade + 300
+        let (a, b) = Self.run(kernel, frames: frames, program: 0.5, chunk: 100)
+        Self.expectClose(a, (0..<frames).map { Self.playing(Self.tone($0), program: 0.5, level: Self.levelIn($0)) })
+        Self.expectClose(b, (0..<frames).map { Self.other(program: 0.5, level: Self.levelIn($0)) })
+        #expect(a[0] == 0.5)
+        #expect(b.suffix(300) == zeros(300))
     }
 
     @Test func tonePhaseIsContinuousAcrossOddCallSizes() {
         let kernel = Kernel()
         domine_kernel_set_test_tone(kernel.raw, 2)
         var n = 0
-        for size in [7, 13, 1, 480, 31] {
+        for size in [7, 13, 1, 480, 31, 2000] {
             let out = TestBufferList(channelsPerBuffer: [4], frames: size)
             kernel.process(.interleaved(left: zeros(size), right: zeros(size)), out)
-            Self.expectTone(out.channel(2), startingAt: n)
+            Self.expectClose(out.channel(2), (n..<n + size).map { Self.playing(Self.tone($0), program: 0, level: Self.levelIn($0)) })
             #expect(out.channel(0) == zeros(size))
             n += size
         }
@@ -47,29 +87,58 @@ struct ToneTests {
         domine_kernel_set_gains(kernel.raw, 0.1, 0.1)
         domine_kernel_set_delay_ms(kernel.raw, -1)
         domine_kernel_set_test_tone(kernel.raw, 1)
-        let out = TestBufferList(channelsPerBuffer: [2, 2], frames: 64)
-        kernel.process(.interleaved(left: zeros(64), right: zeros(64)), out)
-        Self.expectTone(out.channel(0), startingAt: 0)
-        #expect(out.channel(2) == zeros(64))
+        let frames = Self.fade + 64
+        let out = TestBufferList(channelsPerBuffer: [2, 2], frames: frames)
+        kernel.process(.interleaved(left: zeros(frames), right: zeros(frames)), out)
+        Self.expectClose(out.channel(0), (0..<frames).map { Self.playing(Self.tone($0), program: 0, level: Self.levelIn($0)) })
+        #expect(out.channel(2) == zeros(frames))
     }
 
-    @Test func toneRestartsAtZeroPhaseAndProgramResumes() {
+    @Test func toneOffFadesOutThenProgramResumes() {
         let kernel = Kernel()
-        let program = Array(repeating: Float(0.5), count: 50)
         domine_kernel_set_test_tone(kernel.raw, 1)
-        kernel.process(.interleaved(left: program, right: program), TestBufferList(channelsPerBuffer: [4], frames: 50))
+        _ = Self.run(kernel, frames: Self.fade + 100, program: 0.5)
 
         domine_kernel_set_test_tone(kernel.raw, 0)
-        let off = TestBufferList(channelsPerBuffer: [4], frames: 50)
-        kernel.process(.interleaved(left: program, right: program), off)
-        #expect(off.channel(0) == program)
-        #expect(off.channel(2) == program)
+        let frames = Self.fade + 50
+        let (a, b) = Self.run(kernel, frames: frames, program: 0.5)
+        // Level counts down from full: fade, fade - 1, ... 1, then program only.
+        let level = { (i: Int) in max(Self.fade - i, 0) }
+        let n0 = Self.fade + 100
+        Self.expectClose(a, (0..<frames).map { i in
+            level(i) == 0 ? 0.5 : Self.playing(Self.tone(n0 + i), program: 0.5, level: level(i))
+        })
+        Self.expectClose(b, (0..<frames).map { Self.other(program: 0.5, level: level($0)) })
+        #expect(a.suffix(50) == Array(repeating: 0.5, count: 50))
+        #expect(b.suffix(50) == Array(repeating: 0.5, count: 50))
+    }
 
+    @Test func toneOffMidFadeInReversesFromCurrentLevel() {
+        let kernel = Kernel()
+        domine_kernel_set_test_tone(kernel.raw, 1)
+        _ = Self.run(kernel, frames: 100, program: 0.5)  // level 100
+        domine_kernel_set_test_tone(kernel.raw, 0)
+        let (a, b) = Self.run(kernel, frames: 120, program: 0.5)
+        let level = { (i: Int) in max(100 - i, 0) }
+        Self.expectClose(a, (0..<120).map { i in
+            level(i) == 0 ? 0.5 : Self.playing(Self.tone(100 + i), program: 0.5, level: level(i))
+        })
+        Self.expectClose(b, (0..<120).map { Self.other(program: 0.5, level: level($0)) })
+    }
+
+    @Test func movingTheToneFadesOutAThenFadesInBFromPhaseZero() {
+        let kernel = Kernel()
+        domine_kernel_set_test_tone(kernel.raw, 1)
+        _ = Self.run(kernel, frames: 50, program: 0)  // level 50
         domine_kernel_set_test_tone(kernel.raw, 2)
-        let on = TestBufferList(channelsPerBuffer: [4], frames: 50)
-        kernel.process(.interleaved(left: program, right: program), on)
-        Self.expectTone(on.channel(2), startingAt: 0)
-        #expect(on.channel(0) == zeros(50))
+        let (a, b) = Self.run(kernel, frames: 200, program: 0)
+        // Frames 0..<50 fade A out (levels 50...1); B starts at frame 50 at level 0.
+        Self.expectClose(a, (0..<200).map { i in
+            i < 50 ? Self.playing(Self.tone(50 + i), program: 0, level: 50 - i) : 0
+        })
+        Self.expectClose(b, (0..<200).map { i in
+            i < 50 ? 0 : Self.playing(Self.tone(i - 50), program: 0, level: i - 50)
+        })
     }
 
     @Test func invalidToneSideIsOff() {
@@ -133,7 +202,12 @@ struct MuteTests {
         domine_kernel_set_test_tone(kernel.raw, 1)
         domine_kernel_set_muted(kernel.raw, 1)
         let out = Self.run(kernel, frames: 3000, expectBEqualsA: false)
-        #expect(out.prefix(12).last! > 0.2)
+        // Program is all ones: the tone fades in over it while the mute fades both out.
+        let expected = (0..<3000).map { n in
+            ToneTests.playing(ToneTests.tone(n), program: 1, level: ToneTests.levelIn(n))
+                * (Float(max(0, Self.fade - (n + 1))) / Float(Self.fade))
+        }
+        ToneTests.expectClose(out, expected)
         #expect(out.suffix(600).allSatisfy { $0 == 0 })
     }
 }
@@ -168,9 +242,13 @@ struct PeakTests {
     @Test func toneOnAShowsOnlyOnA() {
         let kernel = Kernel()
         domine_kernel_set_test_tone(kernel.raw, 1)
-        let program = Array(repeating: Float(0.9), count: 48)
-        kernel.process(.interleaved(left: program, right: program), TestBufferList(channelsPerBuffer: [4], frames: 48))
-        #expect(kernel.peak(0) == Float(0.25))
+        // Past the fade in, one full 440 Hz cycle (about 109 frames).
+        _ = ToneTests.run(kernel, frames: ToneTests.fade, program: 0.9)
+        let program = Array(repeating: Float(0.9), count: 110)
+        let out = TestBufferList(channelsPerBuffer: [4], frames: 110)
+        kernel.process(.interleaved(left: program, right: program), out)
+        #expect(kernel.peak(0) == out.channel(0).map(abs).max())
+        #expect(kernel.peak(0) > Float(DOMINE_TONE_AMPLITUDE) * 0.999)
         #expect(kernel.peak(1) == 0)
     }
 }
