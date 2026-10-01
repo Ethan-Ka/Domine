@@ -1,27 +1,55 @@
 import AppKit
+import os
 
 /// Hardware volume keys drive Domine's master volume (SPEC section 4b).
 extension AppModel {
-    /// The tap runs only while the user enabled volume keys, Domine has
-    /// Accessibility permission, and the engine is playing. Otherwise no tap
-    /// exists and the keys keep their normal behavior.
-    var wantsVolumeKeyTap: Bool {
-        store.volumeKeysEnabled && services.isAccessibilityTrusted() && engine.state == .running
+    static let volumeKeysLog = Logger(subsystem: "com.ethankawley.Domine", category: "VolumeKeys")
+    static let trustPollInterval: Duration = .seconds(2)
+
+    /// Why the tap should not run right now, or nil when it should. The tap
+    /// runs only while the user enabled volume keys, Domine has Accessibility
+    /// permission, and routing is on. When Domine is off the keys keep their
+    /// normal behavior and control the Mac's own output (SPEC 4b).
+    var volumeKeyTapBlock: String? {
+        if !store.volumeKeysEnabled { return "volume keys are off in Settings" }
+        if !engine.state.isActive { return "routing is off" }
+        if !services.isAccessibilityTrusted() {
+            return "Accessibility is not granted (AXIsProcessTrusted is false; a rebuilt app needs a fresh grant)"
+        }
+        return nil
+    }
+
+    var wantsVolumeKeyTap: Bool { volumeKeyTapBlock == nil }
+
+    /// Volume keys are on but cannot be caught, so they still reach macOS.
+    var volumeKeysNeedAccessibility: Bool {
+        generalSettings.volumeKeysEnabled && !generalSettings.accessibilityGranted
     }
 
     /// Starts or stops the tap to match `wantsVolumeKeyTap`. Called when the
-    /// setting changes, when the engine state changes, and when Domine
-    /// becomes active (the user may have just granted Accessibility).
+    /// setting changes, when the engine state changes, when Domine becomes
+    /// active, and every few seconds while only Accessibility is missing.
     func updateVolumeKeyTap() {
-        if wantsVolumeKeyTap {
-            guard !volumeKeyTap.isRunning else { return }
+        let block = volumeKeyTapBlock
+        if let block {
+            if volumeKeyTap.isRunning {
+                volumeKeyTap.stop()
+                Self.volumeKeysLog.info("Volume key tap stopped: \(block, privacy: .public)")
+            } else if block != lastVolumeKeyTapBlock {
+                Self.volumeKeysLog.info("Volume key tap not running: \(block, privacy: .public)")
+            }
+        } else if !volumeKeyTap.isRunning {
             let started = volumeKeyTap.start { [weak self] event in
                 self?.handleVolumeKey(event)
             }
-            if !started { Self.log.error("Could not start the volume key tap") }
-        } else if volumeKeyTap.isRunning {
-            volumeKeyTap.stop()
+            if started {
+                Self.volumeKeysLog.info("Volume key tap started")
+            } else {
+                Self.volumeKeysLog.error("Could not create the volume key event tap; the keys keep their normal behavior")
+            }
         }
+        lastVolumeKeyTapBlock = block
+        updateTrustPolling()
     }
 
     /// Applies one key press to the master volume and mute, saves the volume
@@ -30,6 +58,7 @@ extension AppModel {
         let (volume, muted) = event.apply(to: pairSettings.masterVolume, muted: isMuted)
         setMasterVolume(Double(volume))
         setMuted(muted)
+        Self.volumeKeysLog.info("Key \(String(describing: event.key), privacy: .public): master \(self.pairSettings.masterVolume), muted \(muted)")
         showVolumeHUD(Double(pairSettings.masterVolume), isMuted)
     }
 
@@ -45,7 +74,35 @@ extension AppModel {
         activationObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification, object: nil, queue: nil
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.updateVolumeKeyTap() }
+            MainActor.assumeIsolated {
+                self?.refreshSystemStatus()
+                self?.updateVolumeKeyTap()
+            }
+        }
+    }
+
+    /// While the keys are wanted and only Accessibility is missing, checks
+    /// trust every few seconds, so a grant made in System Settings takes
+    /// effect without switching back to Domine.
+    private func updateTrustPolling() {
+        let waiting = store.volumeKeysEnabled && engine.state.isActive && !services.isAccessibilityTrusted()
+        if waiting {
+            guard trustPollTask == nil else { return }
+            trustPollTask = Task { [weak self] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: Self.trustPollInterval)
+                    guard !Task.isCancelled, let self else { return }
+                    if self.services.isAccessibilityTrusted() {
+                        self.trustPollTask = nil
+                        self.refreshSystemStatus()
+                        self.updateVolumeKeyTap()
+                        return
+                    }
+                }
+            }
+        } else {
+            trustPollTask?.cancel()
+            trustPollTask = nil
         }
     }
 }
