@@ -5,10 +5,14 @@ import CoreAudio
 struct TapController: Sendable {
     let hal: any AudioHAL
 
-    func create() throws(EngineError) -> ProcessTap {
+    /// `excluded` are further process objects to leave untapped: the
+    /// excluded apps of SPEC 3b, once they are resolved to processes.
+    func create(alsoExcluding excluded: [AudioObjectID] = []) throws(EngineError) -> ProcessTap {
         let own = try EngineError.hal { () throws(HALError) in try hal.ownProcessObject() }
         guard own != kAudioObjectUnknown else { throw .noOwnProcessObject }
-        return try EngineError.hal { () throws(HALError) in try hal.createProcessTap(excluding: [own], muted: true) }
+        return try EngineError.hal { () throws(HALError) in
+            try hal.createProcessTap(excluding: [own] + excluded, muted: true)
+        }
     }
 
     func destroy(_ tap: ProcessTap) throws(HALError) {

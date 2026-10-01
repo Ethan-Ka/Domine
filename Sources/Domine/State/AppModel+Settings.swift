@@ -51,6 +51,7 @@ extension AppModel {
         }
         if new.playThroughDeviceUID != old.playThroughDeviceUID {
             store.excludedAppsPlayThroughUID = new.playThroughDeviceUID
+            syncSettingsWithCatalog()
         }
     }
 
@@ -71,7 +72,10 @@ extension AppModel {
 
     /// Output lists and names that follow the catalog.
     func syncSettingsWithCatalog() {
-        let choices = catalog.outputs.map { ExclusionOutputChoice(uid: $0.uid, name: $0.name) }
+        var choices = catalog.outputs.map { ExclusionOutputChoice(uid: $0.uid, name: $0.name) }
+        if let saved = exclusionsSettings.playThroughDeviceUID, !choices.contains(where: { $0.uid == saved }) {
+            choices.append(ExclusionOutputChoice(uid: saved, name: knownNames[saved] ?? "Output", isConnected: false))
+        }
         if exclusionsSettings.outputChoices != choices { exclusionsSettings.outputChoices = choices }
         let previous = store.previousOutputUID.flatMap { catalog.device(uid: $0)?.name }
         if generalSettings.previousOutputName != previous { generalSettings.previousOutputName = previous }

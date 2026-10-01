@@ -41,9 +41,11 @@ extension AppModel {
         switch engine.state {
         case .idle:
             if leftUID == nil || rightUID == nil { return "Choose two speakers" }
-            return engine.idleReason?.description ?? "Off"
+            return routingRefusal ?? engine.idleReason?.description ?? "Off"
         case .starting: return "Starting"
-        case .running: return engine.swapSides ? "Playing, sides swapped" : "Playing"
+        case .running:
+            if volumeKeysNeedAccessibility { return "Playing, volume keys need Accessibility access" }
+            return engine.swapSides ? "Playing, sides swapped" : "Playing"
         case .stopping: return "Stopping"
         case .error(let message): return message
         }

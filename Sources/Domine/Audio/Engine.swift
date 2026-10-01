@@ -34,6 +34,9 @@ final class Engine {
     /// Fades the output out (or back in) over 50 ms in the kernel.
     var muted = false { didSet { applyControls() } }
     let monoPerSpeaker = true
+    /// Process objects the next tap leaves out besides Domine itself
+    /// (SPEC 3b). Empty until excluded apps are resolved to processes.
+    var excludedProcesses: [AudioObjectID] = []
 
     var isKernelAllocated: Bool { resources.kernel != nil }
 
@@ -162,7 +165,7 @@ final class Engine {
     }
 
     private func createTapAndAggregate(a: SubDevice, b: SubDevice) throws(EngineError) {
-        let tap = try taps.create()
+        let tap = try taps.create(alsoExcluding: excludedProcesses)
         resources.tap = tap
         let format = try EngineError.hal { () throws(HALError) in try hal.tapFormat(of: tap.id) }
         Self.log.info("Tap \(tap.uid, privacy: .public): \(format.mChannelsPerFrame) ch at \(format.mSampleRate) Hz")
