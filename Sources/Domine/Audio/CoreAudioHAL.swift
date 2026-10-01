@@ -125,17 +125,17 @@ final class CoreAudioHAL: AudioHAL {
         return object
     }
 
-    func createProcessTap(excluding processes: [AudioObjectID]) throws(HALError) -> ProcessTap {
+    func createProcessTap(excluding processes: [AudioObjectID], muted: Bool) throws(HALError) -> ProcessTap {
         let description = CATapDescription(stereoGlobalTapButExcludeProcesses: processes)
         description.name = "Domine"
-        description.muteBehavior = .muted
+        description.muteBehavior = muted ? .muted : .unmuted
         description.isPrivate = true
         var tap = AudioObjectID(kAudioObjectUnknown)
         try HALError.check(AudioHardwareCreateProcessTap(description, &tap), "AudioHardwareCreateProcessTap")
         do {
             return ProcessTap(id: tap, uid: try readString(tap, kAudioTapPropertyUID))
         } catch {
-            // Do not leak a muting tap if its UID cannot be read.
+            // Do not leak a tap (possibly muting) if its UID cannot be read.
             let status = AudioHardwareDestroyProcessTap(tap)
             if status != noErr {
                 Self.log.error("\(HALError(status, "AudioHardwareDestroyProcessTap").description)")

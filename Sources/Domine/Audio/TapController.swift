@@ -8,7 +8,7 @@ struct TapController: Sendable {
     func create() throws(EngineError) -> ProcessTap {
         let own = try EngineError.hal { () throws(HALError) in try hal.ownProcessObject() }
         guard own != kAudioObjectUnknown else { throw .noOwnProcessObject }
-        return try EngineError.hal { () throws(HALError) in try hal.createProcessTap(excluding: [own]) }
+        return try EngineError.hal { () throws(HALError) in try hal.createProcessTap(excluding: [own], muted: true) }
     }
 
     func destroy(_ tap: ProcessTap) throws(HALError) {

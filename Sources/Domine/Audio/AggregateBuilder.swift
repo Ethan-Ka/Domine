@@ -38,4 +38,20 @@ enum AggregateBuilder {
             kAudioAggregateDeviceTapAutoStartKey: 1,
         ]
     }
+
+    /// The capture permission probe's aggregate: private, the tap as its only
+    /// member, no sub-devices, so no output device (and no Bluetooth device)
+    /// is opened.
+    static func probeDescription(tapUID: String, instance: UUID = UUID()) -> [String: Any] {
+        [
+            kAudioAggregateDeviceNameKey: name + " Capture Check",
+            kAudioAggregateDeviceUIDKey: DeviceCatalog.domineUIDPrefix + "capturecheck." + instance.uuidString,
+            kAudioAggregateDeviceIsPrivateKey: 1,
+            kAudioAggregateDeviceIsStackedKey: 0,
+            kAudioAggregateDeviceTapListKey: [
+                [kAudioSubTapUIDKey: tapUID, kAudioSubTapDriftCompensationKey: 0],
+            ],
+            kAudioAggregateDeviceTapAutoStartKey: 1,
+        ]
+    }
 }

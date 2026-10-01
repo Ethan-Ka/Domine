@@ -52,6 +52,7 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
     private var defaultOutput: AudioObjectID = kAudioObjectUnknown
     private var listeners: [UUID: (HALProperty, @MainActor @Sendable () -> Void)] = [:]
     private var _ops: [Op] = []
+    private var _tapMuteFlags: [Bool] = []
     private var taps: [AudioObjectID: String] = [:]
     private var aggregates: [AudioObjectID: [String: Any]] = [:]
     private var ioProcs: [IOProcHandle: IOProc] = [:]
@@ -117,6 +118,8 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
 
     var listenerCount: Int { lock.withLock { listeners.count } }
     var ops: [Op] { lock.withLock { _ops } }
+    /// The `muted` argument of every tap created, in order.
+    var tapMuteFlags: [Bool] { lock.withLock { _tapMuteFlags } }
     var liveTapCount: Int { lock.withLock { taps.count } }
     var liveAggregateCount: Int { lock.withLock { aggregates.count } }
     var liveIOProcCount: Int { lock.withLock { ioProcs.count } }
@@ -254,10 +257,11 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
         }
     }
 
-    func createProcessTap(excluding processes: [AudioObjectID]) throws(HALError) -> ProcessTap {
+    func createProcessTap(excluding processes: [AudioObjectID], muted: Bool) throws(HALError) -> ProcessTap {
         try locked { () throws(HALError) -> ProcessTap in
             try fail(.createTap, "AudioHardwareCreateProcessTap")
             _ops.append(.createTap(excluding: processes))
+            _tapMuteFlags.append(muted)
             let id = nextID
             nextID += 1
             let uid = "tap-\(id)"

@@ -12,7 +12,7 @@ final class SettingsStore {
         case lastLeftUID, lastRightUID
         case volumeKeysEnabled, restorePreviousOutput, closeBehavior, startWhenBothConnect
         case previousOutputUID, excludedAppsPlayThroughUID, exclusions
-        case hasCompletedWelcome
+        case hasCompletedWelcome, audioCaptureWorking
 
         var name: String { SettingsStore.keyPrefix + rawValue }
     }
@@ -102,6 +102,13 @@ final class SettingsStore {
     var hasCompletedWelcome: Bool {
         get { bool(.hasCompletedWelcome, default: false) }
         set { defaults.set(newValue, forKey: Key.hasCompletedWelcome.name) }
+    }
+
+    /// Non-zero audio arrived from a process tap at least once, so audio
+    /// capture permission was granted (SPEC section 8). Off by default.
+    var audioCaptureWorking: Bool {
+        get { bool(.audioCaptureWorking, default: false) }
+        set { defaults.set(newValue, forKey: Key.audioCaptureWorking.name) }
     }
 
     /// Entries that fail to decode are dropped; the rest are kept.
