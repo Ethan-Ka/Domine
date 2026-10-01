@@ -170,13 +170,8 @@ func run(_ args: [String]) throws {
     print("Device A (LEFT):  \(a.name)  uid=\(a.uid)")
     print("Device B (RIGHT): \(b.name)  uid=\(b.uid)")
 
-    for d in [a, b] {
-        do {
-            try setValue(d.id, address(kAudioDevicePropertyNominalSampleRate), Float64(48000))
-        } catch {
-            print("warning: could not set 48 kHz on \(d.uid): \(error)")
-        }
-    }
+    // Never set a Bluetooth speaker's sample rate (SPEC section 4a): forcing
+    // a Grip to 48 kHz left it reporting 48 kHz while its codec ran at 44.1 kHz.
 
     let previous = try defaultOutput()
     let aggUID = "\(uidPrefix).\(UUID().uuidString)"
