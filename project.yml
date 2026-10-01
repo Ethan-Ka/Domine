@@ -53,6 +53,55 @@ targets:
         CLANG_WARN_DOCUMENTATION_COMMENTS: YES
         GCC_TREAT_WARNINGS_AS_ERRORS: YES
 
+  DomineDriver:
+    type: bundle
+    platform: macOS
+    sources:
+      - path: Sources/DomineDriver
+        excludes:
+          - module.modulemap
+    dependencies:
+      - sdk: CoreAudio.framework
+      - sdk: CoreFoundation.framework
+    info:
+      path: Sources/DomineDriver/Info.plist
+      properties:
+        CFBundleName: Domine
+        CFBundleDisplayName: Domine
+        CFBundleShortVersionString: "0.1"
+        CFBundleVersion: "1"
+        CFPlugInDynamicRegistration: false
+        CFPlugInUnloadFunction: ""
+        CFPlugInFactories:
+          8E6560DA-E2C1-469A-B453-54199794D373: DomineDriver_Create
+        CFPlugInTypes:
+          443ABAB8-E7B3-491A-B985-BEB9187030DB:
+            - 8E6560DA-E2C1-469A-B453-54199794D373
+    settings:
+      base:
+        PRODUCT_NAME: Domine
+        PRODUCT_BUNDLE_IDENTIFIER: com.ethankawley.Domine.driver
+        WRAPPER_EXTENSION: driver
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Sources/DomineDriver/Info.plist
+        ENABLE_HARDENED_RUNTIME: YES
+        SKIP_INSTALL: YES
+        GCC_WARN_PEDANTIC: YES
+        CLANG_WARN_DOCUMENTATION_COMMENTS: YES
+        GCC_TREAT_WARNINGS_AS_ERRORS: YES
+
+  DomineDriverTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/DomineDriverTests
+      - path: Sources/DomineDriver/DriverMath.c
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.ethankawley.DomineDriverTests
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/Sources/DomineDriver
+
   DomineTests:
     type: bundle.unit-test
     platform: macOS
@@ -86,6 +135,8 @@ schemes:
         Domine: all
         DomineTests: [test]
         DomineDSPTests: [test]
+        DomineDriver: all
+        DomineDriverTests: [test]
     run:
       config: Debug
     test:
@@ -93,3 +144,4 @@ schemes:
       targets:
         - DomineTests
         - DomineDSPTests
+        - DomineDriverTests
