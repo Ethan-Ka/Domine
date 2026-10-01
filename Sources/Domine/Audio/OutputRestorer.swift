@@ -44,10 +44,7 @@ final class OutputRestorer {
             store.previousOutputUID = current
         }
         if let current, pair.contains(current) || Self.isDomine(current) {
-            guard let target = Self.fallbackOutput(
-                pair: pair, playThroughUID: playThroughUID,
-                previousUID: store.previousOutputUID, outputs: outputs())
-            else {
+            guard let target = target(pair: pair, playThroughUID: playThroughUID) else {
                 Self.log.error("Default output \(current, privacy: .public) is a routed speaker and no other output exists")
                 throw .noOtherOutput
             }
@@ -66,15 +63,13 @@ final class OutputRestorer {
         guard store.outputNeedsRestore else { return }
         store.outputNeedsRestore = false
         guard enabled else { return }
-        guard let previous = store.previousOutputUID,
-              let device = outputs().first(where: { $0.uid == previous })
-        else {
+        guard let previous = store.previousOutputUID, isPresent(previous) else {
             Self.log.info("Previous output is gone; leaving the default output alone")
             return
         }
         do {
             if try currentDefaultUID() != previous {
-                try setDefault(device, reason: "routing stopped")
+                try setDefault(previous, reason: "routing stopped")
             }
         } catch {
             Self.log.error("Could not restore the previous output: \(String(describing: error), privacy: .public)")
@@ -91,9 +86,15 @@ final class OutputRestorer {
 
     // MARK: Choosing a device
 
-    /// Where the Mac's own output goes while the pair is routed: the
-    /// excluded-apps device, else the previous output, else the built-in
-    /// output, else any other output. Never one of the pair, never Domine's own.
+    /// Domine's virtual output device. When it is installed it is where the
+    /// Mac's own output goes while routing, so the volume keys and the system
+    /// volume HUD work natively. The catalog hides it, so it is found by UID.
+    static let virtualOutputUID = "com.ethankawley.Domine.VirtualOutput"
+
+    /// Where the Mac's own output goes while the pair is routed when the
+    /// virtual output is not installed: the excluded-apps device, else the
+    /// previous output, else the built-in output, else any other output.
+    /// Never one of the pair, never a Domine device.
     static func fallbackOutput(
         pair: Set<String>, playThroughUID: String?, previousUID: String?, outputs: [OutputDevice]
     ) -> OutputDevice? {
@@ -130,10 +131,7 @@ final class OutputRestorer {
               let current = try? currentDefaultUID(),
               guardedPair.contains(current) || Self.isDomine(current)
         else { return }
-        guard let target = Self.fallbackOutput(
-            pair: guardedPair, playThroughUID: playThroughUID,
-            previousUID: store.previousOutputUID, outputs: outputs())
-        else {
+        guard let target = target(pair: guardedPair, playThroughUID: playThroughUID) else {
             Self.log.error("Default output moved to routed speaker \(current, privacy: .public) and no other output exists")
             return
         }
@@ -153,21 +151,41 @@ final class OutputRestorer {
         }
     }
 
-    private func setDefault(_ device: OutputDevice, reason: String) throws(Failure) {
+    /// The virtual output when present, else `fallbackOutput`.
+    private func target(pair: Set<String>, playThroughUID: String?) -> String? {
+        if isPresent(Self.virtualOutputUID) { return Self.virtualOutputUID }
+        return Self.fallbackOutput(
+            pair: pair, playThroughUID: playThroughUID,
+            previousUID: store.previousOutputUID, outputs: outputs())?.uid
+    }
+
+    /// Looked up through the HAL, since the catalog hides Domine's devices.
+    private func isPresent(_ uid: String) -> Bool {
+        do {
+            return try hal.deviceID(forUID: uid) != kAudioObjectUnknown
+        } catch {
+            Self.log.error("Could not look up \(uid, privacy: .public): \(error.description, privacy: .public)")
+            return false
+        }
+    }
+
+    private func setDefault(_ uid: String, reason: String) throws(Failure) {
         do throws(HALError) {
-            let id = try hal.deviceID(forUID: device.uid)
+            let id = try hal.deviceID(forUID: uid)
             guard id != kAudioObjectUnknown else {
                 throw HALError(kAudioHardwareBadDeviceError, "AudioObjectGetPropertyData",
                                selector: kAudioHardwarePropertyTranslateUIDToDevice)
             }
             try hal.setDefaultOutputDevice(id)
-            Self.log.info("Default output set to \(device.uid, privacy: .public) (\(device.name, privacy: .public)): \(reason, privacy: .public)")
+            Self.log.info("Default output set to \(uid, privacy: .public): \(reason, privacy: .public)")
         } catch {
             throw .hal(error)
         }
     }
 
+    /// One of Domine's own private devices (an aggregate). The virtual
+    /// output is a normal output for this purpose.
     private static func isDomine(_ uid: String) -> Bool {
-        uid.hasPrefix(DeviceCatalog.domineUIDPrefix)
+        uid.hasPrefix(DeviceCatalog.domineUIDPrefix) && uid != virtualOutputUID
     }
 }

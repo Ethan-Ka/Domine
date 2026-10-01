@@ -60,6 +60,30 @@ final class OutputRestoreTests {
         #expect(hal.defaultOutputUID == Self.gripB.uid)
     }
 
+    static let virtualOutput = FakeHAL.Device(
+        uid: OutputRestorer.virtualOutputUID, name: "Domine", transportType: kAudioDeviceTransportTypeVirtual)
+
+    @Test func virtualOutputIsPreferredWhenInstalled() async {
+        model.exclusionsSettings.playThroughDeviceUID = Self.dac.uid
+        add(Self.speakers, Self.dac, Self.virtualOutput, Self.gripA, Self.gripB, default: Self.gripA.uid)
+        #expect(model.catalog.device(uid: OutputRestorer.virtualOutputUID) == nil)  // hidden from the list
+        await model.startRouting()
+        #expect(hal.defaultOutputUID == OutputRestorer.virtualOutputUID)
+        hal.setDefault(uid: Self.gripB.uid)
+        #expect(hal.defaultOutputUID == OutputRestorer.virtualOutputUID)
+        model.stopRouting()
+        #expect(hal.defaultOutputUID == Self.gripA.uid)
+    }
+
+    @Test func virtualOutputAsPreviousOutputIsRestored() async {
+        add(Self.speakers, Self.virtualOutput, Self.gripA, Self.gripB, default: OutputRestorer.virtualOutputUID)
+        await model.startRouting()
+        #expect(model.store.previousOutputUID == OutputRestorer.virtualOutputUID)
+        hal.setDefault(uid: Self.speakers.uid)
+        model.stopRouting()
+        #expect(hal.defaultOutputUID == OutputRestorer.virtualOutputUID)
+    }
+
     @Test func excludedAppsDeviceWinsWhenSet() async {
         model.exclusionsSettings.playThroughDeviceUID = Self.dac.uid
         add(Self.speakers, Self.dac, Self.gripA, Self.gripB, default: Self.gripA.uid)
