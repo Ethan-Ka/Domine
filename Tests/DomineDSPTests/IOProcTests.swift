@@ -86,9 +86,9 @@ struct IOProcTests {
         for channel in 0..<4 { #expect(out.channel(channel) == zeros(Self.frames)) }
     }
 
-    @Test func framesComeFromOutputNotInput() {
-        // Input holds 6 frames but the output only 4: exactly 4 are written,
-        // and the ring advances by 4, which the next cycle's delay reveals.
+    @Test func longerInputIsKeptForTheNextCycle() {
+        // Input holds 6 frames but the output only 4: 4 are written now and
+        // the other 2 come out first next cycle. Nothing is dropped.
         let kernel = Kernel(sampleRate: 1000)
         domine_kernel_set_delay_ms(kernel.raw, 2) // B delayed by 2 samples
         let first = TestBufferList(channelsPerBuffer: [4], frames: 4, capacityFrames: 6)
@@ -98,8 +98,40 @@ struct IOProcTests {
 
         let second = TestBufferList(channelsPerBuffer: [4], frames: 2)
         kernel.ioproc(.interleaved(left: [0.7, 0.8], right: [-0.7, -0.8]), second)
-        #expect(second.channel(0) == [0.7, 0.8])
+        #expect(second.channel(0) == [0.5, 0.6])
         #expect(second.channel(2) == [-0.3, -0.4])
+
+        let third = TestBufferList(channelsPerBuffer: [4], frames: 2)
+        kernel.ioproc(.interleaved(left: [1, 1], right: [-1, -1]), third)
+        #expect(third.channel(0) == [0.7, 0.8])
+    }
+
+    @Test func shorterInputPlaysSilenceThenResumesInOrder() {
+        let kernel = Kernel()
+        let first = TestBufferList(channelsPerBuffer: [4], frames: 4)
+        kernel.ioproc(.interleaved(left: [0.1, 0.2], right: [-0.1, -0.2]), first)
+        #expect(first.channel(0) == [0.1, 0.2, 0, 0])
+        #expect(first.channel(2) == [-0.1, -0.2, 0, 0])
+
+        let second = TestBufferList(channelsPerBuffer: [4], frames: 2)
+        kernel.ioproc(.interleaved(left: [0.3, 0.4], right: [-0.3, -0.4]), second)
+        #expect(second.channel(0) == [0.3, 0.4])
+    }
+
+    @Test func interleavedStereoIsConsumedOneFramePerOutputFrame() {
+        // 512-frame cycles of a ramp: the output must be the exact ramp, with
+        // no frame skipped or repeated across cycle boundaries.
+        let kernel = Kernel()
+        let cycle = 512
+        var played: [Float] = []
+        for c in 0..<4 {
+            let l = ramp(cycle, start: c * cycle + 1, scale: 0.0001)
+            let out = TestBufferList(channelsPerBuffer: [2, 2], frames: cycle)
+            kernel.ioproc(.interleaved(left: l, right: l.map { -$0 }), out)
+            played += out.channel(0)
+            #expect(out.channel(3) == l.map { -$0 })
+        }
+        #expect(played == ramp(4 * cycle, scale: 0.0001))
     }
 
     @Test func framesUseLargestOutputBuffer() {

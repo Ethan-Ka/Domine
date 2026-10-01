@@ -19,12 +19,41 @@ struct AggregateBuilderTests {
             "clock": "A:output",
             "subdevices": [
                 ["uid": "A:output", "drift": 0],
-                ["uid": "B:output", "drift": 1],
+                ["uid": "B:output", "drift": 1, "drift quality": 0x7F],
             ],
-            "taps": [["uid": "TAP", "drift": 1]],
+            "taps": [["uid": "TAP", "drift": 1, "drift quality": 0x7F]],
             "tapautostart": 1,
         ]
         #expect(description as NSDictionary == expected as NSDictionary)
+    }
+
+    @Test func defaultClockIsLeftSpeaker() {
+        #expect(AggregateBuilder.clock == .leftSpeaker)
+        let description = AggregateBuilder.description(uidA: "A:output", uidB: "B:output", tapUID: "TAP")
+        #expect(description["clock"] as? String == "A:output")
+    }
+
+    @Test func externalClockDriftCompensatesBothSpeakers() {
+        let description = AggregateBuilder.description(
+            uidA: "A:output", uidB: "B:output", tapUID: "TAP",
+            clock: .device(uid: "com.ethankawley.Domine.VirtualOutput"), instance: Self.instance)
+        #expect(description["master"] as? String == "A:output")
+        #expect(description["clock"] as? String == "com.ethankawley.Domine.VirtualOutput")
+        let subs = description["subdevices"] as? [[String: Any]]
+        #expect(subs.map { $0 as NSArray } == [
+            ["uid": "A:output", "drift": 1, "drift quality": 0x7F],
+            ["uid": "B:output", "drift": 1, "drift quality": 0x7F],
+        ] as NSArray)
+    }
+
+    @Test func clockMayBeDeviceB() {
+        let description = AggregateBuilder.description(
+            uidA: "A:output", uidB: "B:output", tapUID: "TAP", clock: .device(uid: "B:output"))
+        let subs = description["subdevices"] as? [[String: Any]]
+        #expect(subs.map { $0 as NSArray } == [
+            ["uid": "A:output", "drift": 1, "drift quality": 0x7F],
+            ["uid": "B:output", "drift": 0],
+        ] as NSArray)
     }
 
     @Test func monoDescriptionHasOnlyA() {
@@ -45,6 +74,9 @@ struct AggregateBuilderTests {
         #expect(kAudioSubDeviceDriftCompensationKey == "drift")
         #expect(kAudioSubTapDriftCompensationKey == "drift")
         #expect(kAudioSubTapUIDKey == "uid")
+        #expect(kAudioSubDeviceDriftCompensationQualityKey == "drift quality")
+        #expect(kAudioSubTapDriftCompensationQualityKey == "drift quality")
+        #expect(kAudioAggregateDriftCompensationMaxQuality == 0x7F)
     }
 
     @Test func uidUsesDominePrefix() {

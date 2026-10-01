@@ -17,6 +17,11 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
         var inputStreams: [Int] = []
         var sampleRate: Double = 48_000
         var latency = DeviceLatency()
+        var inputLatency = DeviceLatency()
+        /// nil reads as `sampleRate`.
+        var actualSampleRate: Double? = nil
+        var availableSampleRates: [ClosedRange<Double>] = [44_100...44_100, 48_000...48_000]
+        var bufferFrameSize: UInt32 = 512
 
         var outputLayout: [Int] { outputStreams ?? (outputChannels > 0 ? [outputChannels] : []) }
     }
@@ -71,6 +76,11 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
     var aggregateStreamsHiddenForAttempts = 0
     /// Replaces the aggregate's reported output streams.
     var aggregateOutputOverride: [Int]?
+    /// The tap's rate when there is no default output (otherwise it follows
+    /// the default output's nominal rate, like the real HAL).
+    var tapSampleRate: Double = 48_000
+    /// Makes the tap's (and the aggregate's tap streams') format non-interleaved.
+    var tapNonInterleaved = false
 
     // MARK: - Test controls
 
@@ -132,17 +142,20 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
     }
 
     /// Runs one IOProc cycle on the running aggregate, as the HAL would.
-    func render(input: FakeBufferList, output: FakeBufferList) {
+    func render(input: FakeBufferList, output: FakeBufferList,
+                now: AudioTimeStamp = AudioTimeStamp(),
+                inputTime: AudioTimeStamp = AudioTimeStamp(),
+                outputTime: AudioTimeStamp = AudioTimeStamp()) {
         guard let (handle, proc) = lock.withLock({ () -> (IOProcHandle, IOProc)? in
             guard let handle = running.first, let proc = ioProcs[handle] else { return nil }
             return (handle, proc)
         }) else { return }
-        var now = AudioTimeStamp(), inTime = AudioTimeStamp(), outTime = AudioTimeStamp()
+        var now = now, inTime = inputTime, outTime = outputTime
         _ = proc.proc(handle.device, &now, input.pointer, &inTime, output.pointer, &outTime, proc.clientData)
     }
 
     @MainActor
-    private func fire(_ property: HALProperty) {
+    func fire(_ property: HALProperty) {
         let handlers = lock.withLock { listeners.values.filter { $0.0 == property }.map(\.1) }
         handlers.forEach { $0() }
     }
@@ -222,6 +235,47 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
         try self.device(device, kAudioDevicePropertyLatency).latency
     }
 
+    func latency(of device: AudioObjectID, scope: StreamScope) throws(HALError) -> DeviceLatency {
+        let d = try self.device(device, kAudioDevicePropertyLatency)
+        return scope == .output ? d.latency : d.inputLatency
+    }
+
+    func actualSampleRate(of device: AudioObjectID) throws(HALError) -> Double {
+        let d = try self.device(device, kAudioDevicePropertyActualSampleRate)
+        return d.actualSampleRate ?? d.sampleRate
+    }
+
+    func availableNominalSampleRates(of device: AudioObjectID) throws(HALError) -> [ClosedRange<Double>] {
+        try self.device(device, kAudioDevicePropertyAvailableNominalSampleRates).availableSampleRates
+    }
+
+    func bufferFrameSize(of device: AudioObjectID) throws(HALError) -> UInt32 {
+        try self.device(device, kAudioDevicePropertyBufferFrameSize).bufferFrameSize
+    }
+
+    func streamFormats(of device: AudioObjectID, scope: StreamScope) throws(HALError) -> [AudioStreamBasicDescription] {
+        let channels = try streamChannels(of: device, scope: scope)
+        let d = try self.device(device, kAudioStreamPropertyVirtualFormat)
+        let tapStreams = scope == .input && lock.withLock { aggregates[device] != nil }
+        let rate = tapStreams ? currentTapRate : d.sampleRate
+        return channels.map { Self.format(rate: rate, channels: $0, nonInterleaved: tapStreams && tapNonInterleaved) }
+    }
+
+    /// The tap follows the default output's nominal rate.
+    var currentTapRate: Double {
+        lock.withLock { devices[defaultOutput]?.sampleRate ?? tapSampleRate }
+    }
+
+    static func format(rate: Double, channels: Int, nonInterleaved: Bool) -> AudioStreamBasicDescription {
+        let bytes = UInt32(nonInterleaved ? 4 : 4 * channels)
+        var flags = kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked
+        if nonInterleaved { flags |= kAudioFormatFlagIsNonInterleaved }
+        return AudioStreamBasicDescription(
+            mSampleRate: rate, mFormatID: kAudioFormatLinearPCM, mFormatFlags: flags,
+            mBytesPerPacket: bytes, mFramesPerPacket: 1, mBytesPerFrame: bytes,
+            mChannelsPerFrame: UInt32(channels), mBitsPerChannel: 32, mReserved: 0)
+    }
+
     func setNominalSampleRate(_ rate: Double, of device: AudioObjectID) throws(HALError) {
         let d = try self.device(device, kAudioDevicePropertyNominalSampleRate)
         try locked { () throws(HALError) in
@@ -282,11 +336,8 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
     func tapFormat(of tap: AudioObjectID) throws(HALError) -> AudioStreamBasicDescription {
         try locked { () throws(HALError) -> AudioStreamBasicDescription in
             try fail(.tapFormat, "AudioObjectGetPropertyData", selector: kAudioTapPropertyFormat)
-            return AudioStreamBasicDescription(
-                mSampleRate: 48_000, mFormatID: kAudioFormatLinearPCM,
-                mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked,
-                mBytesPerPacket: 8, mFramesPerPacket: 1, mBytesPerFrame: 8,
-                mChannelsPerFrame: 2, mBitsPerChannel: 32, mReserved: 0)
+            let rate = devices[defaultOutput]?.sampleRate ?? tapSampleRate
+            return Self.format(rate: rate, channels: 2, nonInterleaved: tapNonInterleaved)
         }
     }
 

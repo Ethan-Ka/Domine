@@ -46,9 +46,13 @@ typedef struct DomineKernel DomineKernel;
 /// Pass as outBChannelOffset when Device B is absent (one speaker only).
 #define DOMINE_NO_DEVICE UINT32_MAX
 
+/// Smallest input FIFO capacity, in frames.
+#define DOMINE_INPUT_FIFO_MIN_FRAMES 1024u
+
 /// Creates a kernel. Delay ring buffers are sized for 300 ms at 96 kHz (or at
 /// sampleRate if higher) and start zeroed. maxFrames is the IOProc buffer size
 /// the caller expects; process handles any frame count safely regardless.
+/// The input FIFO holds next_pow2(max(2 * maxFrames, 1024)) frames.
 /// Returns NULL if sampleRate is not positive or allocation fails.
 DomineKernel *_Nullable domine_kernel_create(double sampleRate, uint32_t maxFrames);
 
@@ -120,6 +124,9 @@ void domine_kernel_set_muted(DomineKernel *k, int muted);
 ///     kernel does not write is zeroed.
 /// frames: frames to render. Buffers shorter than this (by mDataByteSize) are
 ///     read as silence past their end and never written past their end.
+///     Exactly `frames` input frames pass through the same input FIFO the
+///     IOProc uses, so with an empty FIFO the output lines up with the input.
+///     Does not record stats.
 void domine_kernel_process(DomineKernel *k,
                            const AudioBufferList *_Nullable in,
                            AudioBufferList *_Nullable out,
@@ -131,6 +138,23 @@ void domine_kernel_process(DomineKernel *k,
 /// process call (SPEC section 3a). position 0 = A (left), 1 = B (right).
 /// Returns 0 for other values.
 float domine_kernel_peak(DomineKernel *k, int position);
+
+/// Format of the tap's streams as the aggregate delivers them to the IOProc
+/// (read from the aggregate's input stream format at start). Stored in
+/// atomics. channelsPerFrame 0 means unknown: the layout is then detected from
+/// the buffer list alone. nonInterleaved nonzero means one channel per
+/// buffer. Samples are always float32.
+///
+/// How the IOProc reads the tap (the buffer list always wins over the format,
+/// since it describes the memory; a disagreement is counted in
+/// formatMismatchCycles):
+///   first tap buffer has 2 or more channels: interleaved, the first two
+///       channels are L and R.
+///   first tap buffer has 1 channel and a second tap buffer exists, and the
+///       format is not known to be mono: deinterleaved, the first channel of
+///       the first two buffers are L and R.
+///   otherwise: mono, the one channel feeds both L and R.
+void domine_kernel_set_input_format(DomineKernel *k, uint32_t channelsPerFrame, int nonInterleaved);
 
 /// Aggregate layout used by domine_kernel_ioproc. Stored in atomics; set it
 /// before the device starts. Defaults: inFirstBuffer 0, A offset 0, B offset 2.
@@ -144,10 +168,21 @@ void domine_kernel_set_layout(DomineKernel *k,
 
 // The AudioDeviceIOProc for the aggregate device (SPEC section 5). Pass it to
 // AudioDeviceCreateIOProcID with the DomineKernel as client data. Real-time
-// safe. It reads the layout atomics, views the input list from inFirstBuffer
-// on (a missing tap buffer is silence), derives the frame count from the
-// largest output buffer (mDataByteSize / (4 * mNumberChannels)), and calls
-// the renderer. NULL client data or output does nothing. Always returns 0.
+// safe. It reads the layout atomics and views the input list from
+// inFirstBuffer on. Input and output frame counts are independent:
+//   input frames: what the tap buffers hold (mDataByteSize / (4 * channels),
+//       the smaller of L and R when deinterleaved; 0 when the tap buffer is
+//       missing or its data is NULL). Every input frame is consumed exactly
+//       once, in order, through the input FIFO (see domine_kernel_create).
+//   output frames: the largest output buffer (mDataByteSize / (4 *
+//       mNumberChannels)).
+// Frame f of the cycle first pushes input frame f (if f < input frames), then
+// pops one frame for output frame f (if f < output frames). So equal counts
+// add no latency and reproduce the input exactly; extra input waits in the
+// FIFO for the next cycle; missing input plays silence (counted as underrun
+// frames). When the FIFO is full the oldest frame is dropped (overflow).
+// It also records the cycle in the stats (domine_kernel_stats).
+// NULL client data or output does nothing. Always returns 0.
 OSStatus domine_kernel_ioproc(AudioObjectID inDevice,
                               const AudioTimeStamp *inNow,
                               const AudioBufferList *inInputData,
@@ -155,6 +190,96 @@ OSStatus domine_kernel_ioproc(AudioObjectID inDevice,
                               AudioBufferList *outOutputData,
                               const AudioTimeStamp *inOutputTime,
                               void *_Nullable inClientData);
+
+/// Bits of DomineKernelStats.timeFlags: which time stamp fields of the most
+/// recent cycle were valid (kAudioTimeStampHostTimeValid or
+/// kAudioTimeStampSampleTimeValid set by the HAL).
+#define DOMINE_STATS_NOW_HOST_VALID      0x01
+#define DOMINE_STATS_INPUT_HOST_VALID    0x02
+#define DOMINE_STATS_INPUT_SAMPLE_VALID  0x04
+#define DOMINE_STATS_OUTPUT_HOST_VALID   0x08
+#define DOMINE_STATS_OUTPUT_SAMPLE_VALID 0x10
+
+/// Diagnostics recorded by domine_kernel_ioproc once per cycle (not by
+/// domine_kernel_process). Totals count since the kernel was created; "last"
+/// fields describe the most recent cycle; "max" fields count since the last
+/// domine_kernel_stats_reset_maxima.
+typedef struct DomineKernelStats {
+    uint64_t cycles;
+    /// Output frames rendered, summed.
+    uint64_t frames;
+    /// Tap input frames the buffer list held, summed.
+    uint64_t inputFrames;
+    /// Cycles with no tap input: NULL input list, no buffer at
+    /// inFirstBuffer, or NULL data.
+    uint64_t inputMissingCycles;
+    /// Cycles where the tap held fewer frames than the output.
+    uint64_t inputShortCycles;
+    /// Cycles where the tap held more frames than the output.
+    uint64_t inputLongCycles;
+    /// Cycles with tap input whose every sample read was exactly 0.
+    uint64_t inputSilentCycles;
+    /// Cycles whose output buffers disagree on frame count.
+    uint64_t outputMismatchCycles;
+    /// Cycles where the buffer list disagreed with the input format.
+    uint64_t formatMismatchCycles;
+    /// Output frames played as silence because the input FIFO was empty.
+    uint64_t underrunFrames;
+    /// Input frames dropped because the input FIFO was full.
+    uint64_t overflowFrames;
+    /// Cycles whose output sample time was not the previous cycle's output
+    /// sample time plus its output frames (both valid).
+    uint64_t sampleTimeJumps;
+    /// inNow->mHostTime, inInputTime->mHostTime, inOutputTime->mHostTime of
+    /// the last cycle (0 when not valid, see timeFlags).
+    uint64_t nowHostTime;
+    uint64_t inputHostTime;
+    uint64_t outputHostTime;
+    /// Largest step of nowHostTime between consecutive cycles, host ticks.
+    uint64_t maxCycleInterval;
+    /// inInputTime->mSampleTime and inOutputTime->mSampleTime of the last
+    /// cycle (0 when not valid).
+    double inputSampleTime;
+    double outputSampleTime;
+    /// The kernel's sample rate (filled by domine_kernel_stats).
+    double sampleRate;
+    uint32_t timeFlags;
+    uint32_t lastFrames;
+    uint32_t lastInputFrames;
+    /// Tap buffers in the input list view (from inFirstBuffer on).
+    uint32_t lastInputBuffers;
+    /// Channels of the first tap buffer.
+    uint32_t lastInputChannels;
+    uint32_t lastOutputBuffers;
+    /// Smallest output buffer of the last cycle, in frames.
+    uint32_t lastOutputFramesMin;
+    /// Frames waiting in the input FIFO after the last cycle.
+    uint32_t fifoFill;
+    /// Largest absolute tap sample (L or R) read in the last cycle.
+    float lastInputPeak;
+    /// Largest absolute tap sample since the last maxima reset.
+    float maxInputPeak;
+    /// Maxima resets the render thread has applied.
+    uint32_t maximaResets;
+    /// Filled by domine_kernel_stats from the parameters, not the render thread.
+    uint32_t layoutInFirstBuffer;
+    uint32_t layoutOutA;
+    uint32_t layoutOutB;
+    uint32_t inputChannelsPerFrame;
+    uint32_t inputNonInterleaved;
+    uint32_t fifoCapacity;
+    uint32_t maxFrames;
+} DomineKernelStats;
+
+/// Copies a consistent snapshot of the stats into *out. Any thread; never
+/// blocks the render thread (seqlock: the reader retries, the writer never
+/// waits). Returns 1 for a consistent snapshot, 0 if the render thread kept
+/// writing for every retry (the copy may then mix two cycles).
+int domine_kernel_stats(DomineKernel *k, DomineKernelStats *out);
+
+/// Asks the render thread to zero maxCycleInterval and maxInputPeak at the
+/// start of its next cycle. Any thread.
+void domine_kernel_stats_reset_maxima(DomineKernel *k);
 
 #pragma clang assume_nonnull end
 #pragma clang diagnostic pop

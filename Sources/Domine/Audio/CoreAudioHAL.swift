@@ -62,17 +62,45 @@ final class CoreAudioHAL: AudioHAL {
     }
 
     func outputLatency(of device: AudioObjectID) throws(HALError) -> DeviceLatency {
-        let output = kAudioObjectPropertyScopeOutput
-        let streams = try readArray(device, address(kAudioDevicePropertyStreams, scope: output), of: AudioObjectID.self)
+        try latency(of: device, scope: .output)
+    }
+
+    func latency(of device: AudioObjectID, scope: StreamScope) throws(HALError) -> DeviceLatency {
+        let s = scope.propertyScope
+        let streams = try readArray(device, address(kAudioDevicePropertyStreams, scope: s), of: AudioObjectID.self)
         var streamFrames: UInt32 = 0
         for stream in streams {
             let frames = try readScalar(stream, address(kAudioStreamPropertyLatency), as: UInt32.self)
             streamFrames = max(streamFrames, frames)
         }
         return DeviceLatency(
-            deviceFrames: try readScalar(device, address(kAudioDevicePropertyLatency, scope: output), as: UInt32.self),
-            safetyOffsetFrames: try readScalar(device, address(kAudioDevicePropertySafetyOffset, scope: output), as: UInt32.self),
+            deviceFrames: try readScalar(device, address(kAudioDevicePropertyLatency, scope: s), as: UInt32.self),
+            safetyOffsetFrames: try readScalar(device, address(kAudioDevicePropertySafetyOffset, scope: s), as: UInt32.self),
             streamFrames: streamFrames)
+    }
+
+    func actualSampleRate(of device: AudioObjectID) throws(HALError) -> Double {
+        try readScalar(device, address(kAudioDevicePropertyActualSampleRate), as: Float64.self)
+    }
+
+    func availableNominalSampleRates(of device: AudioObjectID) throws(HALError) -> [ClosedRange<Double>] {
+        try readArray(device, address(kAudioDevicePropertyAvailableNominalSampleRates), of: AudioValueRange.self)
+            .map { min($0.mMinimum, $0.mMaximum)...max($0.mMinimum, $0.mMaximum) }
+    }
+
+    func bufferFrameSize(of device: AudioObjectID) throws(HALError) -> UInt32 {
+        try readScalar(device, address(kAudioDevicePropertyBufferFrameSize), as: UInt32.self)
+    }
+
+    func streamFormats(of device: AudioObjectID, scope: StreamScope) throws(HALError) -> [AudioStreamBasicDescription] {
+        let streams = try readArray(
+            device, address(kAudioDevicePropertyStreams, scope: scope.propertyScope), of: AudioObjectID.self)
+        var formats: [AudioStreamBasicDescription] = []
+        for stream in streams {
+            formats.append(try readScalar(
+                stream, address(kAudioStreamPropertyVirtualFormat), as: AudioStreamBasicDescription.self))
+        }
+        return formats
     }
 
     func transportType(of device: AudioObjectID) throws(HALError) -> UInt32 {

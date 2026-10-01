@@ -2,11 +2,16 @@ import CoreAudio
 import Foundation
 
 /// Builds the description dictionary for Domine's private aggregate
-/// (SPEC section 3.2). Device A is the main sub-device and clock; Device B,
-/// when present, follows it with drift compensation on. The tap is the only
-/// input and is drift compensated too.
+/// (SPEC section 3.2). Device A is the main sub-device. The clock comes from
+/// `clock`; every sub-device that does not provide the clock, and the tap,
+/// is drift compensated at `driftQuality`.
 enum AggregateBuilder {
     static let name = "Domine"
+
+    /// The clock used for every aggregate the engine builds. Change it here.
+    static let clock: AggregateClock = .leftSpeaker
+    /// Resampler quality for drift compensation.
+    static let driftQuality = Int(kAudioAggregateDriftCompensationMaxQuality)
 
     static func uid(instance: UUID) -> String {
         DeviceCatalog.domineUIDPrefix + "aggregate." + instance.uuidString
@@ -16,24 +21,32 @@ enum AggregateBuilder {
         uidA: String,
         uidB: String?,
         tapUID: String,
+        clock: AggregateClock = clock,
         instance: UUID = UUID()
     ) -> [String: Any] {
-        var subDevices: [[String: Any]] = [
-            [kAudioSubDeviceUIDKey: uidA, kAudioSubDeviceDriftCompensationKey: 0],
-        ]
-        if let uidB {
-            subDevices.append([kAudioSubDeviceUIDKey: uidB, kAudioSubDeviceDriftCompensationKey: 1])
+        let clockUID: String = switch clock {
+        case .leftSpeaker: uidA
+        case .device(let uid): uid
         }
+        func subDevice(_ uid: String) -> [String: Any] {
+            uid == clockUID
+                ? [kAudioSubDeviceUIDKey: uid, kAudioSubDeviceDriftCompensationKey: 0]
+                : [kAudioSubDeviceUIDKey: uid, kAudioSubDeviceDriftCompensationKey: 1,
+                   kAudioSubDeviceDriftCompensationQualityKey: driftQuality]
+        }
+        var subDevices = [subDevice(uidA)]
+        if let uidB { subDevices.append(subDevice(uidB)) }
         return [
             kAudioAggregateDeviceNameKey: name,
             kAudioAggregateDeviceUIDKey: uid(instance: instance),
             kAudioAggregateDeviceIsPrivateKey: 1,
             kAudioAggregateDeviceIsStackedKey: 0,
             kAudioAggregateDeviceMainSubDeviceKey: uidA,
-            kAudioAggregateDeviceClockDeviceKey: uidA,
+            kAudioAggregateDeviceClockDeviceKey: clockUID,
             kAudioAggregateDeviceSubDeviceListKey: subDevices,
             kAudioAggregateDeviceTapListKey: [
-                [kAudioSubTapUIDKey: tapUID, kAudioSubTapDriftCompensationKey: 1],
+                [kAudioSubTapUIDKey: tapUID, kAudioSubTapDriftCompensationKey: 1,
+                 kAudioSubTapDriftCompensationQualityKey: driftQuality],
             ],
             kAudioAggregateDeviceTapAutoStartKey: 1,
         ]

@@ -49,7 +49,26 @@ final class Engine {
         var kernel: OpaquePointer?
         var ioProc: IOProcHandle?
         var deviceStarted = false
+        /// The default output's rate before Domine matched it (restored on stop).
+        var defaultRateRestore: (uid: String, rate: Double)?
+        var diagnostics: EngineDiagnostics?
+        var watchTokens: [HALListenerToken] = []
+        /// What the tap delivered at start, to notice a change while running.
+        var tapFormat: AudioStreamBasicDescription?
+        var defaultOutputUID: String?
     }
+
+    /// Kernel input format chosen at start (for tests and the log).
+    struct InputFormat: Equatable, Sendable {
+        let sampleRate: Double
+        let channels: UInt32
+        let nonInterleaved: Bool
+    }
+
+    /// The tap stream format the kernel was told about at the last start.
+    private(set) var inputFormat: InputFormat?
+    /// The running diagnostics, for tests.
+    var diagnostics: EngineDiagnostics? { resources.diagnostics }
 
     private struct SubDevice {
         let uid: String
@@ -68,14 +87,25 @@ final class Engine {
     /// Bumped by every start and stop, so a start suspended while the
     /// aggregate settles can tell it was cancelled.
     @ObservationIgnored private var generation = 0
+    @ObservationIgnored private let diagnosticsInterval: Duration
+    @ObservationIgnored private let formatCheckDelay: Duration
+    @ObservationIgnored private var speakers: (left: String, right: String)?
+    @ObservationIgnored private var formatCheck: Task<Void, Never>?
+    /// Rebuilds in a row caused by format changes; capped so a flapping
+    /// device cannot rebuild forever.
+    @ObservationIgnored private var formatRebuilds = 0
+    static let maxFormatRebuilds = 3
 
     /// The aggregate may publish its streams a moment after creation, so the
     /// layout read is retried up to `layoutAttempts` times.
-    init(hal: any AudioHAL, layoutAttempts: Int = 10, layoutRetryDelay: Duration = .milliseconds(50)) {
+    init(hal: any AudioHAL, layoutAttempts: Int = 10, layoutRetryDelay: Duration = .milliseconds(50),
+         diagnosticsInterval: Duration = .seconds(2), formatCheckDelay: Duration = .milliseconds(300)) {
         self.hal = hal
         self.taps = TapController(hal: hal)
         self.layoutAttempts = max(1, layoutAttempts)
         self.layoutRetryDelay = layoutRetryDelay
+        self.diagnosticsInterval = diagnosticsInterval
+        self.formatCheckDelay = formatCheckDelay
     }
 
     // MARK: - Start and stop
@@ -109,13 +139,17 @@ final class Engine {
             let b = try inspect(uid: uidB, id: idB)
             setPreferredSampleRate(a)
             setPreferredSampleRate(b)
+            matchDefaultOutputRate(a: a, b: b)
             try createTapAndAggregate(a: a, b: b)
             guard let layout = try await readLayout(a: a, b: b, generation: current),
                   current == generation else { return }
             try startIO(layout: layout)
             self.layout = layout
+            speakers = (uidA, uidB)
             state = .running
             Self.log.info("Running: A \(a.uid, privacy: .public), B \(b.uid, privacy: .public), layout \(String(describing: layout), privacy: .public)")
+            startDiagnostics(a: a, b: b)
+            watchFormat()
         } catch {
             guard current == generation else { return }
             teardown()
@@ -125,6 +159,14 @@ final class Engine {
     }
 
     func stop() {
+        formatCheck?.cancel()
+        formatCheck = nil
+        formatRebuilds = 0
+        speakers = nil
+        halt()
+    }
+
+    private func halt() {
         if state == .idle && isEmpty(resources) { return }
         generation &+= 1
         state = .stopping
@@ -172,7 +214,9 @@ final class Engine {
         resources.tap = tap
         let format = try EngineError.hal { () throws(HALError) in try hal.tapFormat(of: tap.id) }
         Self.log.info("Tap \(tap.uid, privacy: .public): \(format.mChannelsPerFrame) ch at \(format.mSampleRate) Hz")
+        resources.tapFormat = format
         let description = AggregateBuilder.description(uidA: a.uid, uidB: b.uid, tapUID: tap.uid)
+        EngineDiagnostics.logAggregateDescription(description)
         resources.aggregate = try EngineError.hal { () throws(HALError) in
             try hal.createAggregateDevice(description)
         }
@@ -213,6 +257,12 @@ final class Engine {
             UInt32(layout.inFirstBuffer),
             UInt32(layout.outAChannelOffset),
             layout.outBChannelOffset.map { UInt32($0) } ?? DOMINE_NO_DEVICE)
+        let format = tapStreamFormat(aggregate: aggregate, layout: layout)
+        domine_kernel_set_input_format(kernel, format.channels, format.nonInterleaved ? 1 : 0)
+        inputFormat = format
+        if format.sampleRate != rate {
+            Self.log.warning("Tap delivers \(format.sampleRate, privacy: .public) Hz but the aggregate runs at \(rate, privacy: .public) Hz; relying on tap drift compensation")
+        }
         applyControls()
 
         let proc = try EngineError.hal { () throws(HALError) in
@@ -229,11 +279,161 @@ final class Engine {
         resources.deviceStarted = true
     }
 
+    /// The format the IOProc receives for the tap: the aggregate's input
+    /// stream at `inFirstBuffer`, else the tap's own format. Channels count
+    /// across all tap streams when non-interleaved.
+    private func tapStreamFormat(aggregate: AudioObjectID, layout: AggregateLayout) -> InputFormat {
+        var format = resources.tapFormat
+        do {
+            let streams = try hal.streamFormats(of: aggregate, scope: .input)
+            if layout.inFirstBuffer < streams.count { format = streams[layout.inFirstBuffer] }
+        } catch {
+            Self.log.error("Could not read the aggregate's input formats: \(error.description, privacy: .public)")
+        }
+        guard let format else { return InputFormat(sampleRate: 0, channels: 0, nonInterleaved: false) }
+        // Several tap streams (one mono stream per channel) are non-interleaved
+        // as far as the kernel is concerned, whatever each stream reports.
+        let nonInterleaved = format.mFormatFlags & kAudioFormatFlagIsNonInterleaved != 0 || layout.tapBuffers > 1
+        let isFloat32 = format.mFormatFlags & kAudioFormatFlagIsFloat != 0 && format.mBitsPerChannel == 32
+        if !isFloat32 {
+            Self.log.fault("Tap stream is not float32: \(EngineDiagnostics.describe(format), privacy: .public)")
+        }
+        // A non-interleaved stream reports one channel per buffer; the tap's
+        // own format carries the real channel count.
+        let channels = nonInterleaved
+            ? max(format.mChannelsPerFrame, resources.tapFormat?.mChannelsPerFrame ?? 0, UInt32(layout.tapBuffers))
+            : format.mChannelsPerFrame
+        return InputFormat(sampleRate: format.mSampleRate, channels: channels, nonInterleaved: nonInterleaved)
+    }
+
+    /// The tap follows the system default output's rate. If that device is
+    /// not one of the speakers and runs at another rate than Device A, set it
+    /// to Device A's rate when it supports it, and remember the old rate.
+    private func matchDefaultOutputRate(a: SubDevice, b: SubDevice) {
+        do throws(HALError) {
+            let target = try hal.nominalSampleRate(of: a.id)
+            let device = try hal.defaultOutputDevice()
+            guard device != kAudioObjectUnknown, device != a.id, device != b.id else { return }
+            let uid = try hal.uid(of: device)
+            let current = try hal.nominalSampleRate(of: device)
+            guard current != target else { return }
+            let available = try hal.availableNominalSampleRates(of: device)
+            guard available.contains(where: { $0.contains(target) }) else {
+                Self.log.warning("Default output \(uid, privacy: .public) runs at \(current, privacy: .public) Hz and does not support \(target, privacy: .public) Hz; relying on tap drift compensation")
+                return
+            }
+            try hal.setNominalSampleRate(target, of: device)
+            resources.defaultRateRestore = (uid, current)
+            Self.log.info("Default output \(uid, privacy: .public) set from \(current, privacy: .public) Hz to \(target, privacy: .public) Hz to match the speakers")
+        } catch {
+            Self.log.warning("Could not match the default output's rate: \(error.description, privacy: .public)")
+        }
+    }
+
+    private func restoreDefaultOutputRate() {
+        guard let restore = resources.defaultRateRestore else { return }
+        do throws(HALError) {
+            let id = try hal.deviceID(forUID: restore.uid)
+            guard id != kAudioObjectUnknown else { return }
+            try hal.setNominalSampleRate(restore.rate, of: id)
+            Self.log.info("Default output \(restore.uid, privacy: .public) restored to \(restore.rate, privacy: .public) Hz")
+        } catch {
+            Self.log.error("Could not restore the rate of \(restore.uid, privacy: .public): \(error.description, privacy: .public)")
+        }
+    }
+
+    // MARK: - Diagnostics and format watch
+
+    private func startDiagnostics(a: SubDevice, b: SubDevice) {
+        guard let kernel = resources.kernel, let aggregate = resources.aggregate, let tap = resources.tap else { return }
+        let devices = [
+            EngineDiagnostics.Device(label: "A", uid: a.uid, id: a.id),
+            EngineDiagnostics.Device(label: "B", uid: b.uid, id: b.id),
+        ]
+        EngineDiagnostics.logStartup(hal: hal, aggregate: aggregate, tap: tap, kernel: kernel, devices: devices)
+        let diagnostics = EngineDiagnostics(
+            hal: hal, kernel: kernel, aggregate: aggregate, devices: devices, tap: tap, interval: diagnosticsInterval)
+        diagnostics.start()
+        resources.diagnostics = diagnostics
+    }
+
+    /// Re-checks the tap format when the default output or a rate changes,
+    /// and rebuilds if what the tap delivers changed (SPEC section 7).
+    private func watchFormat() {
+        resources.defaultOutputUID = currentDefaultOutputUID()
+        var properties: [HALProperty] = [.defaultOutputDevice]
+        if let aggregate = resources.aggregate { properties.append(.nominalSampleRate(aggregate)) }
+        if let id = try? hal.defaultOutputDevice(), id != kAudioObjectUnknown {
+            properties.append(.nominalSampleRate(id))
+        }
+        for property in properties {
+            do {
+                let token = try hal.addListener(property) { [weak self] in self?.scheduleFormatCheck() }
+                resources.watchTokens.append(token)
+            } catch {
+                Self.log.error("Could not watch \(String(describing: property), privacy: .public): \(error.description, privacy: .public)")
+            }
+        }
+    }
+
+    private func currentDefaultOutputUID() -> String? {
+        guard let id = try? hal.defaultOutputDevice(), id != kAudioObjectUnknown else { return nil }
+        return try? hal.uid(of: id)
+    }
+
+    private func scheduleFormatCheck() {
+        formatCheck?.cancel()
+        let delay = formatCheckDelay
+        formatCheck = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            await self?.checkFormat()
+        }
+    }
+
+    /// Rebuilds when the default output or the tap's format changed since
+    /// start. Returns whether it rebuilt.
+    @discardableResult
+    func checkFormat() async -> Bool {
+        guard state == .running, let tap = resources.tap, let speakers else { return false }
+        let defaultUID = currentDefaultOutputUID()
+        let format: AudioStreamBasicDescription
+        do {
+            format = try hal.tapFormat(of: tap.id)
+        } catch {
+            Self.log.error("Could not re-read the tap format: \(error.description, privacy: .public)")
+            return false
+        }
+        let old = resources.tapFormat
+        let formatChanged = old.map { !Self.sameFormat($0, format) } ?? true
+        guard formatChanged || defaultUID != resources.defaultOutputUID else {
+            formatRebuilds = 0
+            return false
+        }
+        guard formatRebuilds < Self.maxFormatRebuilds else {
+            Self.log.error("Tap format keeps changing; not rebuilding again")
+            return false
+        }
+        formatRebuilds += 1
+        Self.log.info("Rebuilding: default output \(defaultUID ?? "none", privacy: .public), tap \(EngineDiagnostics.describe(format), privacy: .public)")
+        halt()
+        await start(left: speakers.left, right: speakers.right)
+        return true
+    }
+
+    private static func sameFormat(_ a: AudioStreamBasicDescription, _ b: AudioStreamBasicDescription) -> Bool {
+        a.mSampleRate == b.mSampleRate && a.mChannelsPerFrame == b.mChannelsPerFrame
+            && a.mFormatFlags == b.mFormatFlags && a.mBytesPerFrame == b.mBytesPerFrame
+            && a.mFormatID == b.mFormatID
+    }
+
     // MARK: - Teardown
 
     /// Releases everything in `resources`, in reverse creation order. Errors
     /// are logged, not thrown, so one failure never strands the rest.
     private func teardown() {
+        resources.diagnostics?.stop()
+        resources.watchTokens.forEach { $0.cancel() }
         var ioProcGone = true
         var aggregateGone = true
         if let proc = resources.ioProc {
@@ -258,6 +458,7 @@ final class Engine {
                 Self.log.fault("IOProc and aggregate survived teardown; leaking the kernel")
             }
         }
+        restoreDefaultOutputRate()
         resources = Resources()
     }
 

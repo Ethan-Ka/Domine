@@ -1,9 +1,10 @@
 // Domine real-time render kernel. See include/DomineDSP.h for the contract.
 //
-// Everything reachable from domine_kernel_process is real-time safe: no
-// allocation, no locks, no logging, no I/O. Parameters arrive through C11
-// atomics written by other threads; the render thread snapshots them once at
-// the start of each call.
+// Everything reachable from domine_kernel_process and domine_kernel_ioproc is
+// real-time safe: no allocation, no locks, no logging, no I/O. Parameters
+// arrive through C11 atomics written by other threads; the render thread
+// snapshots them once at the start of each call. Stats leave the render
+// thread through a seqlock over atomic words, so the writer never waits.
 
 #include "DomineDSP.h"
 
@@ -13,6 +14,9 @@
 #include <string.h>
 
 #define RING_MIN_RATE 96000.0
+#define STATS_WORDS ((sizeof(DomineKernelStats) + sizeof(uint64_t) - 1) / sizeof(uint64_t))
+
+_Static_assert(sizeof(DomineKernelStats) % sizeof(uint64_t) == 0, "stats must pack into whole words");
 
 struct DomineKernel {
     double sampleRate;
@@ -30,10 +34,17 @@ struct DomineKernel {
     _Atomic uint32_t layoutInFirstBuffer;
     _Atomic uint32_t layoutOutA;
     _Atomic uint32_t layoutOutB;
+    _Atomic uint32_t inputChannels; // 0 = unknown
+    _Atomic int inputNonInterleaved;
+    _Atomic uint32_t statsResetRequests;
 
     // Meters: written by the render thread, read by any thread.
     _Atomic uint32_t peakABits;
     _Atomic uint32_t peakBBits;
+
+    // Stats: published by the render thread under a seqlock (odd = writing).
+    _Atomic uint32_t statsSeq;
+    _Atomic uint64_t statsWords[STATS_WORDS];
 
     // Render thread state only.
     float *ringA;
@@ -48,6 +59,21 @@ struct DomineKernel {
     uint32_t toneLevel;    // 0 = program only, toneFadeLength = tone only
     double tonePhase;      // cycles, in [0, 1)
     double tonePhaseStep;  // cycles per sample
+
+    // Input FIFO between the tap and the output.
+    float *fifoL;
+    float *fifoR;
+    uint32_t fifoMask;
+    uint32_t fifoRead;  // free-running counters; fill = fifoWrite - fifoRead
+    uint32_t fifoWrite;
+
+    // Render thread stats, published after each IOProc cycle.
+    DomineKernelStats stats;
+    uint32_t statsResetsSeen;
+    uint64_t prevNowHostTime; // 0 = none yet
+    int prevOutputSampleValid;
+    double prevOutputSampleTime;
+    uint32_t prevFrames;
 };
 
 // A resolved output channel: base pointer, stride in floats, usable frames.
@@ -63,6 +89,13 @@ typedef struct {
     uint32_t stride;
     uint32_t frames;
 } InChannel;
+
+// What one render call did with its input, for the stats.
+typedef struct {
+    float inputPeak;
+    uint32_t underrunFrames;
+    uint32_t overflowFrames;
+} RenderResult;
 
 static inline uint32_t float_bits(float f) {
     uint32_t u;
@@ -115,23 +148,37 @@ static InChannel in_channel(const AudioBuffer *buf, uint32_t channel) {
     return c;
 }
 
-// Detects interleaved vs deinterleaved stereo input in `count` buffers.
-static void resolve_input(const AudioBuffer *buffers, uint32_t count, InChannel *left, InChannel *right) {
+// Resolves L and R in `count` tap buffers (see domine_kernel_set_input_format).
+// formatChannels 0 means unknown. Returns 1 when the buffers disagree with a
+// known format.
+static int resolve_input(const AudioBuffer *buffers, uint32_t count,
+                         uint32_t formatChannels, int formatNonInterleaved,
+                         InChannel *left, InChannel *right) {
     InChannel none = { NULL, 1, 0 };
     *left = none;
     *right = none;
-    if (buffers == NULL || count == 0) return;
+    if (buffers == NULL || count == 0) return 0;
     const AudioBuffer *b0 = &buffers[0];
     if (b0->mNumberChannels >= 2) {
         *left = in_channel(b0, 0);
         *right = in_channel(b0, 1);
-    } else if (count >= 2) {
+    } else if (count >= 2 && formatChannels != 1) {
         *left = in_channel(b0, 0);
         *right = in_channel(&buffers[1], 0);
     } else {
         *left = in_channel(b0, 0);
         *right = *left;
     }
+    if (formatChannels == 0) return 0;
+    if (formatNonInterleaved) return b0->mNumberChannels != 1 || count < formatChannels;
+    return b0->mNumberChannels != formatChannels;
+}
+
+// Frames held by a resolved input pair: 0 without data, else the shorter side.
+static uint32_t input_frames(const InChannel *l, const InChannel *r) {
+    if (l->data == NULL) return 0;
+    if (r->data == NULL) return l->frames;
+    return l->frames < r->frames ? l->frames : r->frames;
 }
 
 static inline float read_in(const InChannel *c, uint32_t frame) {
@@ -155,12 +202,18 @@ DomineKernel *domine_kernel_create(double sampleRate, uint32_t maxFrames) {
     uint32_t ringSize = next_pow2(maxDelay + 1);
     k->ringA = calloc(ringSize, sizeof(float));
     k->ringB = calloc(ringSize, sizeof(float));
-    if (k->ringA == NULL || k->ringB == NULL) {
+    uint32_t fifoWanted = maxFrames > (1u << 20) ? (1u << 21) : 2 * maxFrames;
+    if (fifoWanted < DOMINE_INPUT_FIFO_MIN_FRAMES) fifoWanted = DOMINE_INPUT_FIFO_MIN_FRAMES;
+    uint32_t fifoSize = next_pow2(fifoWanted);
+    k->fifoL = calloc(fifoSize, sizeof(float));
+    k->fifoR = calloc(fifoSize, sizeof(float));
+    if (k->ringA == NULL || k->ringB == NULL || k->fifoL == NULL || k->fifoR == NULL) {
         domine_kernel_destroy(k);
         return NULL;
     }
     k->ringMask = ringSize - 1;
     k->maxDelaySamples = (int32_t)(ringSize - 1);
+    k->fifoMask = fifoSize - 1;
 
     uint32_t fade = (uint32_t)lround(sampleRate * DOMINE_FADE_MS / 1000.0);
     k->fadeLength = fade > 0 ? fade : 1;
@@ -180,8 +233,13 @@ DomineKernel *domine_kernel_create(double sampleRate, uint32_t maxFrames) {
     atomic_init(&k->layoutInFirstBuffer, 0);
     atomic_init(&k->layoutOutA, 0);
     atomic_init(&k->layoutOutB, 2);
+    atomic_init(&k->inputChannels, 0);
+    atomic_init(&k->inputNonInterleaved, 0);
+    atomic_init(&k->statsResetRequests, 0);
     atomic_init(&k->peakABits, float_bits(0.0f));
     atomic_init(&k->peakBBits, float_bits(0.0f));
+    atomic_init(&k->statsSeq, 0);
+    for (size_t i = 0; i < STATS_WORDS; i++) atomic_init(&k->statsWords[i], 0);
     return k;
 }
 
@@ -189,6 +247,8 @@ void domine_kernel_destroy(DomineKernel *k) {
     if (k == NULL) return;
     free(k->ringA);
     free(k->ringB);
+    free(k->fifoL);
+    free(k->fifoR);
     free(k);
 }
 
@@ -243,15 +303,68 @@ void domine_kernel_set_layout(DomineKernel *k,
     atomic_store_explicit(&k->layoutOutB, outBChannelOffset, memory_order_relaxed);
 }
 
-// Shared renderer. The input is `inCount` buffers starting at `inBuffers`, so
-// the IOProc can pass a view into the aggregate's input list without copying.
-static void render(DomineKernel *k,
-                   const AudioBuffer *inBuffers,
-                   uint32_t inCount,
-                   AudioBufferList *out,
-                   uint32_t frames,
-                   uint32_t outAChannelOffset,
-                   uint32_t outBChannelOffset) {
+void domine_kernel_set_input_format(DomineKernel *k, uint32_t channelsPerFrame, int nonInterleaved) {
+    if (k == NULL) return;
+    atomic_store_explicit(&k->inputChannels, channelsPerFrame, memory_order_relaxed);
+    atomic_store_explicit(&k->inputNonInterleaved, nonInterleaved != 0, memory_order_relaxed);
+}
+
+void domine_kernel_stats_reset_maxima(DomineKernel *k) {
+    if (k == NULL) return;
+    atomic_fetch_add_explicit(&k->statsResetRequests, 1, memory_order_relaxed);
+}
+
+int domine_kernel_stats(DomineKernel *k, DomineKernelStats *out) {
+    if (k == NULL || out == NULL) return 0;
+    uint64_t words[STATS_WORDS];
+    int consistent = 0;
+    for (int attempt = 0; attempt < 1000 && !consistent; attempt++) {
+        const uint32_t before = atomic_load_explicit(&k->statsSeq, memory_order_acquire);
+        for (size_t i = 0; i < STATS_WORDS; i++) {
+            words[i] = atomic_load_explicit(&k->statsWords[i], memory_order_relaxed);
+        }
+        atomic_thread_fence(memory_order_acquire);
+        const uint32_t after = atomic_load_explicit(&k->statsSeq, memory_order_relaxed);
+        consistent = (before & 1u) == 0 && before == after;
+    }
+    memcpy(out, words, sizeof *out);
+    out->sampleRate = k->sampleRate;
+    out->layoutInFirstBuffer = atomic_load_explicit(&k->layoutInFirstBuffer, memory_order_relaxed);
+    out->layoutOutA = atomic_load_explicit(&k->layoutOutA, memory_order_relaxed);
+    out->layoutOutB = atomic_load_explicit(&k->layoutOutB, memory_order_relaxed);
+    out->inputChannelsPerFrame = atomic_load_explicit(&k->inputChannels, memory_order_relaxed);
+    out->inputNonInterleaved = (uint32_t)atomic_load_explicit(&k->inputNonInterleaved, memory_order_relaxed);
+    out->fifoCapacity = k->fifoMask + 1;
+    out->maxFrames = k->maxFrames;
+    return consistent;
+}
+
+// Writer side of the seqlock. Render thread only.
+static void publish_stats(DomineKernel *k) {
+    uint64_t words[STATS_WORDS];
+    memcpy(words, &k->stats, sizeof k->stats);
+    const uint32_t seq = atomic_load_explicit(&k->statsSeq, memory_order_relaxed);
+    atomic_store_explicit(&k->statsSeq, seq + 1, memory_order_relaxed);
+    atomic_thread_fence(memory_order_release);
+    for (size_t i = 0; i < STATS_WORDS; i++) {
+        atomic_store_explicit(&k->statsWords[i], words[i], memory_order_relaxed);
+    }
+    atomic_store_explicit(&k->statsSeq, seq + 2, memory_order_release);
+}
+
+// Shared renderer. Step f first pushes input frame f into the FIFO (while
+// f < inFrames), then pops one frame for output frame f (while f < frames),
+// so equal counts pass straight through with no added latency and unequal
+// counts never drop or stretch input.
+static RenderResult render(DomineKernel *k,
+                           const InChannel *inL,
+                           const InChannel *inR,
+                           uint32_t inFrames,
+                           AudioBufferList *out,
+                           uint32_t frames,
+                           uint32_t outAChannelOffset,
+                           uint32_t outBChannelOffset) {
+    RenderResult result = { 0.0f, 0, 0 };
 
     // Zero every output channel first; the kernel then writes only its own.
     for (uint32_t b = 0; b < out->mNumberBuffers; b++) {
@@ -273,9 +386,6 @@ static void render(DomineKernel *k,
     const uint32_t delayB = delay > 0 ? (uint32_t)delay : 0;
     const int bothChannels = monoPerSpeaker || monoFallback;
 
-    InChannel inL, inR;
-    resolve_input(inBuffers, inCount, &inL, &inR);
-
     OutChannel a0 = {0}, a1 = {0}, b0 = {0}, b1 = {0};
     const int hasA0 = map_out_channel(out, outAChannelOffset, &a0);
     const int hasB0 = map_out_channel(out, outBChannelOffset, &b0);
@@ -285,12 +395,36 @@ static void render(DomineKernel *k,
         && map_out_channel(out, outBChannelOffset + 1, &b1);
 
     const uint32_t mask = k->ringMask;
+    const uint32_t fifoMask = k->fifoMask;
+    const uint32_t fifoCapacity = fifoMask + 1;
     const uint32_t fadeTarget = muted ? 0 : k->fadeLength;
     float peakA = 0.0f, peakB = 0.0f;
 
-    for (uint32_t f = 0; f < frames; f++) {
-        const float l = read_in(&inL, f);
-        const float r = read_in(&inR, f);
+    const uint32_t steps = inFrames > frames ? inFrames : frames;
+    for (uint32_t f = 0; f < steps; f++) {
+        if (f < inFrames) {
+            const float inLeft = read_in(inL, f);
+            const float inRight = read_in(inR, f);
+            if (fabsf(inLeft) > result.inputPeak) result.inputPeak = fabsf(inLeft);
+            if (fabsf(inRight) > result.inputPeak) result.inputPeak = fabsf(inRight);
+            if (k->fifoWrite - k->fifoRead == fifoCapacity) {
+                k->fifoRead++;
+                result.overflowFrames++;
+            }
+            k->fifoL[k->fifoWrite & fifoMask] = inLeft;
+            k->fifoR[k->fifoWrite & fifoMask] = inRight;
+            k->fifoWrite++;
+        }
+        if (f >= frames) continue;
+
+        float l = 0.0f, r = 0.0f;
+        if (k->fifoWrite != k->fifoRead) {
+            l = k->fifoL[k->fifoRead & fifoMask];
+            r = k->fifoR[k->fifoRead & fifoMask];
+            k->fifoRead++;
+        } else {
+            result.underrunFrames++;
+        }
 
         float srcA, srcB;
         if (monoFallback) {
@@ -353,6 +487,7 @@ static void render(DomineKernel *k,
 
     atomic_store_explicit(&k->peakABits, float_bits(peakA), memory_order_relaxed);
     atomic_store_explicit(&k->peakBBits, float_bits(peakB), memory_order_relaxed);
+    return result;
 }
 
 void domine_kernel_process(DomineKernel *k,
@@ -364,7 +499,12 @@ void domine_kernel_process(DomineKernel *k,
     if (k == NULL || out == NULL) return;
     const AudioBuffer *inBuffers = in != NULL ? in->mBuffers : NULL;
     const uint32_t inCount = in != NULL ? in->mNumberBuffers : 0;
-    render(k, inBuffers, inCount, out, frames, outAChannelOffset, outBChannelOffset);
+    InChannel inL, inR;
+    (void)resolve_input(inBuffers, inCount,
+                        atomic_load_explicit(&k->inputChannels, memory_order_relaxed),
+                        atomic_load_explicit(&k->inputNonInterleaved, memory_order_relaxed),
+                        &inL, &inR);
+    (void)render(k, &inL, &inR, frames, out, frames, outAChannelOffset, outBChannelOffset);
 }
 
 OSStatus domine_kernel_ioproc(AudioObjectID inDevice,
@@ -375,23 +515,25 @@ OSStatus domine_kernel_ioproc(AudioObjectID inDevice,
                               const AudioTimeStamp *inOutputTime,
                               void *inClientData) {
     (void)inDevice;
-    (void)inNow;
-    (void)inInputTime;
-    (void)inOutputTime;
     DomineKernel *k = (DomineKernel *)inClientData;
     if (k == NULL || outOutputData == NULL) return 0;
 
     const uint32_t first = atomic_load_explicit(&k->layoutInFirstBuffer, memory_order_relaxed);
     const uint32_t outA = atomic_load_explicit(&k->layoutOutA, memory_order_relaxed);
     const uint32_t outB = atomic_load_explicit(&k->layoutOutB, memory_order_relaxed);
+    const uint32_t formatChannels = atomic_load_explicit(&k->inputChannels, memory_order_relaxed);
+    const int formatNonInterleaved = atomic_load_explicit(&k->inputNonInterleaved, memory_order_relaxed);
 
     uint32_t frames = 0;
+    uint32_t outputMin = UINT32_MAX;
     for (uint32_t b = 0; b < outOutputData->mNumberBuffers; b++) {
         const AudioBuffer *buf = &outOutputData->mBuffers[b];
         if (buf->mNumberChannels == 0) continue;
         const uint32_t n = buf->mDataByteSize / (uint32_t)(sizeof(float) * buf->mNumberChannels);
         if (n > frames) frames = n;
+        if (n < outputMin) outputMin = n;
     }
+    if (outputMin == UINT32_MAX) outputMin = 0;
 
     const AudioBuffer *inBuffers = NULL;
     uint32_t inCount = 0;
@@ -399,6 +541,76 @@ OSStatus domine_kernel_ioproc(AudioObjectID inDevice,
         inBuffers = inInputData->mBuffers + first;
         inCount = inInputData->mNumberBuffers - first;
     }
-    render(k, inBuffers, inCount, outOutputData, frames, outA, outB);
+    InChannel inL, inR;
+    const int formatMismatch = resolve_input(inBuffers, inCount, formatChannels, formatNonInterleaved, &inL, &inR);
+    const uint32_t inFrames = input_frames(&inL, &inR);
+    const int missing = inL.data == NULL;
+
+    DomineKernelStats *st = &k->stats;
+    const uint32_t resetRequests = atomic_load_explicit(&k->statsResetRequests, memory_order_relaxed);
+    if (resetRequests != k->statsResetsSeen) {
+        k->statsResetsSeen = resetRequests;
+        st->maxCycleInterval = 0;
+        st->maxInputPeak = 0.0f;
+        st->maximaResets++;
+    }
+
+    const RenderResult r = render(k, &inL, &inR, inFrames, outOutputData, frames, outA, outB);
+
+    st->cycles++;
+    st->frames += frames;
+    st->inputFrames += inFrames;
+    if (missing) st->inputMissingCycles++;
+    else if (inFrames < frames) st->inputShortCycles++;
+    if (inFrames > frames) st->inputLongCycles++;
+    if (!missing && r.inputPeak == 0.0f) st->inputSilentCycles++;
+    if (outputMin != frames) st->outputMismatchCycles++;
+    if (formatMismatch) st->formatMismatchCycles++;
+    st->underrunFrames += r.underrunFrames;
+    st->overflowFrames += r.overflowFrames;
+
+    uint32_t flags = 0;
+    if (inNow->mFlags & kAudioTimeStampHostTimeValid) flags |= DOMINE_STATS_NOW_HOST_VALID;
+    if (inInputTime->mFlags & kAudioTimeStampHostTimeValid) flags |= DOMINE_STATS_INPUT_HOST_VALID;
+    if (inInputTime->mFlags & kAudioTimeStampSampleTimeValid) flags |= DOMINE_STATS_INPUT_SAMPLE_VALID;
+    if (inOutputTime->mFlags & kAudioTimeStampHostTimeValid) flags |= DOMINE_STATS_OUTPUT_HOST_VALID;
+    if (inOutputTime->mFlags & kAudioTimeStampSampleTimeValid) flags |= DOMINE_STATS_OUTPUT_SAMPLE_VALID;
+    const int nowHostValid = (flags & DOMINE_STATS_NOW_HOST_VALID) != 0;
+    const int outputSampleValid = (flags & DOMINE_STATS_OUTPUT_SAMPLE_VALID) != 0;
+    st->timeFlags = flags;
+    st->nowHostTime = nowHostValid ? inNow->mHostTime : 0;
+    st->inputHostTime = (flags & DOMINE_STATS_INPUT_HOST_VALID) ? inInputTime->mHostTime : 0;
+    st->outputHostTime = (flags & DOMINE_STATS_OUTPUT_HOST_VALID) ? inOutputTime->mHostTime : 0;
+    st->inputSampleTime = (flags & DOMINE_STATS_INPUT_SAMPLE_VALID) ? inInputTime->mSampleTime : 0.0;
+    st->outputSampleTime = outputSampleValid ? inOutputTime->mSampleTime : 0.0;
+
+    if (nowHostValid) {
+        if (k->prevNowHostTime != 0 && inNow->mHostTime > k->prevNowHostTime) {
+            const uint64_t interval = inNow->mHostTime - k->prevNowHostTime;
+            if (interval > st->maxCycleInterval) st->maxCycleInterval = interval;
+        }
+        k->prevNowHostTime = inNow->mHostTime;
+    }
+    if (outputSampleValid) {
+        if (k->prevOutputSampleValid
+            && inOutputTime->mSampleTime != k->prevOutputSampleTime + (double)k->prevFrames) {
+            st->sampleTimeJumps++;
+        }
+        k->prevOutputSampleTime = inOutputTime->mSampleTime;
+    }
+    k->prevOutputSampleValid = outputSampleValid;
+    k->prevFrames = frames;
+
+    st->lastFrames = frames;
+    st->lastInputFrames = inFrames;
+    st->lastInputBuffers = inCount;
+    st->lastInputChannels = inCount > 0 ? inBuffers[0].mNumberChannels : 0;
+    st->lastOutputBuffers = outOutputData->mNumberBuffers;
+    st->lastOutputFramesMin = outputMin;
+    st->fifoFill = k->fifoWrite - k->fifoRead;
+    st->lastInputPeak = r.inputPeak;
+    if (r.inputPeak > st->maxInputPeak) st->maxInputPeak = r.inputPeak;
+
+    publish_stats(k);
     return 0;
 }

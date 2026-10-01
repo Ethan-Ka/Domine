@@ -19,6 +19,16 @@ protocol AudioHAL: AnyObject, Sendable {
     func setNominalSampleRate(_ rate: Double, of device: AudioObjectID) throws(HALError)
     /// Device latency, safety offset, and output stream latency, all output scope.
     func outputLatency(of device: AudioObjectID) throws(HALError) -> DeviceLatency
+    /// Device latency, safety offset, and largest stream latency in `scope`.
+    func latency(of device: AudioObjectID, scope: StreamScope) throws(HALError) -> DeviceLatency
+    /// `kAudioDevicePropertyActualSampleRate`: the measured rate while running.
+    func actualSampleRate(of device: AudioObjectID) throws(HALError) -> Double
+    /// `kAudioDevicePropertyAvailableNominalSampleRates`, as closed ranges.
+    func availableNominalSampleRates(of device: AudioObjectID) throws(HALError) -> [ClosedRange<Double>]
+    /// `kAudioDevicePropertyBufferFrameSize`: the IO buffer size in frames.
+    func bufferFrameSize(of device: AudioObjectID) throws(HALError) -> UInt32
+    /// `kAudioStreamPropertyVirtualFormat` of each stream in `scope`, in stream order.
+    func streamFormats(of device: AudioObjectID, scope: StreamScope) throws(HALError) -> [AudioStreamBasicDescription]
 
     func defaultOutputDevice() throws(HALError) -> AudioObjectID
     func setDefaultOutputDevice(_ device: AudioObjectID) throws(HALError)

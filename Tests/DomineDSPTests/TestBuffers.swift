@@ -99,11 +99,34 @@ final class Kernel {
 
     /// Runs one cycle through the IOProc entry point, as the HAL would.
     @discardableResult
-    func ioproc(_ input: TestBufferList, _ output: TestBufferList) -> OSStatus {
-        var now = AudioTimeStamp(), inTime = AudioTimeStamp(), outTime = AudioTimeStamp()
+    func ioproc(_ input: TestBufferList, _ output: TestBufferList,
+                now: AudioTimeStamp = AudioTimeStamp(),
+                inputTime: AudioTimeStamp = AudioTimeStamp(),
+                outputTime: AudioTimeStamp = AudioTimeStamp()) -> OSStatus {
+        var now = now, inTime = inputTime, outTime = outputTime
         return domine_kernel_ioproc(
             0, &now, input.pointer, &inTime, output.pointer, &outTime, UnsafeMutableRawPointer(raw))
     }
+
+    func stats() -> DomineKernelStats {
+        var s = DomineKernelStats()
+        _ = domine_kernel_stats(raw, &s)
+        return s
+    }
+}
+
+/// A time stamp with the given host and sample times marked valid.
+func stamp(host: UInt64? = nil, sample: Double? = nil) -> AudioTimeStamp {
+    var t = AudioTimeStamp()
+    if let host {
+        t.mHostTime = host
+        t.mFlags.insert(.hostTimeValid)
+    }
+    if let sample {
+        t.mSampleTime = sample
+        t.mFlags.insert(.sampleTimeValid)
+    }
+    return t
 }
 
 let noDevice = UInt32.max
