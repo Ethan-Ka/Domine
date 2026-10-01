@@ -13,6 +13,11 @@ struct SystemServices: Sendable {
     /// The login item is registered but waits for approval in System Settings.
     var launchAtLoginRequiresApproval: @MainActor @Sendable () -> Bool = { false }
     var openLoginItemsSettings: @MainActor @Sendable () -> Void = {}
+    /// Dock icon on (`.regular`) or off (`.accessory`) for background mode (SPEC 6a).
+    var setActivationPolicy: @MainActor @Sendable (NSApplication.ActivationPolicy) -> Void = { _ in }
+    /// Brings Domine's windows to the front.
+    var activateApp: @MainActor @Sendable () -> Void = {}
+    var terminateApp: @MainActor @Sendable () -> Void = {}
 
     static let bluetoothSettingsURL = URL(string: "x-apple.systempreferences:com.apple.Bluetooth")!
     /// Privacy & Security > Screen & System Audio Recording. On macOS 15 and
@@ -33,5 +38,8 @@ struct SystemServices: Sendable {
             return name.hasSuffix(".app") ? String(name.dropLast(4)) : name
         },
         launchAtLoginRequiresApproval: { LaunchAtLogin.requiresApproval },
-        openLoginItemsSettings: { LaunchAtLogin.openLoginItemsSettings() })
+        openLoginItemsSettings: { LaunchAtLogin.openLoginItemsSettings() },
+        setActivationPolicy: { _ = NSApp.setActivationPolicy($0) },
+        activateApp: { NSApp.activate() },
+        terminateApp: { NSApp.terminate(nil) })
 }

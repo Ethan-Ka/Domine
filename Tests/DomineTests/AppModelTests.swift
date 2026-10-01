@@ -500,6 +500,9 @@ final class FakeSystem {
     var failLaunchAtLogin = false
     var loginItemNeedsApproval = false
     var loginItemsOpened = 0
+    var activationPolicies: [NSApplication.ActivationPolicy] = []
+    var activations = 0
+    var terminations = 0
 
     struct Failure: Error {}
 
@@ -516,6 +519,9 @@ final class FakeSystem {
             },
             appName: { _ in nil },
             launchAtLoginRequiresApproval: { [weak self] in self?.loginItemNeedsApproval ?? false },
-            openLoginItemsSettings: { [weak self] in self?.loginItemsOpened += 1 })
+            openLoginItemsSettings: { [weak self] in self?.loginItemsOpened += 1 },
+            setActivationPolicy: { [weak self] in self?.activationPolicies.append($0) },
+            activateApp: { [weak self] in self?.activations += 1 },
+            terminateApp: { [weak self] in self?.terminations += 1 })
     }
 }
