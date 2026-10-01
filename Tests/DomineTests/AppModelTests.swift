@@ -224,12 +224,15 @@ final class AppModelTests {
         #expect(model.engine.peaks() == (0, 0))
     }
 
-    @Test func masterVolumeIsSavedAndScalesKernelGains() {
+    @Test func masterVolumeIsSavedAndSetsBothSpeakers() {
         addGripsAndStart()
         model.setMasterVolume(0.8)
         #expect(model.mainWindowState.masterVolumePercent == 80)
-        #expect(model.engine.leftGain == 0.8)
-        #expect(model.engine.rightGain == 0.8)
+        // Hardware volume carries master; the kernel gain stays at unity.
+        #expect(model.engine.leftGain == 1)
+        #expect(model.engine.rightGain == 1)
+        #expect(hal.volumes(uid: Self.gripA.uid) == [1: 0.8, 2: 0.8])
+        #expect(hal.volumes(uid: Self.gripB.uid) == [1: 0.8, 2: 0.8])
         #expect(model.store.pairSettings(leftUID: Self.gripA.uid, rightUID: Self.gripB.uid).masterVolume == 0.8)
     }
 
@@ -282,8 +285,8 @@ final class AppModelTests {
         model.setBalance(0.5)
         model.setMasterVolume(0.8)
         #expect(model.engine.delayMs == 12)
-        #expect(abs(model.engine.leftGain - 0.4) < 1e-6)
-        #expect(model.engine.rightGain == 0.8)
+        #expect(model.engine.leftGain == 0.5)
+        #expect(model.engine.rightGain == 1)
         let stored = model.store.pairSettings(leftUID: Self.gripA.uid, rightUID: Self.gripB.uid)
         #expect(stored == PairSettings(delayMs: 12, balance: 0.5, masterVolume: 0.8))
         #expect(model.tuningState.delayMs == 12)
@@ -292,8 +295,8 @@ final class AppModelTests {
         // Swapping the pair flips the same physical tuning.
         model.assign(Self.gripB.uid, to: .frontLeft)
         #expect(model.engine.delayMs == -12)
-        #expect(model.engine.leftGain == 0.8)
-        #expect(abs(model.engine.rightGain - 0.4) < 1e-6)
+        #expect(model.engine.leftGain == 1)
+        #expect(model.engine.rightGain == 0.5)
 
         // A fresh model loads it back.
         let reloaded = newModel()
