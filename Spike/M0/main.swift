@@ -182,17 +182,27 @@ func run(_ args: [String]) throws {
     let aggUID = "\(uidPrefix).\(UUID().uuidString)"
     // Not private: a private aggregate cannot be picked as system default output
     // by other processes, and this spike relies on the system routing to it.
+    // DOMINE_CLOCK=builtin: clock from the built-in output, both Grips drift
+    // corrected at max quality (tests the 44.1 kHz AAC encoder finding).
+    let clock = ProcessInfo.processInfo.environment["DOMINE_CLOCK"] == "builtin"
+        ? devices.first { $0.uid == "BuiltInSpeakerDevice" } : nil
+    let maxQ = kAudioSubDeviceDriftCompensationMaxQuality
+    var subs: [[String: Any]] = []
+    if let clock { subs.append([kAudioSubDeviceUIDKey: clock.uid, kAudioSubDeviceDriftCompensationKey: 0]) }
+    subs.append([kAudioSubDeviceUIDKey: a.uid, kAudioSubDeviceDriftCompensationKey: clock == nil ? 0 : 1,
+                 kAudioSubDeviceDriftCompensationQualityKey: maxQ])
+    subs.append([kAudioSubDeviceUIDKey: b.uid, kAudioSubDeviceDriftCompensationKey: 1,
+                 kAudioSubDeviceDriftCompensationQualityKey: maxQ])
+    let mainUID = clock?.uid ?? a.uid
+    print("Clock: \(mainUID)")
     let desc: [String: Any] = [
         kAudioAggregateDeviceNameKey: "Domine Spike",
         kAudioAggregateDeviceUIDKey: aggUID,
         kAudioAggregateDeviceIsPrivateKey: 0,
         kAudioAggregateDeviceIsStackedKey: 0,
-        kAudioAggregateDeviceMainSubDeviceKey: a.uid,
-        kAudioAggregateDeviceClockDeviceKey: a.uid,
-        kAudioAggregateDeviceSubDeviceListKey: [
-            [kAudioSubDeviceUIDKey: a.uid, kAudioSubDeviceDriftCompensationKey: 0],
-            [kAudioSubDeviceUIDKey: b.uid, kAudioSubDeviceDriftCompensationKey: 1],
-        ],
+        kAudioAggregateDeviceMainSubDeviceKey: mainUID,
+        kAudioAggregateDeviceClockDeviceKey: mainUID,
+        kAudioAggregateDeviceSubDeviceListKey: subs,
     ]
     var agg: AudioObjectID = 0
     try check(AudioHardwareCreateAggregateDevice(desc as CFDictionary, &agg), "AudioHardwareCreateAggregateDevice")
@@ -210,7 +220,8 @@ func run(_ args: [String]) throws {
         let layout = try outputStreamLayout(agg)
         print("Aggregate output streams (channels per stream): \(layout)")
         let chA = a.outputChannels
-        let stereo: [UInt32] = [1, UInt32(chA + 1)]
+        let base = UInt32(clock?.outputChannels ?? 0)
+        let stereo: [UInt32] = [base + 1, base + UInt32(chA + 1)]
         if chA != 2 { print("note: Device A has \(chA) output channels, so right goes to channel \(chA + 1)") }
         try setValue(agg, address(kAudioDevicePropertyPreferredChannelsForStereo, kAudioObjectPropertyScopeOutput), (stereo[0], stereo[1]))
         let readBack = try getValue(agg, address(kAudioDevicePropertyPreferredChannelsForStereo, kAudioObjectPropertyScopeOutput), (UInt32(0), UInt32(0)))
