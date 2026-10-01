@@ -335,8 +335,12 @@ struct EngineTests {
         engine.swapSides = false
         engine.testTone = .right
         out = render(output: [2, 2])
-        #expect(out.channel(0) == [0, 0, 0, 0])
-        #expect(out.channel(2) != [0, 0, 0, 0])
+        // The tone fades in (kernel tests cover exact values): position A
+        // fades its program out, position B mixes the tone into its program.
+        let ratios = (0..<4).map { out.channel(0)[$0] / Self.left[$0] }
+        #expect(ratios[0] == 1 && ratios[1] < 1 && ratios[3] < ratios[2] && ratios[2] < ratios[1])
+        #expect(out.channel(2)[0] == Self.right[0])
+        #expect(Array(out.channel(2)[1...]) != Array(Self.right[1...]))
     }
 
     @Test func controlsSetBeforeStartApply() async {

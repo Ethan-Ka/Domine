@@ -106,7 +106,7 @@ final class SetupTests {
         hal.add(AppModelTests.gripB)
         model.start()
         await model.startRouting()
-        model.toggleTestTone(.left)
+        model.playTestTone(.left)
         let input = FakeBufferList(channelsPerBuffer: [2], frames: 64)
         let output = FakeBufferList(channelsPerBuffer: [2, 2], frames: 64)
         hal.render(input: input, output: output)

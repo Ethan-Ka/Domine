@@ -133,26 +133,27 @@ final class AppModelTests {
         #expect(model.engine.swapSides)
     }
 
-    @Test func testToneTogglesOnPositionA() async {
+    @Test func testTonePlaysOnPositionAThroughTheEngine() async {
         addGripsAndStart()
         await model.startRouting()
-        model.toggleTestTone(.left)
+        model.playTestTone(.left)
         #expect(model.engine.testTone == .left)
         #expect(model.mainWindowState.testToneSide == .left)
-        model.toggleTestTone(.left)
-        #expect(model.engine.testTone == .off)
+        model.playTestTone(.left)  // a second press restarts, it does not stop
+        #expect(model.engine.testTone == .left)
+        model.cancelTone()
         #expect(model.mainWindowState.testToneSide == nil)
     }
 
     @Test func testTonesPlayOnTheDeviceWhileOff() {
         addGripsAndStart()
         #expect(model.mainWindowState.canPlayTestTones)
-        model.toggleTestTone(.right)
+        model.playTestTone(.right)
         #expect(model.tones.playingUID == Self.gripB.uid)
         #expect(model.mainWindowState.testToneSide == .right)
         #expect(model.engine.testTone == .off)
-        model.toggleTestTone(.right)
-        #expect(model.tones.playingUID == nil)
+        model.playTestTone(.right)
+        #expect(model.tones.playingUID == Self.gripB.uid)
     }
 
     @Test func assignToneWorksWithoutRouting() {

@@ -40,13 +40,12 @@ struct MainBottomBar: View {
         .frame(height: 84)
     }
 
-    /// One stable toggle per side. A button that swapped styles was rebuilt on
-    /// every change and could miss the click that turns the tone off.
+    /// A plain button: each press plays one short tone. The side that is
+    /// playing is shown by the accessibility value only, so the button keeps
+    /// a single stable identity.
     private func testButton(_ title: String, side: StereoSide) -> some View {
-        Toggle(title, isOn: Binding(
-            get: { state.testToneSide == side },
-            set: { _ in actions.toggleTestTone(side) }))
-            .toggleStyle(.button)
+        Button(title) { actions.playTestTone(side) }
+            .accessibilityValue(state.testToneSide == side ? "Playing" : "")
             .disabled(!state.canPlayTestTones)
     }
 }

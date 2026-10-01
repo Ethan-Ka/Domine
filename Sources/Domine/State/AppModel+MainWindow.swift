@@ -31,7 +31,7 @@ extension AppModel {
                 self?.setMasterVolume(volume)
                 self?.setMuted(false)
             },
-            toggleTestTone: { [weak self] in self?.toggleTestTone($0) },
+            playTestTone: { [weak self] in self?.playTestTone($0) },
             selectSpeaker: { [weak self] in self?.openAssign($0) },
             openTuning: { [weak self] in self?.openTuning() })
     }

@@ -34,9 +34,11 @@ typedef struct DomineKernel DomineKernel;
 /// Largest delay magnitude accepted by domine_kernel_set_delay_ms.
 #define DOMINE_MAX_DELAY_MS 300.0f
 
-/// Test tone frequency and amplitude (-12 dBFS).
-#define DOMINE_TONE_HZ 1000.0
-#define DOMINE_TONE_AMPLITUDE 0.25
+/// Test tone frequency and amplitude (-14 dBFS).
+#define DOMINE_TONE_HZ 440.0
+#define DOMINE_TONE_AMPLITUDE 0.2
+/// Length of the test tone's linear fade in and fade out.
+#define DOMINE_TONE_FADE_MS 40.0
 
 /// Length of the mute and unmute fade.
 #define DOMINE_FADE_MS 50.0
@@ -80,12 +82,21 @@ void domine_kernel_set_mode(DomineKernel *k, int monoPerSpeaker, int swapSides, 
 
 /// Test tone: 0 off, 1 position A (left speaker), 2 position B (right
 /// speaker). Positions are not affected by swapSides. While the tone is on,
-/// the chosen position plays a 1 kHz sine at -12 dBFS (amplitude 0.25) in
+/// the chosen position plays a 440 Hz sine at -14 dBFS (amplitude 0.2) in
 /// place of program audio, on the same channels program audio would use, and
 /// the other position is silent. The tone ignores trim gain and delay but
 /// follows the mute fade. Its phase starts at 0 when the tone turns on (or
 /// changes position) and stays continuous across process calls.
 /// Other values are treated as 0.
+///
+/// The tone crossfades with program audio over L = round(0.04 * sampleRate)
+/// samples. Each sample uses level e = p / L, then p steps by one toward its
+/// target (L while the tone is requested, 0 otherwise), so the fade in reads
+/// 0, 1/L, 2/L, ... and the fade out L/L, (L-1)/L, ... 1/L. The playing
+/// position gets tone * e + program * (1 - e) and the other position gets
+/// program * (1 - e). Turning the tone off, or moving it to the other
+/// position, first fades the current tone out; once p reaches 0 the new
+/// request takes over (program alone, or the new position from phase 0).
 void domine_kernel_set_test_tone(DomineKernel *k, int side);
 
 /// Muted (nonzero) or unmuted (0). The output gain ramps linearly toward the
