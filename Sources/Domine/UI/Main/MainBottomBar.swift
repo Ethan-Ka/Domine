@@ -8,8 +8,9 @@ struct MainBottomBar: View {
     var body: some View {
         HStack(spacing: 16) {
             HStack(spacing: 8) {
-                Image(systemName: "speaker.wave.1")
+                Image(systemName: state.isMuted ? "speaker.slash" : "speaker.wave.1")
                     .foregroundStyle(.secondary)
+                    .frame(width: 16)
                     .accessibilityHidden(true)
                 Text("Master")
                     .font(.callout)
@@ -20,7 +21,7 @@ struct MainBottomBar: View {
                     set: { actions.setMasterVolume($0) }), in: 0...1)
                     .labelsHidden()
                     .accessibilityLabel("Master volume")
-                    .accessibilityValue("\(state.masterVolumePercent) percent")
+                    .accessibilityValue(state.isMuted ? "Muted, \(state.masterVolumePercent) percent" : "\(state.masterVolumePercent) percent")
                 Text("\(state.masterVolumePercent)%")
                     .font(.callout)
                     .monospacedDigit()

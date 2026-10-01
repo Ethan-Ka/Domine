@@ -12,6 +12,8 @@ struct MainWindowState: Equatable, Sendable {
     var speakers: [SpeakerCardState]
     /// Master volume, 0...1.
     var masterVolume: Double
+    /// Muted with the mute key. The slider keeps showing the volume.
+    var isMuted: Bool
     /// The side whose test tone is playing, if any.
     var testToneSide: StereoSide?
     /// Tones need the engine running; Test L and Test R are disabled otherwise.
@@ -27,6 +29,7 @@ struct MainWindowState: Equatable, Sendable {
         canSwap: Bool = true,
         speakers: [SpeakerCardState],
         masterVolume: Double,
+        isMuted: Bool = false,
         testToneSide: StereoSide? = nil,
         canPlayTestTones: Bool = true,
         bannerMessage: String? = nil
@@ -38,6 +41,7 @@ struct MainWindowState: Equatable, Sendable {
         self.canSwap = canSwap
         self.speakers = speakers
         self.masterVolume = masterVolume
+        self.isMuted = isMuted
         self.testToneSide = testToneSide
         self.canPlayTestTones = canPlayTestTones
         self.bannerMessage = bannerMessage
