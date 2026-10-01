@@ -12,6 +12,17 @@ struct SecondaryUIRenderTests {
         try render(GeneralSettingsView(state: .constant(.sampleGranted)), named: "general-granted")
     }
 
+    @Test func rendersGeneralSetupSection() throws {
+        try render(GeneralSettingsView(state: .constant(.sample), setup: .sample), named: "general-setup")
+        try render(GeneralSettingsView(state: .constant(.sampleGranted), setup: .sampleDone), named: "general-setup-done")
+    }
+
+    @Test func rendersWelcomeCaptureNotConfirmed() throws {
+        var state = WelcomeState.sample
+        state.showsPrivacySettings = true
+        try render(WelcomeView(state: state), named: "welcome-capture")
+    }
+
     @Test func rendersExclusions() throws {
         try render(ExclusionsView(state: .constant(.sample)), named: "exclusions")
     }

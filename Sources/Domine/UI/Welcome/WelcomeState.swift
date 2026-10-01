@@ -1,6 +1,10 @@
 /// The first-run checklist, in display order.
 struct WelcomeState: Equatable, Sendable {
     var steps: [WelcomeStep] = WelcomeStep.Kind.allCases.map { WelcomeStep(kind: $0, isDone: false) }
+    /// The audio capture probe is running.
+    var isCheckingCapture = false
+    /// A probe ran without confirming capture, so step 3 also offers the Privacy pane.
+    var showsPrivacySettings = false
 
     var allDone: Bool { steps.allSatisfy(\.isDone) }
 

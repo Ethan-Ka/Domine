@@ -10,6 +10,7 @@ final class AppModel {
     let catalog: DeviceCatalog
     let engine: Engine
     let meters = MeterModel()
+    let captureAccess: AudioCapturePermission
     @ObservationIgnored let store: SettingsStore
 
     /// Selected speakers, by UID. `leftUID` is the Front Left device, which is
@@ -57,6 +58,7 @@ final class AppModel {
         let store = SettingsStore(defaults: defaults)
         catalog = DeviceCatalog(hal: hal)
         engine = Engine(hal: hal)
+        captureAccess = AudioCapturePermission(hal: hal, store: store)
         self.store = store
         self.services = services
         showsWelcome = !store.hasCompletedWelcome
@@ -223,7 +225,7 @@ final class AppModel {
         if engine.state == .running {
             if !hasRunEngine { hasRunEngine = true }
             if !meters.isRunning {
-                meters.start { [weak engine] in engine?.peaks() ?? (0, 0) }
+                meters.start { [weak self] in self?.readMeterPeaks() ?? (0, 0) }
             }
         } else if meters.isRunning {
             meters.stop()

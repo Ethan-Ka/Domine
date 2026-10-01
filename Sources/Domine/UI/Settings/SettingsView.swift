@@ -5,11 +5,13 @@ struct SettingsView: View {
     @Binding var general: GeneralSettingsState
     @Binding var exclusions: ExclusionsState
     var generalActions = GeneralSettingsActions()
+    var setup = SetupState()
+    var setupActions = SetupActions()
     var exclusionsActions = ExclusionsActions()
 
     var body: some View {
         TabView {
-            GeneralSettingsView(state: $general, actions: generalActions)
+            GeneralSettingsView(state: $general, actions: generalActions, setup: setup, setupActions: setupActions)
                 .tabItem { Label("General", systemImage: "gearshape") }
             ExclusionsView(state: $exclusions, actions: exclusionsActions)
                 .tabItem { Label("Exclusions", systemImage: "nosign") }

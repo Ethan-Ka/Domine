@@ -10,10 +10,16 @@ struct SystemServices: Sendable {
     var setLaunchAtLogin: @MainActor @Sendable (Bool) throws -> Void
     /// Display name of an installed app, or nil if it is not installed.
     var appName: @MainActor @Sendable (_ bundleID: String) -> String?
+    /// The login item is registered but waits for approval in System Settings.
+    var launchAtLoginRequiresApproval: @MainActor @Sendable () -> Bool = { false }
+    var openLoginItemsSettings: @MainActor @Sendable () -> Void = {}
 
     static let bluetoothSettingsURL = URL(string: "x-apple.systempreferences:com.apple.Bluetooth")!
+    /// Privacy & Security > Screen & System Audio Recording. On macOS 15 and
+    /// later its "System Audio Recording Only" list holds process-tap apps.
+    /// Unverified on hardware: change it here if the pane does not open.
     static let audioCaptureSettingsURL = URL(
-        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture")!
+        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!
 
     static let live = SystemServices(
         openURL: { NSWorkspace.shared.open($0) },
@@ -25,5 +31,7 @@ struct SystemServices: Sendable {
             guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
             let name = FileManager.default.displayName(atPath: url.path)
             return name.hasSuffix(".app") ? String(name.dropLast(4)) : name
-        })
+        },
+        launchAtLoginRequiresApproval: { LaunchAtLogin.requiresApproval },
+        openLoginItemsSettings: { LaunchAtLogin.openLoginItemsSettings() })
 }

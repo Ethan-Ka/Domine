@@ -3,5 +3,6 @@ struct WelcomeActions {
     /// Button on a step row: mark JBL unpairing done, open Bluetooth settings,
     /// or request audio capture permission.
     var perform: @MainActor (WelcomeStep.Kind) -> Void = { _ in }
+    var openPrivacySettings: @MainActor () -> Void = {}
     var continueSetup: @MainActor () -> Void = {}
 }

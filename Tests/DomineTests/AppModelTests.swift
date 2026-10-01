@@ -351,15 +351,24 @@ final class AppModelTests {
         #expect(model.welcomeState.isDone(.unpairJBL))
         #expect(model.welcomeState.isDone(.connectSpeakers))
         #expect(!model.welcomeState.isDone(.allowCapture))
-        await model.startRouting()
+        model.captureAccess.markWorking()
         #expect(model.welcomeState.allDone)
 
         model.welcomeActions.perform(.connectSpeakers)
-        model.welcomeActions.perform(.allowCapture)
+        model.welcomeActions.openPrivacySettings()
         #expect(system.openedURLs.map(\.absoluteString) == [
             "x-apple.systempreferences:com.apple.Bluetooth",
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
         ])
+    }
+
+    @Test func routingAloneDoesNotConfirmCapture() async {
+        hal.add(Self.gripA)
+        hal.add(Self.gripB)
+        model.start()
+        await model.startRouting()
+        #expect(!model.welcomeState.isDone(.allowCapture))
+        model.stopRouting()
     }
 
     @Test func unpairStepCanBeMarkedByHand() {
@@ -376,6 +385,8 @@ final class FakeSystem {
     var accessRequests = 0
     var launchAtLogin = false
     var failLaunchAtLogin = false
+    var loginItemNeedsApproval = false
+    var loginItemsOpened = 0
 
     struct Failure: Error {}
 
@@ -390,6 +401,8 @@ final class FakeSystem {
                 if self.failLaunchAtLogin { throw Failure() }
                 self.launchAtLogin = enabled
             },
-            appName: { _ in nil })
+            appName: { _ in nil },
+            launchAtLoginRequiresApproval: { [weak self] in self?.loginItemNeedsApproval ?? false },
+            openLoginItemsSettings: { [weak self] in self?.loginItemsOpened += 1 })
     }
 }

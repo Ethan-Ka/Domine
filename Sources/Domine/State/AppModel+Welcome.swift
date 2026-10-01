@@ -2,20 +2,22 @@
 extension AppModel {
     var welcomeState: WelcomeState {
         var state = WelcomeState()
-        let grips = catalog.outputs.filter { $0.name == DeviceCatalog.gripName }.count
-        state.setDone(.unpairJBL, markedJBLUnpaired || grips >= 2)
+        state.setDone(.unpairJBL, markedJBLUnpaired || connectedGripCount >= 2)
         let bothPresent = [leftUID, rightUID].allSatisfy { uid in
             uid.map { catalog.device(uid: $0) != nil } ?? false
         }
         state.setDone(.connectSpeakers, bothPresent)
-        // There is no API to read the capture permission; a successful start is the best signal.
-        state.setDone(.allowCapture, hasRunEngine)
+        // There is no API to read the capture permission; tap audio is the only proof.
+        state.setDone(.allowCapture, captureAccess.status == .working)
+        state.isCheckingCapture = captureAccess.isProbing
+        state.showsPrivacySettings = captureAccess.status == .notConfirmed
         return state
     }
 
     var welcomeActions: WelcomeActions {
         WelcomeActions(
             perform: { [weak self] in self?.performWelcomeStep($0) },
+            openPrivacySettings: { [weak self] in self?.openPrivacySettings() },
             continueSetup: { [weak self] in self?.completeWelcome() })
     }
 
@@ -23,7 +25,7 @@ extension AppModel {
         switch kind {
         case .unpairJBL: markedJBLUnpaired = true
         case .connectSpeakers: services.openURL(SystemServices.bluetoothSettingsURL)
-        case .allowCapture: services.openURL(SystemServices.audioCaptureSettingsURL)
+        case .allowCapture: Task { await requestCaptureAccess() }
         }
     }
 

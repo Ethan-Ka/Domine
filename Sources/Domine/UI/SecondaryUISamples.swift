@@ -19,6 +19,20 @@ extension GeneralSettingsState {
     }
 }
 
+extension SetupState {
+    static let sample = SetupState(
+        captureStatus: .notConfirmed,
+        accessibilityGranted: false,
+        connectedGrips: 1,
+        loginItemNeedsApproval: true)
+
+    static let sampleDone = SetupState(
+        captureStatus: .working,
+        accessibilityGranted: true,
+        connectedGrips: 2,
+        loginItemNeedsApproval: false)
+}
+
 extension ExclusionsState {
     static let sample = ExclusionsState(
         items: [ExclusionItem(bundleID: "us.zoom.xos", appName: "zoom.us", mode: .onlyDuringCalls)],

@@ -19,7 +19,14 @@ struct WelcomeView: View {
             .padding(.bottom, 4)
 
             ForEach(state.steps) { step in
-                WelcomeStepRow(step: step) { actions.perform(step.kind) }
+                let isCapture = step.kind == .allowCapture
+                WelcomeStepRow(
+                    step: step,
+                    isBusy: isCapture && state.isCheckingCapture,
+                    secondaryTitle: isCapture && state.showsPrivacySettings && !step.isDone
+                        ? "Open Privacy Settings" : nil,
+                    secondaryAction: { actions.openPrivacySettings() }
+                ) { actions.perform(step.kind) }
             }
 
             HStack {

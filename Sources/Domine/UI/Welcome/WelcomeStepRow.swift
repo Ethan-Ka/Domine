@@ -1,8 +1,12 @@
 import SwiftUI
 
-/// One checklist step: number or checkmark, title, instruction, action button.
+/// One checklist step: number or checkmark, title, instruction, action
+/// button, and an optional second button under it.
 struct WelcomeStepRow: View {
     let step: WelcomeStep
+    var isBusy = false
+    var secondaryTitle: String?
+    var secondaryAction: () -> Void = {}
     let action: () -> Void
 
     var body: some View {
@@ -18,8 +22,13 @@ struct WelcomeStepRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Button(step.kind.actionTitle, action: action)
-                    .disabled(step.isDone)
+                VStack(alignment: .trailing, spacing: 6) {
+                    Button(step.kind.actionTitle, action: action)
+                        .disabled(step.isDone || isBusy)
+                    if let secondaryTitle {
+                        Button(secondaryTitle, action: secondaryAction)
+                    }
+                }
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 6)

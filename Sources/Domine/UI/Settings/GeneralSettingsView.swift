@@ -4,6 +4,8 @@ import SwiftUI
 struct GeneralSettingsView: View {
     @Binding var state: GeneralSettingsState
     var actions = GeneralSettingsActions()
+    var setup = SetupState()
+    var setupActions = SetupActions()
 
     var body: some View {
         Form {
@@ -47,6 +49,10 @@ struct GeneralSettingsView: View {
             } label: {
                 EmptyView()
             }
+
+            Divider()
+
+            SetupSection(state: setup, actions: setupActions)
         }
         .formStyle(.columns)
         .padding(.horizontal, 32)
@@ -59,6 +65,11 @@ struct GeneralSettingsView: View {
 #Preview("General") {
     @Previewable @State var state = GeneralSettingsState.sample
     GeneralSettingsView(state: $state)
+}
+
+#Preview("General, setup done") {
+    @Previewable @State var state = GeneralSettingsState.sampleGranted
+    GeneralSettingsView(state: $state, setup: .sampleDone)
 }
 
 #Preview("General, access granted") {
