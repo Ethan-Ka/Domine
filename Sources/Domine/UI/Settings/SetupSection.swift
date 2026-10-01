@@ -24,9 +24,12 @@ struct SetupSection: View {
             }
 
             LabeledContent("Accessibility:") {
-                row(state.accessibilityText, ok: state.accessibilityGranted) {
+                row(state.accessibilityText, ok: state.accessibilityGranted, note: state.accessibilityNote) {
                     if !state.accessibilityGranted {
                         Button("Grant Access") { actions.grantAccessibility() }
+                        if state.accessibilityLikelyStale {
+                            Button("Reveal Domine in Finder") { actions.revealApp() }
+                        }
                     }
                 }
             }
@@ -50,13 +53,16 @@ struct SetupSection: View {
     }
 
     /// Status text on the first line, buttons under it.
-    private func row(_ status: String, ok: Bool, @ViewBuilder buttons: () -> some View) -> some View {
+    private func row(_ status: String, ok: Bool, note: String? = nil, @ViewBuilder buttons: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Label {
                 Text(status)
             } icon: {
                 Image(systemName: ok ? "checkmark.circle.fill" : "exclamationmark.circle")
                     .foregroundStyle(ok ? Color.green : Color.secondary)
+            }
+            if let note {
+                Text(note).font(.callout).foregroundStyle(.secondary)
             }
             HStack(spacing: 8) { buttons() }
         }

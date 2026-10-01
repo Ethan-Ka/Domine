@@ -495,7 +495,12 @@ final class AppModelTests {
 final class FakeSystem {
     var openedURLs: [URL] = []
     var trusted = false
+    /// Times AXIsProcessTrusted was read.
+    var trustReads = 0
+    /// Times the prompting AXIsProcessTrustedWithOptions was called.
     var accessRequests = 0
+    var revealedURLs: [URL] = []
+    var signature: String? = "identifier com.ethankawley.Domine and certificate leaf = H\"aa\""
     var launchAtLogin = false
     var failLaunchAtLogin = false
     var loginItemNeedsApproval = false
@@ -506,8 +511,12 @@ final class FakeSystem {
     var services: SystemServices {
         SystemServices(
             openURL: { [weak self] in self?.openedURLs.append($0) },
-            isAccessibilityTrusted: { [weak self] in self?.trusted ?? false },
-            requestAccessibility: { [weak self] in self?.accessRequests += 1 },
+            isAccessibilityTrusted: { [weak self] in
+                guard let self else { return false }
+                self.trustReads += 1
+                return self.trusted
+            },
+            promptForAccessibility: { [weak self] in self?.accessRequests += 1 },
             isLaunchAtLoginEnabled: { [weak self] in self?.launchAtLogin ?? false },
             setLaunchAtLogin: { [weak self] enabled in
                 guard let self else { return }
@@ -516,6 +525,8 @@ final class FakeSystem {
             },
             appName: { _ in nil },
             launchAtLoginRequiresApproval: { [weak self] in self?.loginItemNeedsApproval ?? false },
-            openLoginItemsSettings: { [weak self] in self?.loginItemsOpened += 1 })
+            openLoginItemsSettings: { [weak self] in self?.loginItemsOpened += 1 },
+            revealInFinder: { [weak self] in self?.revealedURLs.append($0) },
+            codeSignature: { [weak self] in self?.signature })
     }
 }
