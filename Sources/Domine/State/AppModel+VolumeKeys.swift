@@ -23,7 +23,7 @@ extension AppModel {
 
     /// Volume keys are on but cannot be caught, so they still reach macOS.
     var volumeKeysNeedAccessibility: Bool {
-        generalSettings.volumeKeysEnabled && !generalSettings.accessibilityGranted
+        generalSettings.showsAccessibilityPrompt
     }
 
     /// Starts or stops the tap to match `wantsVolumeKeyTap`. Called when the
@@ -81,11 +81,12 @@ extension AppModel {
         }
     }
 
-    /// While the keys are wanted and only Accessibility is missing, checks
+    /// While the keys are turned on and Accessibility is missing, checks
     /// trust every few seconds, so a grant made in System Settings takes
-    /// effect without switching back to Domine.
+    /// effect, and the "needs Accessibility" notes go away, without
+    /// switching back to Domine.
     private func updateTrustPolling() {
-        let waiting = store.volumeKeysEnabled && engine.state.isActive && !services.isAccessibilityTrusted()
+        let waiting = store.volumeKeysEnabled && !services.isAccessibilityTrusted()
         if waiting {
             guard trustPollTask == nil else { return }
             trustPollTask = Task { [weak self] in

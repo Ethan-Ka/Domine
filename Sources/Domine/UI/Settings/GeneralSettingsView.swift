@@ -14,11 +14,11 @@ struct GeneralSettingsView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Toggle("Control Domine with the keyboard volume keys", isOn: $state.volumeKeysEnabled)
                         caption(GeneralSettingsState.volumeKeysCaption)
-                        if state.volumeKeysEnabled && !state.accessibilityGranted {
+                        if state.showsAccessibilityPrompt {
                             caption(GeneralSettingsState.accessibilityMissingCaption)
                         }
                     }
-                    if !state.accessibilityGranted {
+                    if state.showsAccessibilityPrompt {
                         Button("Grant access") { actions.grantAccessibility() }
                     }
                 }
@@ -44,7 +44,9 @@ struct GeneralSettingsView: View {
                     }
                     .pickerStyle(.radioGroup)
                     .labelsHidden()
-                    caption(state.closeBehavior.caption)
+                    if let caption = state.closeBehavior.caption {
+                        self.caption(caption)
+                    }
                 }
             }
 

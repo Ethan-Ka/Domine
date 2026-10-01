@@ -4,7 +4,7 @@ A macOS app that plays the left channel of system audio on one Bluetooth speaker
 
 macOS can combine devices into a Multi-Output Device, but then every speaker plays both channels. Domine captures system audio with a Core Audio process tap, sends it to a private aggregate device, and writes left to one speaker and right to the other. The aggregate corrects clock drift between the two speakers, and a delay slider (1 ms steps) lines up their Bluetooth latency.
 
-Status: early development. Nothing here produces a usable app yet. See [the milestones](docs/SPEC.md#10-milestones).
+Status: in development. Progress is tracked in [the milestones](docs/SPEC.md#10-milestones).
 
 ## Requirements
 
@@ -34,7 +34,7 @@ A typical loop: edit, `./scripts/test.sh`, then `./scripts/run.sh --logs` to try
 
 While Domine is running, it mutes system audio everywhere except the two speakers. If the app hangs, `./scripts/stop.sh` brings the sound back: Core Audio removes a quit process's tap and private aggregate device.
 
-The first time the engine starts, macOS asks for permission to capture system audio. Dev builds are ad-hoc signed, so a rebuild can leave a stale grant that makes the tap return silence. If the speakers go quiet after a rebuild, run `./scripts/reset-permissions.sh` and allow access again.
+The first time the engine starts, macOS asks for permission to capture system audio. Debug builds are signed with an Apple Development identity, so the grant survives rebuilds. If the speakers still go quiet after a rebuild, the grant is stale: run `./scripts/reset-permissions.sh` and allow access again.
 
 The same commands without the scripts:
 

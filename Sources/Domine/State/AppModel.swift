@@ -72,6 +72,9 @@ final class AppModel {
         didSet { exclusionsDidChange(from: oldValue) }
     }
     @ObservationIgnored let services: SystemServices
+    /// The login item waits for approval in System Settings. Re-read with
+    /// Accessibility trust in `refreshSystemStatus`.
+    var loginItemNeedsApproval = false
     @ObservationIgnored var isRefreshingSystemStatus = false
 
     static let log = Logger(subsystem: "com.ethankawley.Domine", category: "AppModel")
@@ -109,6 +112,7 @@ final class AppModel {
         showsWelcome = !store.hasCompletedWelcome
         generalSettings = Self.makeGeneralSettings(store: store, services: services)
         exclusionsSettings = Self.makeExclusionsSettings(store: store, services: services)
+        loginItemNeedsApproval = services.launchAtLoginRequiresApproval()
         leftUID = store.lastLeftUID
         rightUID = store.lastRightUID
         pairSettings = Self.loadPairSettings(store: store, left: leftUID, right: rightUID)
@@ -154,6 +158,7 @@ final class AppModel {
         if wasActive { stopRouting() }
         leftUID = left
         rightUID = right
+        routingRefusal = nil
         store.lastLeftUID = left
         store.lastRightUID = right
         pairSettings = Self.loadPairSettings(store: store, left: left, right: right)
@@ -217,7 +222,15 @@ final class AppModel {
         syncWithEngine()
     }
 
-    static let noOtherOutputMessage = "No other output for the Mac's own sound"
+    static let noOtherOutputMessage = "No other output for the Mac's own sound; connect one"
+
+    /// The only refusal is `noOtherOutputMessage`; it goes away as soon as
+    /// an output outside the pair appears.
+    private func clearRefusalIfResolved() {
+        guard routingRefusal != nil,
+              catalog.outputs.contains(where: { $0.uid != leftUID && $0.uid != rightUID }) else { return }
+        routingRefusal = nil
+    }
 
     func stopRouting() {
         stopClickTest()
@@ -351,6 +364,7 @@ final class AppModel {
     /// Called whenever the output list changes.
     func syncWithCatalog() {
         for device in catalog.outputs { knownNames[device.uid] = device.name }
+        clearRefusalIfResolved()
         chooseDefaultSpeakers()
         syncSettingsWithCatalog()
         syncVolumeLink()

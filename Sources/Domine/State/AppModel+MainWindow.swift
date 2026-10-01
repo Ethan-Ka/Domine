@@ -1,6 +1,13 @@
 /// Main window state and actions (docs/mockups/Main.dc.html).
 extension AppModel {
+    static let routingErrorMessage = "Could not start routing. Turn Domine on to try again."
     static let gripPairingHint = "Only one JBL Grip found. Turn off stereo pairing in the JBL Portable app."
+
+    /// One Grip is visible and the selected pair is not both present, so the
+    /// second Grip is probably still stereo-paired to the first (SPEC 9).
+    var showsGripPairingHint: Bool {
+        catalog.showsGripPairingHint && !bothSelectedSpeakersPresent
+    }
 
     var mainWindowState: MainWindowState {
         MainWindowState(
@@ -18,7 +25,7 @@ extension AppModel {
             testToneSide: testToneSide,
             canPlayTestTones: engine.state == .running
                 || [leftUID, rightUID].contains { $0.flatMap(catalog.device(uid:)) != nil },
-            bannerMessage: catalog.showsGripPairingHint ? Self.gripPairingHint : nil)
+            bannerMessage: showsGripPairingHint ? Self.gripPairingHint : nil)
     }
 
     var mainWindowActions: MainWindowActions {
@@ -47,7 +54,7 @@ extension AppModel {
             if volumeKeysNeedAccessibility { return "Playing, volume keys need Accessibility access" }
             return engine.swapSides ? "Playing, sides swapped" : "Playing"
         case .stopping: return "Stopping"
-        case .error(let message): return message
+        case .error: return Self.routingErrorMessage
         }
     }
 

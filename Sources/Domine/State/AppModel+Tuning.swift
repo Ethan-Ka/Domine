@@ -68,8 +68,7 @@ extension AppModel {
     private var routingFailureText: String {
         if let refusal = routingRefusal { return refusal }
         if let reason = engine.idleReason { return reason.description }
-        if case .error(let message) = engine.state { return "Could not start routing: \(message)" }
-        return "Could not start routing"
+        return Self.routingErrorMessage
     }
 
     func setDelayMs(_ ms: Int) {

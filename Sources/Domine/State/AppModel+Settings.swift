@@ -36,6 +36,7 @@ extension AppModel {
         if new.launchAtLogin != old.launchAtLogin {
             do {
                 try services.setLaunchAtLogin(new.launchAtLogin)
+                loginItemNeedsApproval = services.launchAtLoginRequiresApproval()
             } catch {
                 Self.log.error("Could not change launch at login: \(error.localizedDescription, privacy: .public)")
                 refreshSystemStatus()
@@ -60,7 +61,9 @@ extension AppModel {
     }
 
     /// Re-reads state the user can change outside Domine: Accessibility
-    /// trust and the login item. Does not write anything back.
+    /// trust and the login item. Does not write anything back. Runs when the
+    /// Settings window opens, when Domine becomes active, and from the trust
+    /// poll in AppModel+VolumeKeys.
     func refreshSystemStatus() {
         isRefreshingSystemStatus = true
         defer { isRefreshingSystemStatus = false }
@@ -68,6 +71,8 @@ extension AppModel {
         if generalSettings.accessibilityGranted != trusted { generalSettings.accessibilityGranted = trusted }
         let launch = services.isLaunchAtLoginEnabled()
         if generalSettings.launchAtLogin != launch { generalSettings.launchAtLogin = launch }
+        let approval = services.launchAtLoginRequiresApproval()
+        if loginItemNeedsApproval != approval { loginItemNeedsApproval = approval }
     }
 
     /// Output lists and names that follow the catalog.

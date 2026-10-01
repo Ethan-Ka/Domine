@@ -11,17 +11,21 @@ struct GeneralSettingsState: Equatable, Sendable {
             }
         }
 
-        var caption: String {
+        /// Only where the title leaves something out.
+        var caption: String? {
             switch self {
-            case .keepPlaying: "Audio keeps playing. Click Domine in the Dock to open the window again."
-            case .stopPlaying: "Closing the window turns Domine off."
+            case .keepPlaying: "Click Domine in the Dock to bring the window back."
+            case .stopPlaying: nil
             }
         }
     }
 
-    static let volumeKeysCaption = "Volume up, down, and mute change both speakers together while Domine is playing."
-    static let accessibilityMissingCaption = "Domine does not have Accessibility access, so the keys still control the Mac. If Domine is already on in the Accessibility list, remove it and add it again."
+    static let volumeKeysCaption = "Volume up, down, and mute change both speakers while Domine is playing."
+    static let accessibilityMissingCaption = "Needs Accessibility access. Until then the keys change the Mac's own volume."
     static let autoStartCaption = "Works even if the window is closed."
+
+    /// The volume keys are on but cannot be caught yet.
+    var showsAccessibilityPrompt: Bool { volumeKeysEnabled && !accessibilityGranted }
 
     var restoreCaption: String {
         guard let previousOutputName else { return "Also happens on Quit." }

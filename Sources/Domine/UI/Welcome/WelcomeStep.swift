@@ -20,7 +20,7 @@ struct WelcomeStep: Identifiable, Equatable, Sendable {
             case .connectSpeakers:
                 "Pair each Grip in System Settings › Bluetooth. Disconnect them from your phone."
             case .allowCapture:
-                "Domine needs this to route system audio to your speakers."
+                "Without it, both speakers stay silent."
             }
         }
 
