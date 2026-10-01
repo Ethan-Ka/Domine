@@ -49,7 +49,7 @@ extension AppModel {
                 canPlayTone: canPlayTone(uid: device.uid))
         }
         return AssignSheetState(
-            position: position, note: nil, rows: rows,
+            position: position, rows: rows,
             footnote: showsGripPairingHint ? Self.gripPairingHint : nil)
     }
 

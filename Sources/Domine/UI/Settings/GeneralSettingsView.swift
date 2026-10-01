@@ -13,13 +13,12 @@ struct GeneralSettingsView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     VStack(alignment: .leading, spacing: 2) {
                         Toggle("Control Domine with the keyboard volume keys", isOn: $state.volumeKeysEnabled)
-                        caption(GeneralSettingsState.volumeKeysCaption)
                         if state.showsAccessibilityPrompt {
                             caption(GeneralSettingsState.accessibilityMissingCaption)
                         }
                     }
                     if state.showsAccessibilityPrompt {
-                        Button("Grant access") { actions.grantAccessibility() }
+                        Button("Grant Access") { actions.grantAccessibility() }
                     }
                 }
             }
@@ -29,7 +28,9 @@ struct GeneralSettingsView: View {
             LabeledContent("When Domine stops:") {
                 VStack(alignment: .leading, spacing: 2) {
                     Toggle("Switch back to the previous output", isOn: $state.restorePreviousOutput)
-                    caption(state.restoreCaption)
+                    if let restoreCaption = state.restoreCaption {
+                        caption(restoreCaption)
+                    }
                 }
             }
 
@@ -44,18 +45,12 @@ struct GeneralSettingsView: View {
                     }
                     .pickerStyle(.radioGroup)
                     .labelsHidden()
-                    if let caption = state.closeBehavior.caption {
-                        self.caption(caption)
-                    }
                 }
             }
 
             LabeledContent {
                 VStack(alignment: .leading, spacing: 6) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Toggle("Start routing when both speakers connect", isOn: $state.startWhenBothConnect)
-                        caption(GeneralSettingsState.autoStartCaption)
-                    }
+                    Toggle("Start routing when both speakers connect", isOn: $state.startWhenBothConnect)
                     Toggle("Launch at login", isOn: $state.launchAtLogin)
                 }
             } label: {

@@ -101,7 +101,6 @@ final class AppModelTests {
         #expect(left.deviceName == "JBL Grip")
         #expect(left.uidSuffix == "4F2A")
         #expect(left.sideTag == "L")
-        #expect(left.volumePercent == 50)
         #expect(left.statusText == "Connected")
         #expect(state.speaker(at: .frontRight).uidSuffix == "9C11")
         #expect(state.speaker(at: .rearLeft).connection == .placeholder)
@@ -112,7 +111,7 @@ final class AppModelTests {
         #expect(right.connection == .disconnected)
         #expect(right.deviceName == "JBL Grip")
         #expect(right.uidSuffix == "9C11")
-        #expect(right.volumePercent == nil)
+        #expect(right.statusText == "Not connected")
     }
 
     @Test func unassignedCard() {

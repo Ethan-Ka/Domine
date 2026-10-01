@@ -27,6 +27,10 @@ struct UIRenderTests {
         try renderWindow(MainContentView(state: SampleStates.off), name: "main-off")
     }
 
+    @Test func mainWindowDisconnected() throws {
+        try renderWindow(MainContentView(state: SampleStates.disconnected), name: "main-disconnected")
+    }
+
     @Test func mainWindowLarge() throws {
         try renderWindow(
             MainContentView(state: SampleStates.playing), name: "main-large",
@@ -39,6 +43,12 @@ struct UIRenderTests {
 
     @Test func tuningSheet() throws {
         try renderView(TuningSheet(state: SampleStates.tuning), name: "tuning")
+    }
+
+    @Test func tuningSheetClickTest() throws {
+        var state = SampleStates.tuning
+        state.isClickTestPlaying = true
+        try renderView(TuningSheet(state: state), name: "tuning-click")
     }
 
     @Test func volumeHUD() throws {

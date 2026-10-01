@@ -1,7 +1,7 @@
 /// Main window state and actions (docs/mockups/Main.dc.html).
 extension AppModel {
-    static let routingErrorMessage = "Could not start routing. Turn Domine on to try again."
-    static let gripPairingHint = "Only one JBL Grip found. Turn off stereo pairing in the JBL Portable app."
+    static let routingErrorMessage = "Could not start routing"
+    nonisolated static let gripPairingHint = "Only one JBL Grip found. Turn off stereo pairing in the JBL Portable app."
 
     /// One Grip is visible and the selected pair is not both present, so the
     /// second Grip is probably still stereo-paired to the first (SPEC 9).
@@ -51,7 +51,7 @@ extension AppModel {
             return routingRefusal ?? engine.idleReason?.description ?? "Off"
         case .starting: return "Starting"
         case .running:
-            if volumeKeysNeedAccessibility { return "Playing, volume keys need Accessibility access" }
+            if volumeKeysNeedAccessibility { return "Playing, volume keys need Accessibility" }
             return engine.swapSides ? "Playing, sides swapped" : "Playing"
         case .stopping: return "Stopping"
         case .error: return Self.routingErrorMessage
@@ -90,13 +90,12 @@ extension AppModel {
             return SpeakerCardState(
                 position: position, sideTag: tag,
                 deviceName: knownNames[uid], uidSuffix: OutputDevice.suffix(forUID: uid),
-                statusText: "Off or disconnected", connection: .disconnected)
+                statusText: "Not connected", connection: .disconnected)
         }
         let level = engine.state == .running ? (isA ? meters.levelA : meters.levelB) : 0
         return SpeakerCardState(
             position: position, sideTag: tag,
             deviceName: device.name, uidSuffix: device.uidSuffix,
-            volumePercent: Int((pairSettings.masterVolume * 100).rounded()),
             statusText: "Connected", connection: .connected,
             level: Double(level))
     }

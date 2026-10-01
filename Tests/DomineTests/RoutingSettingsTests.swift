@@ -197,7 +197,7 @@ final class RoutingSettingsTests {
         model.start()
         model.generalSettings.volumeKeysEnabled = true
         await model.startRouting()
-        #expect(model.mainWindowState.statusLine == "Playing, volume keys need Accessibility access")
+        #expect(model.mainWindowState.statusLine == "Playing, volume keys need Accessibility")
         system.trusted = true
         model.refreshSystemStatus()
         #expect(model.mainWindowState.statusLine == "Playing")

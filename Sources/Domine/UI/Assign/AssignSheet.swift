@@ -9,11 +9,6 @@ struct AssignSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(state.title)
                 .font(.headline)
-            if let note = state.note {
-                Text(note)
-                    .font(.callout)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
             rowList
             if let footnote = state.footnote {
                 Text(footnote)

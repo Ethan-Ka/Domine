@@ -222,7 +222,7 @@ final class AppModel {
         syncWithEngine()
     }
 
-    static let noOtherOutputMessage = "No other output for the Mac's own sound; connect one"
+    static let noOtherOutputMessage = "Connect another output to start"
 
     /// The only refusal is `noOtherOutputMessage`; it goes away as soon as
     /// an output outside the pair appears.
