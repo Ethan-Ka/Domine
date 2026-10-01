@@ -21,14 +21,20 @@ extension AppModel {
         }
     }
 
-    /// A tone can play only through a running engine, on one of its two speakers.
+    /// Any connected output can play its identification tone.
     func canPlayTone(uid: String) -> Bool {
-        engine.state == .running && (uid == leftUID || uid == rightUID)
+        catalog.device(uid: uid) != nil
     }
 
+    /// Through the engine when the device is one of the two routed speakers,
+    /// otherwise directly on that device.
     func playAssignTone(uid: String) {
         guard canPlayTone(uid: uid) else { return }
-        playTones([(uid == leftUID ? .left : .right, Self.assignToneDuration)])
+        if engine.state == .running, uid == leftUID || uid == rightUID {
+            playTones([(uid == leftUID ? .left : .right, Self.assignToneDuration)])
+        } else {
+            tones.play(uid: uid)
+        }
     }
 
     func assignSheetState(for position: SpeakerPosition) -> AssignSheetState {

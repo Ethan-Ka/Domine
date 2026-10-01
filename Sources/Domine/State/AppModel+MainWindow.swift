@@ -16,7 +16,8 @@ extension AppModel {
             masterVolume: Double(pairSettings.masterVolume),
             isMuted: isMuted,
             testToneSide: testToneSide,
-            canPlayTestTones: engine.state == .running,
+            canPlayTestTones: engine.state == .running
+                || [leftUID, rightUID].contains { $0.flatMap(catalog.device(uid:)) != nil },
             bannerMessage: catalog.showsGripPairingHint ? Self.gripPairingHint : nil)
     }
 
@@ -50,7 +51,10 @@ extension AppModel {
 
     /// Test tones are positional: left is position A, the Front Left card.
     private var testToneSide: StereoSide? {
-        switch engine.testTone {
+        if engine.state != .running, let playing = tones.playingUID {
+            return playing == leftUID ? .left : playing == rightUID ? .right : nil
+        }
+        return switch engine.testTone {
         case .off: nil
         case .left: .left
         case .right: .right

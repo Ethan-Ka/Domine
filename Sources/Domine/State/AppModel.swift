@@ -11,6 +11,8 @@ final class AppModel {
     let engine: Engine
     let meters = MeterModel()
     let captureAccess: AudioCapturePermission
+    /// Identification tones on a single device while routing is off.
+    let tones: DeviceTonePlayer
     @ObservationIgnored let store: SettingsStore
 
     /// Selected speakers, by UID. `leftUID` is the Front Left device, which is
@@ -71,6 +73,7 @@ final class AppModel {
         catalog = DeviceCatalog(hal: hal)
         engine = Engine(hal: hal)
         captureAccess = AudioCapturePermission(hal: hal, store: store)
+        tones = DeviceTonePlayer(hal: hal)
         self.store = store
         self.services = services
         showsWelcome = !store.hasCompletedWelcome
@@ -145,6 +148,7 @@ final class AppModel {
     }
 
     func startRouting() async {
+        tones.stop()
         applyPairSettingsToEngine()
         await engine.start(left: leftUID, right: rightUID)
         syncWithEngine()
@@ -195,8 +199,20 @@ final class AppModel {
 
     // MARK: - Test tones
 
-    /// Starts the tone on that side, or stops it if it is already playing.
+    /// While routing, starts the engine's tone on that side or stops it if it
+    /// is already playing. While off, plays a short tone directly on that
+    /// side's speaker so the user can tell the two apart.
     func toggleTestTone(_ side: StereoSide) {
+        guard engine.state == .running else {
+            let uid = side == .left ? leftUID : rightUID
+            if let uid, tones.playingUID == uid {
+                tones.stop()
+            } else if let uid, catalog.device(uid: uid) != nil {
+                tones.play(uid: uid)
+            }
+            return
+        }
+        tones.stop()
         let tone: TestTone = side == .left ? .left : .right
         let playing = engine.testTone == tone
         cancelTone()

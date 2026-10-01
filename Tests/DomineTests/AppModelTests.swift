@@ -144,11 +144,22 @@ final class AppModelTests {
         #expect(model.mainWindowState.testToneSide == nil)
     }
 
-    @Test func testTonesDisabledUntilRunning() async {
+    @Test func testTonesPlayOnTheDeviceWhileOff() {
         addGripsAndStart()
-        #expect(!model.mainWindowState.canPlayTestTones)
-        await model.startRouting()
         #expect(model.mainWindowState.canPlayTestTones)
+        model.toggleTestTone(.right)
+        #expect(model.tones.playingUID == Self.gripB.uid)
+        #expect(model.mainWindowState.testToneSide == .right)
+        #expect(model.engine.testTone == .off)
+        model.toggleTestTone(.right)
+        #expect(model.tones.playingUID == nil)
+    }
+
+    @Test func assignToneWorksWithoutRouting() {
+        addGripsAndStart()
+        #expect(model.canPlayTone(uid: Self.speakers.uid))
+        model.playAssignTone(uid: Self.speakers.uid)
+        #expect(model.tones.playingUID == Self.speakers.uid)
     }
 
     @Test func metersRunOnlyWhileRunning() async {
@@ -200,15 +211,15 @@ final class AppModelTests {
         #expect(rows[1].details == ["Bluetooth"])
         #expect(rows[1].isSelected)
         #expect(rows[2].details == ["Bluetooth", "In use as Front Right"])
-        #expect(rows.allSatisfy { !$0.canPlayTone })
+        #expect(rows.allSatisfy { $0.canPlayTone })
 
         await model.startRouting()
         rows = model.assignSheetState(for: .frontLeft).rows
-        #expect(rows.map(\.canPlayTone) == [false, true, true])
+        #expect(rows.allSatisfy { $0.canPlayTone })
         model.playAssignTone(uid: Self.gripB.uid)
         #expect(model.engine.testTone == .right)
         model.playAssignTone(uid: Self.speakers.uid)
-        #expect(model.engine.testTone == .right)
+        #expect(model.tones.playingUID == Self.speakers.uid)
     }
 
     // MARK: Tuning
