@@ -8,13 +8,14 @@ struct DomineApp: App {
     static let isTestHost = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
         || ProcessInfo.processInfo.environment["XCTestBundlePath"] != nil
 
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = AppModel()
 
     var body: some Scene {
         Window("Domine", id: "main") {
             Group {
                 if Self.isTestHost {
-                    Color.clear
+                    TestHostWindowHider()
                 } else {
                     MainView()
                         .environment(model)
