@@ -55,6 +55,10 @@ struct DomineKernel {
     _Atomic uint32_t statsSeq;
     _Atomic uint64_t statsWords[STATS_WORDS];
 
+    // EFFECTS BLOCK (SPEC 5a): per-position effect instances, index 0 = A,
+    // 1 = B. Allocated in create, freed in destroy. Other modules add here.
+    DomineEQ *eq[2];
+
     // Render thread state only.
     float *ringA;
     float *ringB;
@@ -232,6 +236,15 @@ DomineKernel *domine_kernel_create(double sampleRate, uint32_t maxFrames) {
         domine_kernel_destroy(k);
         return NULL;
     }
+    // EFFECTS BLOCK (SPEC 5a): create.
+    for (int i = 0; i < 2; i++) {
+        k->eq[i] = domine_eq_create(sampleRate);
+        if (k->eq[i] == NULL) {
+            domine_kernel_destroy(k);
+            return NULL;
+        }
+    }
+    // END EFFECTS BLOCK
     k->ringMask = ringSize - 1;
     k->maxDelaySamples = (int32_t)(ringSize - 1);
     k->fifoMask = fifoSize - 1;
@@ -274,6 +287,9 @@ DomineKernel *domine_kernel_create(double sampleRate, uint32_t maxFrames) {
 
 void domine_kernel_destroy(DomineKernel *k) {
     if (k == NULL) return;
+    // EFFECTS BLOCK (SPEC 5a): destroy.
+    for (int i = 0; i < 2; i++) domine_eq_destroy(k->eq[i]);
+    // END EFFECTS BLOCK
     free(k->ringA);
     free(k->ringB);
     free(k->fifoL);
@@ -314,6 +330,13 @@ void domine_kernel_set_click_test(DomineKernel *k, int mode) {
     if (k == NULL) return;
     atomic_store_explicit(&k->clickTest, (mode == 1 || mode == 2) ? mode : 0, memory_order_relaxed);
 }
+
+// EFFECTS BLOCK (SPEC 5a): setters.
+void domine_kernel_set_eq(DomineKernel *k, int position, const DomineEQParams *params) {
+    if ((position != 0 && position != 1) || params == NULL) return;
+    domine_eq_set_params(k->eq[position], params);
+}
+// END EFFECTS BLOCK
 
 void domine_kernel_set_muted(DomineKernel *k, int muted) {
     if (k == NULL) return;
@@ -535,6 +558,13 @@ static RenderResult render(DomineKernel *k,
             srcA = l;
             srcB = r;
         }
+
+        // EFFECTS BLOCK (SPEC 5a): per position chain on the program source,
+        // after mapping and before the click source, delay line and trim gain.
+        // Order: EQ, bass enhancer, compressor/limiter. An idle stage is skipped.
+        if (!domine_eq_is_idle(k->eq[0])) domine_eq_process(k->eq[0], &srcA, 1);
+        if (!domine_eq_is_idle(k->eq[1])) domine_eq_process(k->eq[1], &srcB, 1);
+        // END EFFECTS BLOCK
 
         // Click test: replaces the source before the delay line.
         if (clickTest == 1 || k->clickLevel != 0) click_mix(k, clickTest == 1, &srcA, &srcB);

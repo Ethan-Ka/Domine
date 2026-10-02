@@ -216,6 +216,35 @@ Input streams in the aggregate list sub-device inputs first, then the tap's stre
 
 The IOProc itself is a C function in `DomineDSP` (`domine_kernel_ioproc`, passed to `AudioDeviceCreateIOProcID` with the kernel as client data), so no Swift runs on the audio thread at all. The Swift side stores the layout in the kernel through atomics before starting the device.
 
+## 5a. Effects
+
+Built-in effects run inside the kernel, per output position, so position A and position B each have their own instance of every stage and never share state. The chain, in order:
+
+1. EQ (five bands: low shelf, three peaking, high shelf; each +-12 dB, with frequency and Q).
+2. Bass enhancer.
+3. Compressor/limiter.
+4. Trim gain (section 4a).
+5. Delay (section 4).
+
+The chain runs on the program source right after the side mapping (swap, mono fallback) and before the click source and the delay line, so it works on one continuous stream per position, test signals are never colored by it, and changing the delay does not disturb filter state. The calibration chirp and test tone bypass it.
+
+Every stage has an enable flag. A disabled stage fades to a no-op over about 10 ms and is then skipped entirely. With every stage disabled the kernel output is bit-exact passthrough, so the guarantees in section 4d stay true. Enabling any stage means that stage's processing is, by design, no longer transparent, and the trim gain still never adds gain.
+
+Module contract (`Sources/DomineDSP/include/DomineEffects.h`). Each effect is its own module with its own header `DomineX.h` and source `x.c`:
+
+```c
+typedef struct X X;
+X *x_create(double sampleRate);                 // allocates; not real-time
+void x_destroy(X *x);
+void x_set_params(X *x, const XParams *p);      // any thread; atomics only
+void x_process(X *x, float *samples, uint32_t frames); // in place, real-time safe
+int x_is_idle(const X *x);                      // settled no-op, kernel may skip
+```
+
+Parameters cross threads through a seqlock over atomic words (or an atomically swapped double buffer); the render thread never waits. `x_process` picks up changes itself and smooths them over about 10 ms. The kernel exposes one setter per stage, such as `domine_kernel_set_eq(k, position, params)`. Create and destroy happen only inside `domine_kernel_create` and `domine_kernel_destroy`.
+
+EQ details: RBJ cookbook biquads, double precision state, float input and output. A band at exactly 0 dB has identity coefficients and is skipped once settled. Parameter changes slide the coefficients linearly over 10 ms.
+
 ## 6. App structure (Swift)
 
 ```

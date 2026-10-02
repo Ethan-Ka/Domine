@@ -17,6 +17,7 @@
 
 #include <stdint.h>
 #include "DomineChime.h"
+#include "DomineEQ.h"
 #include <CoreAudio/CoreAudioTypes.h>
 #include <CoreAudio/AudioHardwareBase.h> // AudioObjectID only; no Core Audio calls
 
@@ -151,6 +152,14 @@ void domine_kernel_set_click_test(DomineKernel *k, int mode);
 /// calibration chirp: `frames` samples from the chirp start, zero past its end.
 /// Real-time safe.
 void domine_calibration_chirp(float *out, uint32_t frames, double sampleRate, int rising);
+
+/// Effects chain (SPEC section 5a). Per position (0 = A, 1 = B; positions
+/// never swap), run on the program source after the side mapping and before
+/// the click source, the delay line, and the trim gains. Order: EQ, bass
+/// enhancer, compressor/limiter, then trim gain, then delay. Stages that are
+/// disabled and settled are skipped, so with all effects off the transparency
+/// guarantee below holds. Other values of position are ignored.
+void domine_kernel_set_eq(DomineKernel *k, int position, const DomineEQParams *params);
 
 /// Muted (nonzero) or unmuted (0). The output gain ramps linearly toward the
 /// target over 50 ms of samples (round(0.05 * sampleRate)). A new kernel
