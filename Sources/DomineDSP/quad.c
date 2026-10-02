@@ -41,6 +41,7 @@ struct DomineQuad {
     DomineEQ *eq[NPOS];
     DomineBass *bass[NPOS];
     DomineCompressor *comp[NPOS];
+    DomineSpatial *spatial; // SPATIAL BLOCK: DOMINE_REAR_SPATIAL
 };
 
 typedef struct { float *data; uint32_t stride, frames; } OutCh;
@@ -76,6 +77,7 @@ DomineQuad *domine_quad_create(double sampleRate, uint32_t maxFrames) {
         atomic_init(&q->delaySamples[i], 0);
         atomic_init(&q->peakBits[i], 0);
     }
+    q->spatial = domine_spatial_create(sampleRate); // SPATIAL BLOCK
     atomic_init(&q->layoutFirst, 0);
     atomic_init(&q->inputChannels, 0);
     atomic_init(&q->inputNonInterleaved, 0);
@@ -89,7 +91,7 @@ DomineQuad *domine_quad_create(double sampleRate, uint32_t maxFrames) {
     }
     atomic_init(&q->rearTrimBits, f2u(1.0f));
     for (int i = 0; i < NPOS; i++) {
-        if (!q->ring[i] || !q->eq[i] || !q->bass[i] || !q->comp[i]) {
+        if (!q->spatial || !q->ring[i] || !q->eq[i] || !q->bass[i] || !q->comp[i]) {
             domine_quad_destroy(q);
             return NULL;
         }
@@ -105,6 +107,7 @@ void domine_quad_destroy(DomineQuad *q) {
         if (q->bass[i]) domine_bass_destroy(q->bass[i]);
         if (q->comp[i]) domine_compressor_destroy(q->comp[i]);
     }
+    domine_spatial_destroy(q->spatial); // SPATIAL BLOCK
     free(q);
 }
 
@@ -133,7 +136,8 @@ void domine_quad_start_faded_out(DomineQuad *q) {
 }
 
 void domine_quad_set_rear_mode(DomineQuad *q, int mode) {
-    uint32_t m = mode == DOMINE_REAR_MATRIX ? DOMINE_REAR_MATRIX
+    uint32_t m = mode == DOMINE_REAR_SPATIAL ? DOMINE_REAR_SPATIAL // SPATIAL BLOCK
+               : mode == DOMINE_REAR_MATRIX ? DOMINE_REAR_MATRIX
                : mode == DOMINE_REAR_DIRECT ? DOMINE_REAR_DIRECT : DOMINE_REAR_MIRROR;
     atomic_store_explicit(&q->rearMode, m, memory_order_relaxed);
 }
@@ -141,6 +145,12 @@ void domine_quad_set_rear_mode(DomineQuad *q, int mode) {
 void domine_quad_set_rear_trim(DomineQuad *q, float gain) {
     atomic_store_explicit(&q->rearTrimBits, f2u(clamp01(gain)), memory_order_relaxed);
 }
+
+// SPATIAL BLOCK begin
+void domine_quad_set_spatial(DomineQuad *q, const DomineSpatialParams *p) {
+    if (q != NULL) domine_spatial_set_params(q->spatial, p);
+}
+// SPATIAL BLOCK end
 
 void domine_quad_set_eq(DomineQuad *q, int pos, const DomineEQParams *p) {
     if (pos >= 0 && pos < NPOS) domine_eq_set_params(q->eq[pos], p);
@@ -239,6 +249,9 @@ static void quad_render(DomineQuad *q, InCh inL, InCh inR, const TapSet *tapSet,
             rl = DOMINE_REAR_MATRIX_K * (L - 0.5f * R);
             rr = DOMINE_REAR_MATRIX_K * (R - 0.5f * L);
         }
+        // SPATIAL BLOCK begin
+        if (mode == DOMINE_REAR_SPATIAL) domine_spatial_tick(q->spatial, L, R, &rl, &rr);
+        // SPATIAL BLOCK end
         rl *= trim;
         rr *= trim;
 

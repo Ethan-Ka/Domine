@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <CoreAudio/CoreAudioTypes.h>
 #include "DomineDSP.h"
+#include "DomineSpatial.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -29,6 +30,8 @@ typedef struct DomineQuad DomineQuad;
 #define DOMINE_REAR_MIRROR 0
 #define DOMINE_REAR_MATRIX 1
 #define DOMINE_REAR_DIRECT 2
+/// Spatial upmixer (DomineSpatial.h, SPEC 11.6a); see domine_quad_set_spatial.
+#define DOMINE_REAR_SPATIAL 3
 /// Matrix scale: rearL = k(L - 0.5R), rearR = k(R - 0.5L), k = 1 / 1.5.
 #define DOMINE_REAR_MATRIX_K (1.0f / 1.5f)
 
@@ -47,6 +50,8 @@ void domine_quad_set_delay_ms(DomineQuad *q, int pos, float ms);
 /// default 1) applied to RL and RR after derivation.
 void domine_quad_set_rear_mode(DomineQuad *q, int mode);
 void domine_quad_set_rear_trim(DomineQuad *q, float gain);
+/// Parameters for DOMINE_REAR_SPATIAL (any thread). Rear trim still applies after.
+void domine_quad_set_spatial(DomineQuad *q, const DomineSpatialParams *params);
 /// Muted (nonzero) or unmuted (0). The output ramps linearly toward the target
 /// over the same 50 ms (DOMINE_FADE_MS) as the stereo kernel. Starts unmuted at
 /// full gain with no ramp.

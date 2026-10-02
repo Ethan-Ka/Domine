@@ -399,6 +399,12 @@ Quad mode adds rear left and rear right speakers. Positions are indexed 0 FL, 1 
 - For stereo sources: mid/side split. Direct sound (mid) stays on the fronts; side and decorrelated ambience go to the rears. Controls: "Spatial amount" (0 to 100%, 0 is mirror trim only) and "Room size" (rear delay plus gentle diffusion, all-pass chain, no allocation on the audio thread).
 - UI name is "Spatial". Do not use "Dolby" or "Atmos" anywhere in the app.
 
+### 11.6a Spatial upmixer module
+- `Sources/DomineDSP/spatial.c`, `DomineSpatial.h`. Stereo L, R in; rear pair RL, RR out. The fronts are the untouched input. Params: `amount` 0...1, `roomMs` 5...30 (default 15), `highCutHz` 1000...16000 (default 5000). Set through a seqlock; amount and room size smooth over about 10 ms.
+- Rear = (1 - amount) * mirror + amount * ambience. Ambience: side S = (L - R) / 2, delayed by room size (RR by 1.13 times that), a different 3-stage all-pass chain per rear (RR polarity inverted), a high shelf of about -4.4 dB above `highCutHz`, gain sqrt(2) so uncorrelated material keeps its level, clamped to +-1 so the rears never exceed full scale.
+- Mono input has no side, so the rears fall to silence as amount rises; side-only input appears in the rears. At amount 0 (settled) the output is bit-exact mirror.
+- Kernel hook: rear mode `DOMINE_REAR_SPATIAL` (3) with `domine_quad_set_spatial`. Rear trim applies after it. The stereo UI "Spatial amount" and "Room size" map to `amount` and `roomMs`.
+
 ### 11.7 Calibration and tuning
 - Per-speaker distance (delay) and level calibration. Auto-calibration (section 12) extends to four positions, one click per speaker. Settings persist per set of four speakers (key: the four UIDs sorted).
 

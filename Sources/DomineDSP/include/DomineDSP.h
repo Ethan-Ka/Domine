@@ -20,6 +20,7 @@
 #include "DomineEQ.h"
 #include "DomineBass.h"
 #include "DomineCompressor.h"
+#include "DomineSpatial.h"
 #include <CoreAudio/CoreAudioTypes.h>
 #include <CoreAudio/AudioHardwareBase.h> // AudioObjectID only; no Core Audio calls
 
