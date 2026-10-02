@@ -1,4 +1,5 @@
 #include "DomineQuad.h"
+#include "TapMix.h"
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,6 +29,7 @@ struct DomineQuad {
     _Atomic uint32_t inputChannels;
     _Atomic uint32_t inputNonInterleaved;
     uint32_t maxDelay;
+    TapMixer taps;
 
     // Render thread state.
     uint32_t fadeLength;   // samples in a full mute fade
@@ -60,6 +62,7 @@ DomineQuad *domine_quad_create(double sampleRate, uint32_t maxFrames) {
     DomineQuad *q = calloc(1, sizeof *q);
     if (q == NULL) return NULL;
     q->sampleRate = sampleRate;
+    tapmix_init(&q->taps, sampleRate);
     double ringRate = sampleRate > RING_MIN_RATE ? sampleRate : RING_MIN_RATE;
     q->maxDelay = (uint32_t)ceil(ringRate * DOMINE_MAX_DELAY_MS / 1000.0);
     uint32_t size = next_pow2(q->maxDelay + 1);
@@ -186,7 +189,7 @@ static int map_out(AudioBufferList *abl, uint32_t flat, OutCh *o) {
     return 0;
 }
 
-static void quad_render(DomineQuad *q, InCh inL, InCh inR, AudioBufferList *out,
+static void quad_render(DomineQuad *q, InCh inL, InCh inR, const TapSet *tapSet, AudioBufferList *out,
                         uint32_t frames, const uint32_t *out_offsets) {
     for (uint32_t b = 0; b < out->mNumberBuffers; b++) {
         if (out->mBuffers[b].mData != NULL) memset(out->mBuffers[b].mData, 0, out->mBuffers[b].mDataByteSize);
@@ -228,7 +231,9 @@ static void quad_render(DomineQuad *q, InCh inL, InCh inR, AudioBufferList *out,
         if (q->fadePosition < fadeTarget) q->fadePosition++;
         else if (q->fadePosition > fadeTarget) q->fadePosition--;
         const float fade = q->fadePosition == q->fadeLength ? 1.0f : (float)q->fadePosition / (float)q->fadeLength;
-        const float L = read_in(&inL, f), R = read_in(&inR, f);
+        float L, R;
+        if (tapSet != NULL) tapmix_read(&q->taps, tapSet, f, &L, &R);
+        else { L = read_in(&inL, f); R = read_in(&inR, f); }
         float rl = L, rr = R;
         if (mode == DOMINE_REAR_MATRIX) {
             rl = DOMINE_REAR_MATRIX_K * (L - 0.5f * R);
@@ -297,14 +302,32 @@ void domine_quad_process(DomineQuad *q, const AudioBufferList *in, AudioBufferLi
                          uint32_t frames, const uint32_t *out_offsets) {
     if (q == NULL || out == NULL || out_offsets == NULL) return;
     InCh inL, inR;
-    quad_resolve(in != NULL ? in->mBuffers : NULL, in != NULL ? in->mNumberBuffers : 0, 0, &inL, &inR);
-    quad_render(q, inL, inR, out, frames, out_offsets);
+    TapSet tapSet;
+    const int useTaps = tapmix_begin(&q->taps);
+    if (useTaps) {
+        (void)tapmix_resolve(&q->taps, in, &tapSet, NULL);
+        inL = inR = (InCh){ NULL, 1, 0 };
+    } else {
+        quad_resolve(in != NULL ? in->mBuffers : NULL, in != NULL ? in->mNumberBuffers : 0, 0, &inL, &inR);
+    }
+    quad_render(q, inL, inR, useTaps ? &tapSet : NULL, out, frames, out_offsets);
 }
 
 void domine_quad_set_layout(DomineQuad *q, uint32_t inFirstBuffer, const uint32_t *out_offsets) {
     atomic_store_explicit(&q->layoutFirst, inFirstBuffer, memory_order_relaxed);
     for (int i = 0; i < NPOS; i++)
         atomic_store_explicit(&q->layoutOut[i], out_offsets[i], memory_order_relaxed);
+}
+
+void domine_quad_set_tap_layout(DomineQuad *q, uint32_t tapCount, const uint32_t *firstBuffer,
+                                const uint32_t *channels, const uint32_t *interleaved) {
+    if (q == NULL) return;
+    tapmix_set_layout(&q->taps, tapCount, firstBuffer, channels, interleaved);
+}
+
+void domine_quad_set_tap_gain(DomineQuad *q, uint32_t tap, float gain) {
+    if (q == NULL) return;
+    tapmix_set_gain(&q->taps, tap, gain);
 }
 
 void domine_quad_set_input_format(DomineQuad *q, uint32_t channelsPerFrame, int nonInterleaved) {
@@ -338,7 +361,14 @@ OSStatus domine_quad_ioproc(AudioObjectID inDevice, const AudioTimeStamp *inNow,
         inCount = inInputData->mNumberBuffers - first;
     }
     InCh inL, inR;
-    quad_resolve(inBuffers, inCount, fmt, &inL, &inR);
-    quad_render(q, inL, inR, outOutputData, frames, offsets);
+    TapSet tapSet;
+    const int useTaps = tapmix_begin(&q->taps);
+    if (useTaps) {
+        (void)tapmix_resolve(&q->taps, inInputData, &tapSet, NULL);
+        inL = inR = (InCh){ NULL, 1, 0 };
+    } else {
+        quad_resolve(inBuffers, inCount, fmt, &inL, &inR);
+    }
+    quad_render(q, inL, inR, useTaps ? &tapSet : NULL, outOutputData, frames, offsets);
     return 0;
 }
