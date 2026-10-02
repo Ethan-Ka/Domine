@@ -155,6 +155,28 @@ final class CoreAudioHAL: AudioHAL {
         return settable.boolValue
     }
 
+    func isMuted(of device: AudioObjectID) throws(HALError) -> Bool? {
+        var addr = muteAddress
+        guard AudioObjectHasProperty(device, &addr) else { return nil }
+        var settable: DarwinBoolean = false
+        try HALError.check(
+            AudioObjectIsPropertySettable(device, &addr, &settable),
+            "AudioObjectIsPropertySettable", selector: addr.mSelector)
+        guard settable.boolValue else { return nil }
+        return try readScalar(device, addr, as: UInt32.self) != 0
+    }
+
+    func setMuted(_ muted: Bool, of device: AudioObjectID) throws(HALError) {
+        try writeScalar(device, muteAddress, UInt32(muted ? 1 : 0))
+    }
+
+    private var muteAddress: AudioObjectPropertyAddress {
+        AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyMute,
+            mScope: kAudioObjectPropertyScopeOutput,
+            mElement: kAudioObjectPropertyElementMain)
+    }
+
     // MARK: - Default output
 
     func defaultOutputDevice() throws(HALError) -> AudioObjectID {

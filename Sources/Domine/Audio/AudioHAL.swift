@@ -43,6 +43,11 @@ protocol AudioHAL: AnyObject, Sendable {
     func volume(of device: AudioObjectID, element: AudioObjectPropertyElement) throws(HALError) -> Float
     func setVolume(_ volume: Float, of device: AudioObjectID, element: AudioObjectPropertyElement) throws(HALError)
 
+    /// `kAudioDevicePropertyMute`, output scope, main element. Nil when the
+    /// device has no settable mute control.
+    func isMuted(of device: AudioObjectID) throws(HALError) -> Bool?
+    func setMuted(_ muted: Bool, of device: AudioObjectID) throws(HALError)
+
     func defaultOutputDevice() throws(HALError) -> AudioObjectID
     func setDefaultOutputDevice(_ device: AudioObjectID) throws(HALError)
 

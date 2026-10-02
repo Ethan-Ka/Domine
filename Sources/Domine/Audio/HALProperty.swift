@@ -11,11 +11,13 @@ enum HALProperty: Hashable, Sendable {
     /// `kAudioDeviceProcessorOverload`: fires when an IO cycle ran late.
     case processorOverload(AudioObjectID)
     case nominalSampleRate(AudioObjectID)
+    /// `kAudioDevicePropertyMute`, output scope, main element.
+    case mute(AudioObjectID)
 
     var object: AudioObjectID {
         switch self {
         case .devices, .defaultOutputDevice: AudioObjectID(kAudioObjectSystemObject)
-        case .name(let id), .isAlive(let id), .volume(let id, _), .processorOverload(let id), .nominalSampleRate(let id): id
+        case .name(let id), .isAlive(let id), .volume(let id, _), .processorOverload(let id), .nominalSampleRate(let id), .mute(let id): id
         }
     }
 
@@ -27,6 +29,11 @@ enum HALProperty: Hashable, Sendable {
         case .isAlive: Self.global(kAudioDevicePropertyDeviceIsAlive)
         case .processorOverload: Self.global(kAudioDeviceProcessorOverload)
         case .nominalSampleRate: Self.global(kAudioDevicePropertyNominalSampleRate)
+        case .mute:
+            AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyMute,
+                mScope: kAudioObjectPropertyScopeOutput,
+                mElement: kAudioObjectPropertyElementMain)
         case .volume(_, let element):
             AudioObjectPropertyAddress(
                 mSelector: kAudioDevicePropertyVolumeScalar,

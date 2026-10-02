@@ -12,6 +12,7 @@ extension AppModel {
     var volumeKeyTapBlock: String? {
         if !store.volumeKeysEnabled { return "volume keys are off in Settings" }
         if !engine.state.isActive { return "routing is off" }
+        if virtualOutput != nil { return "the Domine virtual output handles the volume keys" }
         if !services.isAccessibilityTrusted() {
             return "Accessibility is not granted (AXIsProcessTrusted is false; a rebuilt app needs a fresh grant)"
         }
@@ -65,6 +66,7 @@ extension AppModel {
     func setMuted(_ muted: Bool) {
         if isMuted != muted { isMuted = muted }
         if engine.muted != muted { engine.muted = muted }
+        mirrorMuteToVirtualOutput()
     }
 
     func observeActivationForVolumeKeys() {
