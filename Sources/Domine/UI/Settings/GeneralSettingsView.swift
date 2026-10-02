@@ -6,7 +6,7 @@ struct GeneralSettingsView: View {
     var actions = GeneralSettingsActions()
     var setup = SetupState()
     var setupActions = SetupActions()
-    /// Sparkle's automatic check setting. Nil hides the checkbox.
+    /// Automatic update check setting. Nil hides the checkbox.
     var automaticUpdates: Binding<Bool>?
 
     var body: some View {

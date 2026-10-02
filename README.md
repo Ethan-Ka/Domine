@@ -14,7 +14,29 @@ A macOS app that plays the left channel of system audio on one Bluetooth speaker
 
 macOS can combine devices into a Multi-Output Device, but then every speaker plays both channels. Domine captures system audio with a Core Audio process tap, sends it to a private aggregate device, and writes left to one speaker and right to the other. The aggregate corrects clock drift between the two speakers, and a delay slider (1 ms steps) lines up their Bluetooth latency.
 
-Status: in development. Progress is tracked in [the milestones](docs/SPEC.md#10-milestones).
+## Status: v0.1.0
+
+Tested daily on a MacBook Pro with two JBL Grips.
+
+**Works**
+- Left to one speaker, right to the other, each speaker getting its side on both channels.
+- Starts on launch when both speakers are present and switches the Mac's output for you; turning off or quitting puts it back.
+- The "Domine" virtual output: volume keys and the macOS volume overlay control both speakers, kept at the same hardware volume.
+- Auto-calibrate: the built-in microphone hears both speakers and sets the delay between them. Manual delay and balance in Sync & Balance.
+- One speaker drops out: the other plays both sides until it returns. Sleep and wake are handled.
+- Sound sheet: presets, 5-band EQ, bass enhancer, compressor, per speaker or linked.
+- Quad mode for four speakers, with rear mirror or matrix and rear effects.
+- Menu bar panel, background playback with the window closed, app exclusions for calls.
+- Update check against GitHub Releases.
+
+**In progress**
+- Spatial upmix for quad, per-app volume, saved room setups.
+
+This build is signed for development, not notarized. Other Macs need right-click, Open the first time.
+
+## Install
+
+Download `Domine-0.1.0.pkg` from [Releases](https://github.com/Ethan-Ka/Domine/releases) and run it. It installs the app in Applications and the audio driver, then restarts macOS audio for a few seconds. To update, run the newer installer. To remove everything, run `scripts/uninstall.sh`.
 
 ## Requirements
 
@@ -43,7 +65,6 @@ Status: in development. Progress is tracked in [the milestones](docs/SPEC.md#10-
 | `./scripts/release.sh` | Archive, Developer ID sign the app and driver, notarize, and staple into `build/release/` (see [Releasing](#releasing)) |
 | `./scripts/package.sh` | Installer: build, sign, notarize, and staple `build/release/Domine-<version>.pkg` from the release output (needs `INSTALLER_IDENTITY`) |
 | `./scripts/uninstall.sh` | Installer: remove the app and driver, forget the pkg receipts, and restart coreaudiod (needs sudo) |
-| `./scripts/appcast.sh` | Build the Sparkle appcast and versioned update files into `build/release/appcast/` (see [Updates](#updates)) |
 
 A typical loop: edit, `./scripts/test.sh`, then `./scripts/run.sh --logs` to try it.
 
@@ -102,33 +123,7 @@ INSTALLER_IDENTITY="Developer ID Installer: Your Name (TEAMID)" DEVELOPMENT_TEAM
 `build/release/Domine-<version>.pkg` installs the app and the driver and restarts coreaudiod. End users remove everything with `./scripts/uninstall.sh`.
 ### Updates
 
-Domine checks for updates with [Sparkle](https://sparkle-project.org). The feed URL is `SPARKLE_FEED_URL` in `project.yml` (now `https://ethan-ka.github.io/Domine/appcast.xml`); change it there if the appcast moves. Until `SPARKLE_PUBLIC_ED_KEY` holds a real key, the updater stays off: "Check for Updates…" is disabled, Settings hides the checkbox, and nothing is checked.
-
-One-time setup:
-
-1. Build once so Xcode downloads the Sparkle package (`./scripts/build.sh`).
-2. Create the signing key. `generate_keys` stores the private key in the login keychain and prints the public key:
-
-   ```sh
-   build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys
-   ```
-
-   Back up the private key (`generate_keys -x private-key-file`) somewhere safe. Losing it means installed copies can no longer verify updates.
-3. Put the printed public key into `SPARKLE_PUBLIC_ED_KEY` in `project.yml` and commit it.
-4. Turn on GitHub Pages for the repo (Settings > Pages), serving either the `docs/` folder on `main` or a `gh-pages` branch. The appcast must end up at the feed URL.
-
-Each release, after `release.sh`:
-
-```sh
-./scripts/appcast.sh          # add --dry-run to print the commands
-```
-
-It starts from the published appcast (so older entries stay), copies the zip to `build/release/appcast/Domine-VERSION.zip`, and runs Sparkle's `generate_appcast`, which signs the update with the key in the keychain and writes `appcast.xml`. Then:
-
-1. Create a GitHub release tagged `vVERSION` and attach `Domine-VERSION.zip` (and the `.pkg`, if there is one). The appcast points at `https://github.com/Ethan-Ka/Domine/releases/download/vVERSION/`; set `DOWNLOAD_URL_PREFIX` to use another location.
-2. Copy `build/release/appcast/appcast.xml` to the Pages source (`docs/appcast.xml` on `main`, or `appcast.xml` on `gh-pages`) and push.
-
-Bump `CFBundleVersion` in `project.yml` for every release: Sparkle compares build numbers. A zip update replaces only the app. `generate_appcast` does not read `.pkg` files, so for a package that also installs the driver, the script prints a signed enclosure to put in the appcast by hand.
+Releases are published as a notarized `.pkg` on GitHub Releases, tagged `vVERSION`. Updating means downloading and running the installer, which replaces the app and the driver. Domine checks the latest release at launch (at most once a day) and from "Check for Updates…" in the app menu; when a newer version exists it offers to open the installer download. Settings > General has "Check for updates automatically". To publish: run `release.sh --pkg`, create the GitHub release with the tag, and attach the `.pkg`. Bump `CFBundleShortVersionString` in `project.yml` for every release.
 
 ## Using two JBL Grips
 

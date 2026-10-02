@@ -5,6 +5,7 @@ struct SoundSheet: View {
     var state: SoundState
     var actions: SoundActions = .none
     @State private var side: StereoSide = .left
+    @State private var rear = false
 
     static let width: CGFloat = 420
     private static let customTag = "Custom"
@@ -42,23 +43,57 @@ struct SoundSheet: View {
     }
 
     private var editedSide: StereoSide { state.effects.linkSpeakers ? .left : side }
-    private var current: PairSettings.SideEffects { state.side(editedSide) }
+    private var current: PairSettings.SideEffects { state.side(editedSide, rear: rear) }
 
     private var presetBinding: Binding<String> {
         Binding(
             get: { state.preset?.rawValue ?? Self.customTag },
             set: { name in
                 if let p = PairSettings.Preset(rawValue: name) {
+                    if var q = state.quad, !q.linkRears {
+                        q.rearLeft = p.settings.left
+                        q.rearRight = p.settings.left
+                        actions.setQuad(q)
+                    }
                     actions.setEffects(state.applying(preset: p))
                 }
             })
     }
 
     private func edit(_ change: (inout PairSettings.SideEffects) -> Void) {
-        actions.setEffects(state.applying(to: editedSide, change))
+        if state.editsRears(rear) {
+            actions.setQuad(state.applyingRear(to: editedSide, change))
+        } else {
+            actions.setEffects(state.applying(to: editedSide, change))
+        }
     }
 
     private var linkRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            speakerLinkRow
+            if let quad = state.quad {
+                HStack(spacing: 12) {
+                    Toggle("Rears follow fronts", isOn: Binding(
+                        get: { quad.linkRears },
+                        set: { v in var q = quad; q.linkRears = v; actions.setQuad(q) }))
+                        .toggleStyle(.checkbox)
+                        .fixedSize()
+                    if !quad.linkRears {
+                        Picker("Position", selection: $rear) {
+                            Text("Front").tag(false)
+                            Text("Rear").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .frame(width: 140)
+                    }
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    private var speakerLinkRow: some View {
         HStack(spacing: 12) {
             Toggle("Link speakers", isOn: Binding(
                 get: { state.effects.linkSpeakers },
