@@ -169,6 +169,49 @@ struct QuadKernelTests {
         #expect(out.channel(6) == Self.right)
     }
 
+    // At 1000 Hz the 50 ms fade is 50 samples.
+    @Test func muteFadesOutLinearlyOverFiftyMilliseconds() {
+        let q = domine_quad_create(1000, 256)!
+        defer { domine_quad_destroy(q) }
+        let ones = [Float](repeating: 1, count: 100)
+        domine_quad_set_muted(q, 1)
+        let out = Self.run(q, offsets: Self.full, left: ones, right: ones)
+        let expected: [Float] = (0..<100).map { $0 < 50 ? Float(49 - $0) / 50 : 0 }
+        for c in 0..<8 { #expect(out.channel(c) == expected) }
+    }
+
+    @Test func unmuteFadesBackIn() {
+        let q = domine_quad_create(1000, 256)!
+        defer { domine_quad_destroy(q) }
+        let ones = [Float](repeating: 1, count: 100)
+        domine_quad_set_muted(q, 1)
+        _ = Self.run(q, offsets: Self.full, left: ones, right: ones)
+        domine_quad_set_muted(q, 0)
+        let out = Self.run(q, offsets: Self.full, left: ones, right: ones)
+        let expected: [Float] = (0..<100).map { $0 < 50 ? Float($0 + 1) / 50 : 1 }
+        for c in 0..<8 { #expect(out.channel(c) == expected) }
+    }
+
+    @Test func startFadedOutFadesInFromSilence() {
+        let q = domine_quad_create(1000, 256)!
+        defer { domine_quad_destroy(q) }
+        let ones = [Float](repeating: 1, count: 100)
+        domine_quad_start_faded_out(q)
+        let out = Self.run(q, offsets: Self.full, left: ones, right: ones)
+        let expected: [Float] = (0..<100).map { $0 < 50 ? Float($0 + 1) / 50 : 1 }
+        for c in 0..<8 { #expect(out.channel(c) == expected) }
+    }
+
+    @Test func startFadedOutWhileMutedStaysSilent() {
+        let q = domine_quad_create(1000, 256)!
+        defer { domine_quad_destroy(q) }
+        let ones = [Float](repeating: 1, count: 60)
+        domine_quad_set_muted(q, 1)
+        domine_quad_start_faded_out(q)
+        let out = Self.run(q, offsets: Self.full, left: ones, right: ones)
+        for c in 0..<8 { #expect(out.channel(c) == [Float](repeating: 0, count: 60)) }
+    }
+
     @Test func peakPerPosition() {
         let q = domine_quad_create(48000, 256)!
         defer { domine_quad_destroy(q) }

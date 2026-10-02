@@ -770,10 +770,10 @@ final class Engine {
 
     /// Ramps the kernel to silence over its 50 ms fade and waits it out.
     private func fadeOut() async {
-        guard let kernel = resources.kernel else { return }
+        guard resources.kernel != nil || resources.quad != nil else { return }
         fadingOut = true
         defer { fadingOut = false }
-        domine_kernel_set_muted(kernel, 1)
+        if let quad = resources.quad { domine_quad_set_muted(quad, 1) } else if let kernel = resources.kernel { domine_kernel_set_muted(kernel, 1) }
         await fadeWait(Self.rebuildFadeWait)
     }
 
@@ -948,7 +948,7 @@ extension Engine {
             guard try await createTap(expectedRate: targetRate, generation: current) else { return nil }
             try createAggregate(present)
             guard let layout = try await readQuadLayout(devices, generation: current), current == generation else { return nil }
-            try startQuadIO(layout: layout)
+            try startQuadIO(layout: layout, fadeIn: fadeIn)
             self.layout = layout
             resources.quadIDs = ids
             let missing = (0..<4).filter { ids[$0] == nil }
@@ -988,7 +988,7 @@ extension Engine {
         }
     }
 
-    private func startQuadIO(layout: AggregateLayout) throws(EngineError) {
+    private func startQuadIO(layout: AggregateLayout, fadeIn: Bool) throws(EngineError) {
         guard let aggregate = resources.aggregate else { throw .kernelUnavailable }
         let rate = try EngineError.hal { () throws(HALError) in try hal.nominalSampleRate(of: aggregate) }
         guard rate.isFinite, rate > 0 else { throw .invalidSampleRate(rate) }
@@ -1000,6 +1000,7 @@ extension Engine {
         let format = tapStreamFormat(aggregate: aggregate, layout: layout)
         domine_quad_set_input_format(quad, format.channels, format.nonInterleaved ? 1 : 0)
         inputFormat = format
+        if fadeIn { domine_quad_start_faded_out(quad) }
         applyQuadControls(quad)
 
         let proc = try EngineError.hal { () throws(HALError) in
@@ -1022,6 +1023,7 @@ extension Engine {
         }
         domine_quad_set_rear_mode(quad, rearMode)
         domine_quad_set_rear_trim(quad, rearTrim)
+        domine_quad_set_muted(quad, muted || fadingOut ? 1 : 0)
     }
 
     private func watchQuadSpeakers(_ uids: [String]) {

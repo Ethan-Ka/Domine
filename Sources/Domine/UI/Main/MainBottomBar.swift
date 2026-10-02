@@ -6,6 +6,46 @@ struct MainBottomBar: View {
     var actions: MainWindowActions
 
     var body: some View {
+        VStack(spacing: 10) {
+            if state.mode == .quad { rearRow }
+            mainRow
+        }
+        .padding(.horizontal, 20)
+        .frame(height: state.mode == .quad ? 120 : 84)
+    }
+
+    private var rearRow: some View {
+        HStack(spacing: 16) {
+            Picker("Rear", selection: Binding(
+                get: { state.rearMode },
+                set: { actions.setRearMode($0) })) {
+                ForEach(RearMode.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 200)
+            .accessibilityLabel("Rear")
+
+            HStack(spacing: 8) {
+                Text("Rear level")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                Slider(value: Binding(
+                    get: { state.rearLevel },
+                    set: { actions.setRearLevel($0) }), in: 0...1)
+                    .labelsHidden()
+                    .accessibilityLabel("Rear level")
+                    .accessibilityValue("\(Int((state.rearLevel * 100).rounded())) percent")
+                Text("\(Int((state.rearLevel * 100).rounded()))%")
+                    .font(.callout)
+                    .monospacedDigit()
+                    .frame(width: 34, alignment: .trailing)
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+
+    private var mainRow: some View {
         HStack(spacing: 16) {
             HStack(spacing: 8) {
                 Image(systemName: state.isMuted ? "speaker.slash" : "speaker.wave.1")
@@ -37,8 +77,6 @@ struct MainBottomBar: View {
             Button("Sound…", action: actions.openSound)
             Button("Sync & Balance…", action: actions.openTuning)
         }
-        .padding(.horizontal, 20)
-        .frame(height: 84)
     }
 
     /// A plain button: each press plays one short tone. The side that is

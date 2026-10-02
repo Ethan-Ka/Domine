@@ -20,6 +20,7 @@ struct DomineQuad {
     _Atomic uint32_t delaySamples[NPOS];
     _Atomic uint32_t rearMode;
     _Atomic uint32_t rearTrimBits;
+    _Atomic int muted;
     _Atomic uint32_t peakBits[NPOS];
     // IOProc layout, set before the device starts.
     _Atomic uint32_t layoutFirst;
@@ -29,6 +30,8 @@ struct DomineQuad {
     uint32_t maxDelay;
 
     // Render thread state.
+    uint32_t fadeLength;   // samples in a full mute fade
+    uint32_t fadePosition; // 0 = silent, fadeLength = full gain
     GainState gain[NPOS];
     float *ring[NPOS];
     uint32_t ringMask;
@@ -75,6 +78,12 @@ DomineQuad *domine_quad_create(double sampleRate, uint32_t maxFrames) {
     atomic_init(&q->inputNonInterleaved, 0);
     for (int i = 0; i < NPOS; i++) atomic_init(&q->layoutOut[i], DOMINE_NO_DEVICE);
     atomic_init(&q->rearMode, DOMINE_REAR_MIRROR);
+    atomic_init(&q->muted, 0);
+    {
+        uint32_t fade = (uint32_t)lround(sampleRate * DOMINE_FADE_MS / 1000.0);
+        q->fadeLength = fade > 0 ? fade : 1;
+        q->fadePosition = q->fadeLength;
+    }
     atomic_init(&q->rearTrimBits, f2u(1.0f));
     for (int i = 0; i < NPOS; i++) {
         if (!q->ring[i] || !q->eq[i] || !q->bass[i] || !q->comp[i]) {
@@ -108,6 +117,16 @@ void domine_quad_set_delay_ms(DomineQuad *q, int pos, float ms) {
     uint32_t n = (uint32_t)llround((double)ms * q->sampleRate / 1000.0);
     if (n > q->maxDelay) n = q->maxDelay;
     atomic_store_explicit(&q->delaySamples[pos], n, memory_order_relaxed);
+}
+
+void domine_quad_set_muted(DomineQuad *q, int muted) {
+    if (q == NULL) return;
+    atomic_store_explicit(&q->muted, muted != 0, memory_order_relaxed);
+}
+
+void domine_quad_start_faded_out(DomineQuad *q) {
+    if (q == NULL) return;
+    q->fadePosition = 0;
 }
 
 void domine_quad_set_rear_mode(DomineQuad *q, int mode) {
@@ -203,8 +222,12 @@ static void quad_render(DomineQuad *q, InCh inL, InCh inR, AudioBufferList *out,
         delay[p] = atomic_load_explicit(&q->delaySamples[p], memory_order_relaxed);
     }
 
+    const uint32_t fadeTarget = atomic_load_explicit(&q->muted, memory_order_relaxed) ? 0 : q->fadeLength;
     float peak[NPOS] = { 0, 0, 0, 0 };
     for (uint32_t f = 0; f < frames; f++) {
+        if (q->fadePosition < fadeTarget) q->fadePosition++;
+        else if (q->fadePosition > fadeTarget) q->fadePosition--;
+        const float fade = q->fadePosition == q->fadeLength ? 1.0f : (float)q->fadePosition / (float)q->fadeLength;
         const float L = read_in(&inL, f), R = read_in(&inR, f);
         float rl = L, rr = R;
         if (mode == DOMINE_REAR_MATRIX) {
@@ -238,7 +261,8 @@ static void quad_render(DomineQuad *q, InCh inL, InCh inR, AudioBufferList *out,
             if (g->applied != 1.0f) s *= g->applied;
 
             q->ring[p][q->ringPos & q->ringMask] = s;
-            const float o = delay[p] > 0 ? q->ring[p][(q->ringPos - delay[p]) & q->ringMask] : s;
+            float o = delay[p] > 0 ? q->ring[p][(q->ringPos - delay[p]) & q->ringMask] : s;
+            if (fade != 1.0f) o *= fade;
             if (has[p]) {
                 const float a = fabsf(o);
                 if (a > peak[p]) peak[p] = a;

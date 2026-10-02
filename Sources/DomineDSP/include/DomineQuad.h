@@ -47,6 +47,13 @@ void domine_quad_set_delay_ms(DomineQuad *q, int pos, float ms);
 /// default 1) applied to RL and RR after derivation.
 void domine_quad_set_rear_mode(DomineQuad *q, int mode);
 void domine_quad_set_rear_trim(DomineQuad *q, float gain);
+/// Muted (nonzero) or unmuted (0). The output ramps linearly toward the target
+/// over the same 50 ms (DOMINE_FADE_MS) as the stereo kernel. Starts unmuted at
+/// full gain with no ramp.
+void domine_quad_set_muted(DomineQuad *q, int muted);
+/// Puts the output at 0 at once, as if a mute fade had just finished. Unless
+/// muted, the next process calls fade in over 50 ms. Call before the IOProc starts.
+void domine_quad_start_faded_out(DomineQuad *q);
 /// Effects per position, run in order EQ, bass, compressor, then gain, then delay.
 void domine_quad_set_eq(DomineQuad *q, int pos, const DomineEQParams *params);
 void domine_quad_set_bass(DomineQuad *q, int pos, const DomineBassParams *params);

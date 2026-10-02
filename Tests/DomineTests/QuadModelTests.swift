@@ -64,11 +64,14 @@ final class QuadModelTests {
         assignAll()
         model.setRoutingMode(.quad)
         model.setRearTrim(0.5)
+        model.setRearMode(.matrix)
         let again = AppModel(hal: FakeHAL(), defaults: defaults, services: FakeSystem().services)
         #expect(again.routingMode == .quad)
         #expect(again.rearLeftUID == "C")
         again.assign("A", to: .rearRight)
         #expect(again.quadSettings.rearTrim == 0.5)
+        #expect(again.quadSettings.rearMode == 1)
+        #expect(again.mainWindowState.rearMode == .matrix)
     }
 
     @Test func clearingAFourthSpeakerFallsBackToStereo() {

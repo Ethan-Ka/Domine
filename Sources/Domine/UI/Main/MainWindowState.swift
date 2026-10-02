@@ -18,6 +18,10 @@ struct MainWindowState: Equatable, Sendable {
     var testToneSide: StereoSide?
     /// Tones need the engine running; Test L and Test R are disabled otherwise.
     var canPlayTestTones: Bool
+    /// Rear pair controls, shown in Quad mode only.
+    var rearMode: RearMode
+    /// Rear level, 0...1.
+    var rearLevel: Double
     /// Shown at the bottom of the stage, e.g. while in mono fallback.
     var bannerMessage: String?
 
@@ -32,8 +36,12 @@ struct MainWindowState: Equatable, Sendable {
         isMuted: Bool = false,
         testToneSide: StereoSide? = nil,
         canPlayTestTones: Bool = true,
-        bannerMessage: String? = nil
+        bannerMessage: String? = nil,
+        rearMode: RearMode = .mirror,
+        rearLevel: Double = 1
     ) {
+        self.rearMode = rearMode
+        self.rearLevel = rearLevel
         self.statusLine = statusLine
         self.isOn = isOn
         self.mode = mode

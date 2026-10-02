@@ -4,6 +4,8 @@ struct MainWindowActions: Sendable {
     var setMode: @MainActor @Sendable (RoutingMode) -> Void = { _ in }
     var swap: @MainActor @Sendable () -> Void = {}
     var setMasterVolume: @MainActor @Sendable (Double) -> Void = { _ in }
+    var setRearMode: @MainActor @Sendable (RearMode) -> Void = { _ in }
+    var setRearLevel: @MainActor @Sendable (Double) -> Void = { _ in }
     /// Plays one short tone on that side.
     var playTestTone: @MainActor @Sendable (StereoSide) -> Void = { _ in }
     /// A card was clicked; the owner presents `AssignSheet`.

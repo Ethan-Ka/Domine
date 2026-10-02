@@ -22,7 +22,9 @@ extension AppModel {
             testToneSide: testToneSide,
             canPlayTestTones: engine.state.isRouting
                 || [leftUID, rightUID].contains { $0.flatMap(catalog.device(uid:)) != nil },
-            bannerMessage: monoFallbackBanner ?? (showsGripPairingHint ? Self.gripPairingHint : nil))
+            bannerMessage: monoFallbackBanner ?? (showsGripPairingHint ? Self.gripPairingHint : nil),
+            rearMode: RearMode(rawValue: quadSettings.rearMode) ?? .mirror,
+            rearLevel: Double(quadSettings.rearTrim))
     }
 
     var mainWindowActions: MainWindowActions {
@@ -35,6 +37,8 @@ extension AppModel {
                 self?.setMasterVolume(volume)
                 self?.setMuted(false)
             },
+            setRearMode: { [weak self] in self?.setRearMode($0) },
+            setRearLevel: { [weak self] in self?.setRearTrim(Float($0)) },
             playTestTone: { [weak self] in self?.playTestTone($0) },
             selectSpeaker: { [weak self] in self?.openAssign($0) },
             openTuning: { [weak self] in self?.openTuning() },

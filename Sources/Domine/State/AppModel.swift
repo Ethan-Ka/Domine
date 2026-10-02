@@ -281,6 +281,13 @@ final class AppModel {
         store.setQuadSettings(quadSettings, uids: [leftUID, rightUID, rearLeftUID, rearRightUID].compactMap { $0 })
     }
 
+    func setRearMode(_ mode: RearMode) {
+        quadSettings.rearMode = mode.rawValue
+        engine.rearMode = Int32(mode.rawValue)
+        guard isQuadAvailable else { return }
+        store.setQuadSettings(quadSettings, uids: [leftUID, rightUID, rearLeftUID, rearRightUID].compactMap { $0 })
+    }
+
     private func reloadQuadSettings() {
         quadSettings = isQuadAvailable
             ? store.quadSettings(uids: [leftUID, rightUID, rearLeftUID, rearRightUID].compactMap { $0 })
@@ -459,7 +466,7 @@ final class AppModel {
         ]
         let delay = pairSettings.delayMs
         engine.quadDelaysMs = [max(-delay, 0), max(delay, 0), 0, 0]
-        engine.rearMode = Int32(DOMINE_REAR_MIRROR)
+        engine.rearMode = Int32(quadSettings.rearMode)
         engine.rearTrim = quadSettings.rearTrim
     }
 
