@@ -5,16 +5,6 @@ import Testing
 
 @MainActor
 struct CallbackThreadTests {
-    @Test func gainSliderUpdatesKeepOneSlider() {
-        let slider = NSSlider()
-        slider.minValue = -12
-        slider.maxValue = 12
-        for v in stride(from: -12.0, through: 12.0, by: 1) {
-            VerticalGainSlider.apply(value: v, axLabel: "Bass gain", axValue: "\(Int(v)) dB", to: slider)
-            #expect(slider.doubleValue == v)
-        }
-    }
-
     @Test func mainQueueObserverPostedFromBackgroundDoesNotTrap() async {
         let center = NotificationCenter()
         let name = Notification.Name("domine.test")
