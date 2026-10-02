@@ -33,11 +33,10 @@ final class QuadModelTests {
         #expect(model.isQuadAvailable)
     }
 
-    @Test func choosingQuadKeepsStereoRoutingAndSaysNotReady() {
+    @Test func choosingQuadShowsFourCards() {
         assignAll()
         model.setRoutingMode(.quad)
         #expect(model.routingMode == .quad)
-        #expect(model.statusLine == "Quad playback is not ready yet")
         #expect(model.mainWindowState.speakers.count == 4)
         model.setRoutingMode(.stereo)
         #expect(model.mainWindowState.speakers.count == 2)

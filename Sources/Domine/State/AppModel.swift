@@ -1,5 +1,6 @@
 import AppKit
 import CoreAudio
+import DomineDSP
 import Observation
 import os
 
@@ -42,8 +43,8 @@ final class AppModel {
     private(set) var routingMode: RoutingMode = .stereo
     /// Tuning for the current set of four speakers.
     private(set) var quadSettings = QuadSettings()
-    /// Flips to true in phase 2, when the engine and kernel can play four speakers.
-    nonisolated static let engineSupportsQuad = false
+    /// The engine and kernel play four speakers (SPEC 11, phase 2).
+    nonisolated static let engineSupportsQuad = true
     /// Tuning for the selected pair, seen with `leftUID` as Front Left.
     private(set) var pairSettings = PairSettings()
 
@@ -238,10 +239,13 @@ final class AppModel {
         guard left != rearLeftUID || right != rearRightUID else { return }
         rearLeftUID = left
         rearRightUID = right
+        let wasQuadActive = routingMode == .quad && engine.state.isActive
+        if wasQuadActive { stopRouting() }
         store.lastRearLeftUID = left
         store.lastRearRightUID = right
         reloadQuadSettings()
         if routingMode == .quad, !isQuadAvailable { setRoutingMode(.stereo) }
+        if wasQuadActive { Task { await startRouting() } }
     }
 
     /// Four distinct outputs are assigned (the Quad segment's enable rule).
@@ -254,12 +258,25 @@ final class AppModel {
     /// mode is shown but routing stays stereo.
     func setRoutingMode(_ mode: RoutingMode) {
         guard mode == .stereo || isQuadAvailable else { return }
+        guard mode != routingMode else { return }
+        let wasActive = engine.state.isActive
+        if wasActive { stopRouting() }
         routingMode = mode
         store.routingMode = mode
+        if wasActive { Task { await startRouting() } }
+    }
+
+    /// The four UIDs in position order when Quad is chosen and all four
+    /// outputs are present; otherwise routing is stereo.
+    private var quadRouteUIDs: [String]? {
+        guard Self.engineSupportsQuad, routingMode == .quad, isQuadAvailable else { return nil }
+        let uids = [leftUID, rightUID, rearLeftUID, rearRightUID].compactMap { $0 }
+        return uids.allSatisfy({ catalog.device(uid: $0) != nil }) ? uids : nil
     }
 
     func setRearTrim(_ trim: Float) {
         quadSettings.rearTrim = min(max(trim.isFinite ? trim : 1, 0), 1)
+        engine.rearTrim = quadSettings.rearTrim
         guard isQuadAvailable else { return }
         store.setQuadSettings(quadSettings, uids: [leftUID, rightUID, rearLeftUID, rearRightUID].compactMap { $0 })
     }
@@ -296,6 +313,7 @@ final class AppModel {
     /// previous output back.
     func startRouting() async {
         guard !engine.state.isActive else { return }
+        let quad = quadRouteUIDs
         tones.stop()
         routingRefusal = nil
         applyInitialDelayIfUnset()
@@ -303,7 +321,7 @@ final class AppModel {
            catalog.device(uid: left) != nil, catalog.device(uid: right) != nil {
             do throws(OutputRestorer.Failure) {
                 try outputRestorer.prepareForRouting(
-                    pair: [left, right], playThroughUID: store.excludedAppsPlayThroughUID,
+                    pair: Set(quad ?? [left, right]), playThroughUID: store.excludedAppsPlayThroughUID,
                     exclusionsActive: !engine.excludedProcesses.isEmpty)
             } catch .noOtherOutput {
                 routingRefusal = Self.noOtherOutputMessage
@@ -317,7 +335,11 @@ final class AppModel {
             if let volume = volumeLink.relink() { adoptHardwareVolume(volume) }
         }
         applyPairSettingsToEngine()
-        await engine.start(left: leftUID, right: rightUID)
+        if let quad {
+            await engine.start(quad: quad)
+        } else {
+            await engine.start(left: leftUID, right: rightUID)
+        }
         if !engine.state.isActive {
             outputRestorer.restore(enabled: store.restorePreviousOutput)
         }
@@ -422,7 +444,23 @@ final class AppModel {
         engine.leftGain = pairSettings.leftGain * kernelVolume(for: leftUID)
         engine.rightGain = pairSettings.rightGain * kernelVolume(for: rightUID)
         engine.delayMs = pairSettings.delayMs
+        applyQuadSettingsToEngine()
         engine.setEffects(left: pairSettings.effects.left, right: pairSettings.effects.effectiveRight)
+    }
+
+    /// Quad kernel controls: per-position gain and delay (the signed pair
+    /// delay becomes two non-negative ones on the fronts), rear mode and trim.
+    private func applyQuadSettingsToEngine() {
+        let master = pairSettings.masterVolume
+        engine.quadGains = [
+            pairSettings.leftGain * kernelVolume(for: leftUID),
+            pairSettings.rightGain * kernelVolume(for: rightUID),
+            master, master,
+        ]
+        let delay = pairSettings.delayMs
+        engine.quadDelaysMs = [max(-delay, 0), max(delay, 0), 0, 0]
+        engine.rearMode = Int32(DOMINE_REAR_MIRROR)
+        engine.rearTrim = quadSettings.rearTrim
     }
 
     func setEffects(_ effects: PairSettings.EffectsSettings) {

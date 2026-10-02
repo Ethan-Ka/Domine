@@ -1,6 +1,5 @@
 /// Main window state and actions (docs/mockups/Main.dc.html).
 extension AppModel {
-    static let quadNotReadyMessage = "Quad playback is not ready yet"
     static let routingErrorMessage = "Could not start routing"
     nonisolated static let gripPairingHint = "Only one JBL Grip found. Turn off stereo pairing in the JBL Portable app."
 
@@ -56,7 +55,6 @@ extension AppModel {
 
     /// One short phrase for the window subtitle.
     var statusLine: String {
-        if routingMode == .quad, !Self.engineSupportsQuad { return Self.quadNotReadyMessage }
         switch engine.state {
         case .idle:
             if leftUID == nil || rightUID == nil { return "Choose two speakers" }
@@ -67,6 +65,7 @@ extension AppModel {
             if routingMode == .quad { return "Quad" }
             return engine.swapSides ? "Playing, sides swapped" : "Playing"
         case .degraded(.monoFallback): return "Mono fallback"
+        case .degraded(.quadFallback): return "Quad, some speakers missing"
         case .stopping: return "Stopping"
         case .error: return Self.routingErrorMessage
         }
