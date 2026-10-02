@@ -55,6 +55,17 @@ struct UIRenderTests {
         try renderView(TuningSheet(state: state), name: "tuning-click")
     }
 
+    @Test func soundSheet() throws {
+        try renderView(SoundSheet(state: SoundState(effects: PairSettings.Preset.night.settings)), name: "sound")
+    }
+
+    @Test func soundSheetUnlinked() throws {
+        var fx = PairSettings.Preset.bassBoost.settings
+        fx.linkSpeakers = false
+        fx.right.eqBands[2].gainDb = 4
+        try renderView(SoundSheet(state: SoundState(effects: fx)), name: "sound-unlinked")
+    }
+
     @Test func volumeHUD() throws {
         try renderView(VolumeHUD(volume: 0.62).padding(20), name: "volume-hud")
     }

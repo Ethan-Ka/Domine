@@ -38,7 +38,8 @@ extension AppModel {
             },
             playTestTone: { [weak self] in self?.playTestTone($0) },
             selectSpeaker: { [weak self] in self?.openAssign($0) },
-            openTuning: { [weak self] in self?.openTuning() })
+            openTuning: { [weak self] in self?.openTuning() },
+            openSound: { [weak self] in self?.openSound() })
     }
 
     /// The missing speaker's position while the engine is in mono fallback.

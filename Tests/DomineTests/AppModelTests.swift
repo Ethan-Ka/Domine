@@ -339,6 +339,27 @@ final class AppModelTests {
         #expect(!model.tuningState.isClickTestPlaying)
     }
 
+    @Test func soundSheetActionsUpdateEffects() {
+        model.start()
+        model.openSound()
+        #expect(model.showsSound)
+        let actions = model.soundActions
+        actions.setEffects(model.soundState.applying(preset: .bassBoost))
+        #expect(model.pairSettings.effects.left.bassEnabled)
+        #expect(model.soundState.preset == .bassBoost)
+        actions.setEffects(model.soundState.applying(to: .left) { $0.eqBands[2].gainDb = 3 })
+        #expect(model.pairSettings.effects.right.eqBands[2].gainDb == 3)
+        #expect(model.soundState.preset == nil)
+        actions.setEffects(model.soundState.setting(link: false))
+        actions.setEffects(model.soundState.applying(to: .right) { $0.compressorEnabled = true })
+        #expect(model.pairSettings.effects.right.compressorEnabled)
+        #expect(!model.pairSettings.effects.left.compressorEnabled)
+        actions.reset()
+        #expect(model.pairSettings.effects == PairSettings.EffectsSettings())
+        actions.done()
+        #expect(!model.showsSound)
+    }
+
     private func addGrips(leftFrames: UInt32, rightFrames: UInt32) {
         var a = FakeHAL.Device(uid: Self.gripA.uid, name: "JBL Grip")
         a.latency = DeviceLatency(deviceFrames: leftFrames, safetyOffsetFrames: 0, streamFrames: 0)

@@ -11,5 +11,8 @@ struct MainWindowActions: Sendable {
     /// "Sync & Balance…" was clicked; the owner presents `TuningSheet`.
     var openTuning: @MainActor @Sendable () -> Void = {}
 
+    /// "Sound…" was clicked; the owner presents `SoundSheet`.
+    var openSound: @MainActor @Sendable () -> Void = {}
+
     static let none = MainWindowActions()
 }

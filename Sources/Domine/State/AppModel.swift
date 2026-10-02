@@ -52,6 +52,7 @@ final class AppModel {
     /// The radio selection in that sheet.
     var assignSelection: String?
     /// Closing the tuning sheet stops the click test.
+    var showsSound = false
     var showsTuning = false {
         didSet { if !showsTuning { stopClickTest(); cancelCalibration() } }
     }

@@ -34,6 +34,7 @@ struct MainBottomBar: View {
                 testButton("Test R", side: .right)
             }
 
+            Button("Sound…", action: actions.openSound)
             Button("Sync & Balance…", action: actions.openTuning)
         }
         .padding(.horizontal, 20)

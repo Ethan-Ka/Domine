@@ -16,6 +16,9 @@ struct MainView: View {
             .sheet(isPresented: $model.showsTuning) {
                 TuningSheet(state: model.tuningState, actions: model.tuningActions)
             }
+            .sheet(isPresented: $model.showsSound) {
+                SoundSheet(state: model.soundState, actions: model.soundActions)
+            }
             .sheet(isPresented: $model.showsWelcome) {
                 WelcomeView(state: model.welcomeState, actions: model.welcomeActions)
                     .interactiveDismissDisabled()
