@@ -10,6 +10,9 @@ struct SecondaryUIRenderTests {
     @Test func rendersGeneralSettings() throws {
         try render(GeneralSettingsView(state: .constant(.sample)), named: "general")
         try render(GeneralSettingsView(state: .constant(.sampleGranted)), named: "general-granted")
+        try render(
+            GeneralSettingsView(state: .constant(.sampleGranted), automaticUpdates: .constant(true)),
+            named: "general-updates")
     }
 
     @Test func rendersGeneralSetupSection() throws {

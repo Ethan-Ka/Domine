@@ -304,6 +304,12 @@ States: `idle`, `starting`, `running`, `degraded(reason)`, `stopping`, `error(me
 - The driver package runs `Installer/scripts/postinstall`, which restarts coreaudiod (`launchctl kickstart -k`, with `killall coreaudiod` as fallback) so the device appears without a reboot. Audio stops for a few seconds.
 - The pkg is signed with `productsign` using the Developer ID Installer certificate named in `INSTALLER_IDENTITY`, notarized with the same status check as `release.sh`, stapled, and checked with `pkgutil --check-signature` and `spctl -a -t install`. `release.sh --pkg` runs it as a final step.
 - `scripts/uninstall.sh` removes the app and the driver, forgets the `com.ethankawley.Domine.*` receipts, and restarts coreaudiod. It needs sudo and takes `--dry-run`.
+### 8c. Updates
+
+- Sparkle 2 (Swift package) with its standard update UI. `Updater` wraps `SPUStandardUpdaterController`; the app menu has "Check for Updates…" after About, and Settings > General has "Check for updates automatically".
+- Info.plist: `SUFeedURL` from the `SPARKLE_FEED_URL` build setting (`https://ethan-ka.github.io/Domine/appcast.xml`), `SUPublicEDKey` from `SPARKLE_PUBLIC_ED_KEY`, and `SUEnableInstallerLauncherService` so an update can be a .pkg that also installs the driver.
+- The updater never starts in the unit test host or while the public key is the placeholder. Then the menu item is disabled and the checkbox hidden, so dev builds never prompt.
+- Updates are EdDSA signed with a private key kept in the release machine's login keychain. `scripts/appcast.sh` builds the appcast from the notarized release output; the appcast is served from GitHub Pages and the files from GitHub Releases.
 
 ## 9. Known risks
 

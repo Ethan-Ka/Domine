@@ -7,11 +7,14 @@ struct SettingsView: View {
     var generalActions = GeneralSettingsActions()
     var setup = SetupState()
     var setupActions = SetupActions()
+    /// Nil hides the update checkbox (updates are off for this build).
+    var automaticUpdates: Binding<Bool>?
     var exclusionsActions = ExclusionsActions()
 
     var body: some View {
         TabView {
-            GeneralSettingsView(state: $general, actions: generalActions, setup: setup, setupActions: setupActions)
+            GeneralSettingsView(state: $general, actions: generalActions, setup: setup, setupActions: setupActions,
+                automaticUpdates: automaticUpdates)
                 .tabItem { Label("General", systemImage: "gearshape") }
             ExclusionsView(state: $exclusions, actions: exclusionsActions)
                 .tabItem { Label("Exclusions", systemImage: "nosign") }
