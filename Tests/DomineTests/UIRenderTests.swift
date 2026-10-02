@@ -19,6 +19,10 @@ struct UIRenderTests {
         try renderWindow(MainContentView(state: SampleStates.playing), name: "main-playing")
     }
 
+    @Test func mainWindowQuad() throws {
+        try renderWindow(MainContentView(state: SampleStates.quad), name: "main-quad")
+    }
+
     @Test func mainWindowMonoFallback() throws {
         try renderWindow(MainContentView(state: SampleStates.monoFallback), name: "main-mono-fallback")
     }

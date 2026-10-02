@@ -8,28 +8,30 @@ struct StageView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let layout = StageLayout(size: proxy.size)
+            let layout = StageLayout(size: proxy.size, mode: state.mode)
             ZStack(alignment: .topLeading) {
                 Circle()
                     .stroke(.quaternary, lineWidth: 1)
                     .frame(width: layout.guideRadius * 2, height: layout.guideRadius * 2)
                     .position(layout.macCenter)
 
-                ForEach(SpeakerPosition.allCases) { position in
+                ForEach(SpeakerPosition.positions(in: state.mode)) { position in
                     connector(for: state.speaker(at: position), layout: layout)
                 }
 
-                Text("FRONT")
-                    .font(.caption.weight(.semibold))
-                    .tracking(1.2)
-                    .foregroundStyle(.tertiary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 10)
+                if state.mode == .quad {
+                    Text("FRONT")
+                        .font(.caption.weight(.semibold))
+                        .tracking(1.2)
+                        .foregroundStyle(.tertiary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 10)
+                }
 
                 thisMac
                     .position(x: layout.macCenter.x, y: layout.macCenter.y + 8)
 
-                ForEach(SpeakerPosition.allCases) { position in
+                ForEach(SpeakerPosition.positions(in: state.mode)) { position in
                     SpeakerCard(state: state.speaker(at: position)) { onSelect(position) }
                         .position(layout.cardCenter(position))
                 }
@@ -84,6 +86,12 @@ struct StageView: View {
 
 #Preview("Playing") {
     StageView(state: SampleStates.playing)
+        .frame(width: 616, height: 320)
+        .padding()
+}
+
+#Preview("Quad") {
+    StageView(state: SampleStates.quad)
         .frame(width: 616, height: 320)
         .padding()
 }

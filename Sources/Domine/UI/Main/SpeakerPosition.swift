@@ -1,5 +1,5 @@
-/// A place on the stage. v1 routes to the front pair only; the rear pair is
-/// shown as placeholders until quad mode (SPEC section 11).
+/// A place on the stage. Stereo shows the front pair; quad adds the rear
+/// pair (SPEC section 11).
 enum SpeakerPosition: String, CaseIterable, Identifiable, Sendable {
     case frontLeft
     case frontRight
@@ -15,6 +15,11 @@ enum SpeakerPosition: String, CaseIterable, Identifiable, Sendable {
         case .rearLeft: "Rear Left"
         case .rearRight: "Rear Right"
         }
+    }
+
+    /// The positions drawn in `mode`.
+    static func positions(in mode: RoutingMode) -> [SpeakerPosition] {
+        mode == .quad ? allCases : [.frontLeft, .frontRight]
     }
 
     var isFront: Bool { self == .frontLeft || self == .frontRight }
