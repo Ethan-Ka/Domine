@@ -42,7 +42,7 @@ struct DomineApp: App {
         }
 
         // Only in background mode, and never in the test host (SPEC 6a).
-        MenuBarExtra("Domine", systemImage: "hifispeaker.2.fill", isInserted: menuBarItemInserted) {
+        MenuBarExtra("Domine", image: "MenuBarIcon", isInserted: menuBarItemInserted) {
             BackgroundMenu()
                 .environment(model)
         }
