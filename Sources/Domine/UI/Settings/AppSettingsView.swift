@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 /// The `Settings` scene content, bound to `AppModel`.
 struct AppSettingsView: View {
     @Environment(AppModel.self) private var model
-    @Environment(Updater.self) private var updater
+    @Environment(UpdateChecker.self) private var updater
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -17,7 +17,7 @@ struct AppSettingsView: View {
             generalActions: model.generalSettingsActions,
             setup: model.setupState,
             setupActions: model.setupActions(showMainWindow: showMainWindow),
-            automaticUpdates: updater.isEnabled ? $updater.automaticallyChecksForUpdates : nil,
+            automaticUpdates: $updater.automaticallyChecks,
             exclusionsActions: ExclusionsActions(chooseApp: chooseApp))
             .onAppear { model.settingsDidAppear() }
             .onDisappear { model.settingsDidDisappear() }

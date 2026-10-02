@@ -267,7 +267,7 @@ final class AppModel {
 
     /// The four UIDs in position order when Quad is chosen and all four
     /// outputs are present; otherwise routing is stereo.
-    private var quadRouteUIDs: [String]? {
+    var quadRouteUIDs: [String]? {
         guard Self.engineSupportsQuad, routingMode == .quad, isQuadAvailable else { return nil }
         let uids = [leftUID, rightUID, rearLeftUID, rearRightUID].compactMap { $0 }
         return uids.allSatisfy({ catalog.device(uid: $0) != nil }) ? uids : nil
@@ -278,6 +278,13 @@ final class AppModel {
         engine.rearTrim = quadSettings.rearTrim
         guard isQuadAvailable else { return }
         store.setQuadSettings(quadSettings, uids: [leftUID, rightUID, rearLeftUID, rearRightUID].compactMap { $0 })
+    }
+
+    func setQuadRearEffects(_ change: (inout QuadSettings) -> Void) {
+        change(&quadSettings)
+        guard isQuadAvailable else { return }
+        store.setQuadSettings(quadSettings, uids: [leftUID, rightUID, rearLeftUID, rearRightUID].compactMap { $0 })
+        applyPairSettingsToEngine()
     }
 
     func setRearMode(_ mode: RearMode) {
@@ -453,7 +460,11 @@ final class AppModel {
         engine.rightGain = pairSettings.rightGain * kernelVolume(for: rightUID)
         engine.delayMs = pairSettings.delayMs
         applyQuadSettingsToEngine()
-        engine.setEffects(left: pairSettings.effects.left, right: pairSettings.effects.effectiveRight)
+        let fronts = (pairSettings.effects.left, pairSettings.effects.effectiveRight)
+        engine.setEffects(left: fronts.0, right: fronts.1)
+        let rears = quadSettings.rearEffects(frontLeft: fronts.0, frontRight: fronts.1,
+                                             linkSpeakers: pairSettings.effects.linkSpeakers)
+        engine.setRearEffects(left: rears.left, right: rears.right)
     }
 
     /// Quad kernel controls: per-position gain and delay (the signed pair

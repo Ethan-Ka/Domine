@@ -58,6 +58,17 @@ final class Engine {
     private(set) var effectsB = PairSettings.SideEffects()
     /// Test hook: the last EQ parameters pushed to the kernel for position A and B.
     private(set) var pushedEQ: [DomineEQParams] = []
+    /// Quad rears: effects for positions RL and RR (already resolved by the caller).
+    private(set) var effectsRL = PairSettings.SideEffects()
+    private(set) var effectsRR = PairSettings.SideEffects()
+    /// Test hook: the last EQ parameters pushed per quad position (FL, FR, RL, RR).
+    private(set) var pushedQuadEQ: [DomineEQParams] = []
+    func setRearEffects(left: PairSettings.SideEffects, right: PairSettings.SideEffects) {
+        guard left != effectsRL || right != effectsRR else { return }
+        effectsRL = left
+        effectsRR = right
+        applyControls()
+    }
     func setEffects(left: PairSettings.SideEffects, right: PairSettings.SideEffects) {
         guard left != effectsA || right != effectsB else { return }
         effectsA = left
@@ -1020,6 +1031,16 @@ extension Engine {
         for position in 0..<4 {
             domine_quad_set_gain(quad, Int32(position), quadGains[position])
             domine_quad_set_delay_ms(quad, Int32(position), quadDelaysMs[position])
+        }
+        pushedQuadEQ = []
+        for (position, fx) in [effectsA, effectsB, effectsRL, effectsRR].enumerated() {
+            var eq = fx.eqParams
+            var bass = fx.bassParams
+            var comp = fx.compressorParams
+            domine_quad_set_eq(quad, Int32(position), &eq)
+            domine_quad_set_bass(quad, Int32(position), &bass)
+            domine_quad_set_compressor(quad, Int32(position), &comp)
+            pushedQuadEQ.append(eq)
         }
         domine_quad_set_rear_mode(quad, rearMode)
         domine_quad_set_rear_trim(quad, rearTrim)
