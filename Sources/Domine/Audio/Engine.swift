@@ -52,6 +52,18 @@ final class Engine {
     var rightGain: Float = 1 { didSet { applyControls() } }
     /// Positive delays the right speaker, negative the left (SPEC section 4).
     var delayMs: Float = 0 { didSet { applyControls() } }
+    /// Effects per physical speaker: position A (Front Left device) and B.
+    /// Positions never swap, so Swap Sides does not move them.
+    private(set) var effectsA = PairSettings.SideEffects()
+    private(set) var effectsB = PairSettings.SideEffects()
+    /// Test hook: the last EQ parameters pushed to the kernel for position A and B.
+    private(set) var pushedEQ: [DomineEQParams] = []
+    func setEffects(left: PairSettings.SideEffects, right: PairSettings.SideEffects) {
+        guard left != effectsA || right != effectsB else { return }
+        effectsA = left
+        effectsB = right
+        applyControls()
+    }
     /// Fades the output out (or back in) over 50 ms in the kernel.
     var muted = false { didSet { applyControls() } }
     /// Called when the engine stops routing on its own: both speakers
@@ -824,5 +836,15 @@ final class Engine {
         domine_kernel_set_gains(kernel, leftGain, rightGain)
         domine_kernel_set_delay_ms(kernel, delayMs)
         domine_kernel_set_muted(kernel, muted || fadingOut ? 1 : 0)
+        pushedEQ = []
+        for (position, fx) in [(Int32(0), effectsA), (Int32(1), effectsB)] {
+            var eq = fx.eqParams
+            var bass = fx.bassParams
+            var comp = fx.compressorParams
+            domine_kernel_set_eq(kernel, position, &eq)
+            domine_kernel_set_bass(kernel, position, &bass)
+            domine_kernel_set_compressor(kernel, position, &comp)
+            pushedEQ.append(eq)
+        }
     }
 }
