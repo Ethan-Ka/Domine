@@ -3,15 +3,23 @@
 #include <math.h>
 #include <stdatomic.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define KNEE_DB 6.0
 #define LIMITER_RELEASE_S 0.05
 #define FADE_S 0.01
+#define PARAM_WORDS ((sizeof(DomineCompressorParams) + 3) / 4)
+#define MAX_READ_TRIES 4
+
+_Static_assert(sizeof(DomineCompressorParams) % 4 == 0, "params must pack into whole words");
 
 struct DomineCompressor {
     double sampleRate;
-    DomineCompressorParams params[2];
-    _Atomic int active; // index of the params copy the audio thread reads
+    // Parameters cross threads through a seqlock over atomic words (odd seq =
+    // writer mid-store), so the audio thread never reads a half-written set.
+    _Atomic uint32_t seq;
+    _Atomic uint32_t words[PARAM_WORDS];
+    DomineCompressorParams cur; // last consistent set (audio thread only)
     double gainDb;      // smoothed compressor gain (audio thread only)
     double limGain;     // linear limiter gain, <= 1 (audio thread only)
     double mix;         // 0 = dry, 1 = processed; ramps over FADE_S (audio thread only)
@@ -27,8 +35,11 @@ DomineCompressor *domine_compressor_create(double sampleRate) {
     DomineCompressor *c = calloc(1, sizeof(DomineCompressor));
     if (!c) return NULL;
     c->sampleRate = sampleRate > 0 ? sampleRate : 48000.0;
-    c->params[0] = c->params[1] = default_params();
-    atomic_init(&c->active, 0);
+    c->cur = default_params();
+    uint32_t w[PARAM_WORDS];
+    memcpy(w, &c->cur, sizeof c->cur);
+    atomic_init(&c->seq, 0);
+    for (size_t i = 0; i < PARAM_WORDS; i++) atomic_init(&c->words[i], w[i]);
     c->limGain = 1.0;
     return c;
 }
@@ -37,10 +48,30 @@ void domine_compressor_destroy(DomineCompressor *c) { free(c); }
 
 void domine_compressor_set_params(DomineCompressor *c, const DomineCompressorParams *p) {
     if (!c || !p) return;
-    int cur = atomic_load_explicit(&c->active, memory_order_relaxed);
-    int next = 1 - cur;
-    c->params[next] = *p;
-    atomic_store_explicit(&c->active, next, memory_order_release);
+    uint32_t w[PARAM_WORDS];
+    memcpy(w, p, sizeof *p);
+    const uint32_t s = atomic_load_explicit(&c->seq, memory_order_relaxed);
+    atomic_store_explicit(&c->seq, s + 1, memory_order_relaxed);
+    atomic_thread_fence(memory_order_release);
+    for (size_t i = 0; i < PARAM_WORDS; i++) atomic_store_explicit(&c->words[i], w[i], memory_order_relaxed);
+    atomic_store_explicit(&c->seq, s + 2, memory_order_release);
+}
+
+// Latest consistent parameters, or the last ones read if the writer is busy.
+static DomineCompressorParams read_params(const DomineCompressor *c) {
+    DomineCompressor *m = (DomineCompressor *)c;
+    for (int tries = 0; tries < MAX_READ_TRIES; tries++) {
+        const uint32_t s1 = atomic_load_explicit(&m->seq, memory_order_acquire);
+        if (s1 & 1u) continue;
+        uint32_t w[PARAM_WORDS];
+        for (size_t i = 0; i < PARAM_WORDS; i++) w[i] = atomic_load_explicit(&m->words[i], memory_order_relaxed);
+        atomic_thread_fence(memory_order_acquire);
+        if (atomic_load_explicit(&m->seq, memory_order_relaxed) != s1) continue;
+        DomineCompressorParams p;
+        memcpy(&p, w, sizeof p);
+        return p;
+    }
+    return c->cur;
 }
 
 static double coeff(double ms, double sr) {
@@ -62,8 +93,8 @@ static double static_gain_db(double level, double thr, double ratio) {
 
 void domine_compressor_process(DomineCompressor *c, float *samples, uint32_t frames) {
     if (!c || !samples) return;
-    int idx = atomic_load_explicit(&c->active, memory_order_acquire);
-    const DomineCompressorParams *p = &c->params[idx];
+    c->cur = read_params(c);
+    const DomineCompressorParams *p = &c->cur;
     if (!c->primed) {
         c->primed = 1;
         c->mix = p->enabled ? 1.0 : 0.0;
@@ -119,6 +150,5 @@ void domine_compressor_process(DomineCompressor *c, float *samples, uint32_t fra
 
 int domine_compressor_is_idle(const DomineCompressor *c) {
     if (!c) return 1;
-    int idx = atomic_load_explicit(&((DomineCompressor *)c)->active, memory_order_acquire);
-    return !c->params[idx].enabled && c->mix <= 0.0;
+    return !read_params(c).enabled && c->mix <= 0.0;
 }

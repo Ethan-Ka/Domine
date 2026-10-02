@@ -7,13 +7,21 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define PARAM_WORDS ((sizeof(DomineBassParams) + 3) / 4)
+#define MAX_READ_TRIES 4
+
+_Static_assert(sizeof(DomineBassParams) % 4 == 0, "params must pack into whole words");
+
 typedef struct { float b0, b1, b2, a1, a2; } Coef;
 typedef struct { float z1, z2; } State;
 
 struct DomineBass {
     double sampleRate;
-    DomineBassParams slots[2];
-    atomic_int active;      // index of the slot the audio thread reads
+    // Parameters cross threads through a seqlock over atomic words (odd seq =
+    // writer mid-store), so the audio thread never reads a half-written set.
+    _Atomic uint32_t seq;
+    _Atomic uint32_t words[PARAM_WORDS];
+    DomineBassParams cur;   // last consistent set (audio thread only)
     float cutoff;           // cutoff the coefficients were built for
     float wet;              // smoothed amount (0 when disabled)
     float smoothA;
@@ -23,7 +31,8 @@ struct DomineBass {
     State sLp, sHp, sBpLp, sHp60, sHp60b;
 };
 
-static float clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
+// NaN clamps to lo, so a bad parameter can never poison the filter state.
+static float clampf(float v, float lo, float hi) { return !(v >= lo) ? lo : (v > hi ? hi : v); }
 
 static Coef biquad(double sr, double fc, int highpass) {
     const double w = 2.0 * M_PI * fc / sr;
@@ -60,12 +69,13 @@ DomineBass *domine_bass_create(double sampleRate) {
     DomineBass *b = calloc(1, sizeof(DomineBass));
     if (!b) return NULL;
     b->sampleRate = sampleRate;
-    for (int i = 0; i < 2; i++) {
-        b->slots[i].enabled = 0;
-        b->slots[i].amount = 0;
-        b->slots[i].cutoffHz = 120;
-    }
-    atomic_init(&b->active, 0);
+    b->cur.enabled = 0;
+    b->cur.amount = 0;
+    b->cur.cutoffHz = 120;
+    uint32_t w[PARAM_WORDS];
+    memcpy(w, &b->cur, sizeof b->cur);
+    atomic_init(&b->seq, 0);
+    for (size_t i = 0; i < PARAM_WORDS; i++) atomic_init(&b->words[i], w[i]);
     b->smoothA = (float)(1.0 - exp(-1.0 / (0.0033 * sampleRate)));
     b->envRelease = (float)exp(-1.0 / (0.05 * sampleRate));
     b->hp60 = biquad(sampleRate, 60.0, 1);
@@ -76,13 +86,35 @@ DomineBass *domine_bass_create(double sampleRate) {
 void domine_bass_destroy(DomineBass *b) { free(b); }
 
 void domine_bass_set_params(DomineBass *b, const DomineBassParams *p) {
-    const int next = 1 - atomic_load_explicit(&b->active, memory_order_relaxed);
-    b->slots[next] = *p;
-    atomic_store_explicit(&b->active, next, memory_order_release);
+    uint32_t w[PARAM_WORDS];
+    memcpy(w, p, sizeof *p);
+    const uint32_t s = atomic_load_explicit(&b->seq, memory_order_relaxed);
+    atomic_store_explicit(&b->seq, s + 1, memory_order_relaxed);
+    atomic_thread_fence(memory_order_release);
+    for (size_t i = 0; i < PARAM_WORDS; i++) atomic_store_explicit(&b->words[i], w[i], memory_order_relaxed);
+    atomic_store_explicit(&b->seq, s + 2, memory_order_release);
+}
+
+// Latest consistent parameters, or the last ones read if the writer is busy.
+static DomineBassParams read_params(const DomineBass *b) {
+    DomineBass *m = (DomineBass *)b;
+    for (int tries = 0; tries < MAX_READ_TRIES; tries++) {
+        const uint32_t s1 = atomic_load_explicit(&m->seq, memory_order_acquire);
+        if (s1 & 1u) continue;
+        uint32_t w[PARAM_WORDS];
+        for (size_t i = 0; i < PARAM_WORDS; i++) w[i] = atomic_load_explicit(&m->words[i], memory_order_relaxed);
+        atomic_thread_fence(memory_order_acquire);
+        if (atomic_load_explicit(&m->seq, memory_order_relaxed) != s1) continue;
+        DomineBassParams p;
+        memcpy(&p, w, sizeof p);
+        return p;
+    }
+    return b->cur;
 }
 
 void domine_bass_process(DomineBass *b, float *x, uint32_t frames) {
-    const DomineBassParams p = b->slots[atomic_load_explicit(&b->active, memory_order_acquire)];
+    b->cur = read_params(b);
+    const DomineBassParams p = b->cur;
     const float target = p.enabled ? clampf(p.amount, 0.0f, 1.0f) : 0.0f;
     if (target == 0.0f && b->wet == 0.0f) { reset(b); return; }
     const float cutoff = clampf(p.cutoffHz, 80.0f, (float)(0.1 * b->sampleRate));
@@ -109,7 +141,7 @@ void domine_bass_process(DomineBass *b, float *x, uint32_t frames) {
 }
 
 int domine_bass_is_idle(const DomineBass *b) {
-    const DomineBassParams *p = &b->slots[atomic_load_explicit(&((DomineBass *)b)->active, memory_order_acquire)];
-    const int off = !p->enabled || !(p->amount > 0.0f);
+    const DomineBassParams p = read_params(b);
+    const int off = !p.enabled || !(p.amount > 0.0f);
     return off && b->wet == 0.0f;
 }

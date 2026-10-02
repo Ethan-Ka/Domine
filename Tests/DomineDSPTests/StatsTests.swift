@@ -150,6 +150,7 @@ struct StatsTests {
 
     @Test func idleSnapshotIsConsistent() {
         var s = DomineKernelStats()
-        #expect(domine_kernel_stats(Kernel().raw, &s) == 1)
+        let k = Kernel()
+        withExtendedLifetime(k) { #expect(domine_kernel_stats(k.raw, &s) == 1) }
     }
 }
