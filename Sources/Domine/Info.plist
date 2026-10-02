@@ -24,5 +24,11 @@
 	<string>public.app-category.music</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>Domine captures system audio to send the left channel to one speaker and the right channel to another.</string>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>$(SPARKLE_FEED_URL)</string>
+	<key>SUPublicEDKey</key>
+	<string>$(SPARKLE_PUBLIC_ED_KEY)</string>
 </dict>
 </plist>
