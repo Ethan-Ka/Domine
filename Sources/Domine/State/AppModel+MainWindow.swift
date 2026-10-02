@@ -23,9 +23,9 @@ extension AppModel {
             masterVolume: Double(pairSettings.masterVolume),
             isMuted: isMuted,
             testToneSide: testToneSide,
-            canPlayTestTones: engine.state == .running
+            canPlayTestTones: engine.state.isRouting
                 || [leftUID, rightUID].contains { $0.flatMap(catalog.device(uid:)) != nil },
-            bannerMessage: showsGripPairingHint ? Self.gripPairingHint : nil)
+            bannerMessage: monoFallbackBanner ?? (showsGripPairingHint ? Self.gripPairingHint : nil))
     }
 
     var mainWindowActions: MainWindowActions {
@@ -43,6 +43,18 @@ extension AppModel {
             openTuning: { [weak self] in self?.openTuning() })
     }
 
+    /// The missing speaker's position while the engine is in mono fallback.
+    var monoFallbackMissingPosition: SpeakerPosition? {
+        engine.state.missingSpeaker.map { $0 == .left ? .frontLeft : .frontRight }
+    }
+
+    /// Stage banner during mono fallback (docs/mockups/Disconnected.dc.html).
+    var monoFallbackBanner: String? {
+        guard let missing = monoFallbackMissingPosition else { return nil }
+        let playing: SpeakerPosition = missing == .frontLeft ? .frontRight : .frontLeft
+        return "\(missing.title) disconnected. \(playing.title) plays both sides until it reconnects."
+    }
+
     /// One short phrase for the window subtitle.
     var statusLine: String {
         switch engine.state {
@@ -53,6 +65,7 @@ extension AppModel {
         case .running:
             if volumeKeysNeedAccessibility { return "Playing, volume keys need Accessibility" }
             return engine.swapSides ? "Playing, sides swapped" : "Playing"
+        case .degraded(.monoFallback): return "Mono fallback"
         case .stopping: return "Stopping"
         case .error: return Self.routingErrorMessage
         }
@@ -63,7 +76,7 @@ extension AppModel {
     /// through the swap.
     private var testToneSide: StereoSide? {
         let onA: Bool
-        if engine.state != .running, let playing = tones.playingUID {
+        if !engine.state.isRouting, let playing = tones.playingUID {
             guard playing == leftUID || playing == rightUID else { return nil }
             onA = playing == leftUID
         } else {
@@ -78,6 +91,8 @@ extension AppModel {
 
     /// A front card. Front Left is always position A (the `leftUID` device);
     /// swapping only changes which channel it plays, shown by the side tag.
+    /// In mono fallback the missing speaker reads "Not connected" (even if
+    /// it is still listed but no longer alive) and the other one plays L+R.
     func card(for position: SpeakerPosition) -> SpeakerCardState {
         guard position.isFront else { return .placeholder(position) }
         let isA = position == .frontLeft
@@ -86,17 +101,19 @@ extension AppModel {
             return SpeakerCardState(
                 position: position, sideTag: tag, statusText: "Choose a speaker", connection: .unassigned)
         }
-        guard let device = catalog.device(uid: uid) else {
+        let missing = monoFallbackMissingPosition
+        guard missing != position, let device = catalog.device(uid: uid) else {
             return SpeakerCardState(
                 position: position, sideTag: tag,
                 deviceName: knownNames[uid], uidSuffix: OutputDevice.suffix(forUID: uid),
                 statusText: "Not connected", connection: .disconnected)
         }
-        let level = engine.state == .running ? (isA ? meters.levelA : meters.levelB) : 0
+        let level = engine.state.isRouting ? (isA ? meters.levelA : meters.levelB) : 0
+        let isMonoFallback = missing != nil
         return SpeakerCardState(
-            position: position, sideTag: tag,
+            position: position, sideTag: isMonoFallback ? "L+R" : tag,
             deviceName: device.name, uidSuffix: device.uidSuffix,
-            statusText: "Connected", connection: .connected,
-            level: Double(level))
+            statusText: isMonoFallback ? "Mono fallback" : "Connected", connection: .connected,
+            level: Double(level), isMonoFallback: isMonoFallback)
     }
 }

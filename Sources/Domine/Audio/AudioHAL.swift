@@ -13,6 +13,9 @@ protocol AudioHAL: AnyObject, Sendable {
     func name(of device: AudioObjectID) throws(HALError) -> String
     func outputChannelCount(of device: AudioObjectID) throws(HALError) -> Int
     func transportType(of device: AudioObjectID) throws(HALError) -> UInt32
+    /// `kAudioDevicePropertyDeviceIsAlive`: false once the device is gone or
+    /// stopped responding, which can come before it leaves the device list.
+    func isAlive(_ device: AudioObjectID) throws(HALError) -> Bool
     /// Channels per buffer, in buffer order (`kAudioDevicePropertyStreamConfiguration`).
     func streamChannels(of device: AudioObjectID, scope: StreamScope) throws(HALError) -> [Int]
     func nominalSampleRate(of device: AudioObjectID) throws(HALError) -> Double

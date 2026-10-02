@@ -35,9 +35,14 @@ struct StageView: View {
                 }
 
                 if let banner = state.bannerMessage {
+                    // Between the rear cards and level with their bottom, so
+                    // the rear placeholder text stays readable.
                     StageBanner(message: banner)
-                        .frame(maxWidth: 316)
-                        .position(x: layout.size.width / 2, y: layout.size.height - 44)
+                        .frame(width: layout.bannerWidth)
+                        .frame(
+                            width: layout.size.width,
+                            height: max(0, layout.size.height - layout.bannerBottomInset),
+                            alignment: .bottom)
                 }
             }
         }

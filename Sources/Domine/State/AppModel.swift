@@ -140,6 +140,7 @@ final class AppModel {
         pairSettings = Self.loadPairSettings(store: store, left: leftUID, right: rightUID)
         applyPairSettingsToEngine()
         volumeLink.onExternalChange = { [weak self] volume in self?.adoptHardwareVolume(volume) }
+        engine.onRoutingEnded = { [weak self] in self?.engineEndedRouting() }
     }
 
     func start() {
@@ -266,6 +267,15 @@ final class AppModel {
         syncWithEngine()
     }
 
+    /// The engine stopped on its own (both speakers gone, or a rebuild
+    /// failed): put the previous output back, as a user stop would.
+    func engineEndedRouting() {
+        stopClickTest()
+        cancelTone()
+        outputRestorer.restore(enabled: store.restorePreviousOutput)
+        syncWithEngine()
+    }
+
     func swapSides() {
         engine.swapSides.toggle()
     }
@@ -355,7 +365,7 @@ final class AppModel {
     /// that speaker. While swapped, the left side is position B.
     func playTestTone(_ side: StereoSide) {
         let onA = (side == .left) != engine.swapSides
-        guard engine.state == .running else {
+        guard engine.state.isRouting else {
             if let uid = onA ? leftUID : rightUID, catalog.device(uid: uid) != nil {
                 tones.play(uid: uid)
             }
@@ -367,7 +377,7 @@ final class AppModel {
 
     /// Plays each tone for its duration, then turns the tone off. Only while running.
     func playTones(_ steps: [(TestTone, Duration)]) {
-        guard engine.state == .running, let first = steps.first else { return }
+        guard engine.state.isRouting, let first = steps.first else { return }
         cancelTone()
         engine.testTone = first.0
         toneTask = Task { [weak self] in
@@ -411,9 +421,9 @@ final class AppModel {
         autoStartTask = Task { [weak self] in await self?.startRouting() }
     }
 
-    /// Called whenever the engine state changes: meters poll only while running.
+    /// Called whenever the engine state changes: meters poll only while routing.
     func syncWithEngine() {
-        if engine.state == .running {
+        if engine.state.isRouting {
             if !hasRunEngine { hasRunEngine = true }
             if !meters.isRunning {
                 meters.start { [weak self] in self?.readMeterPeaks() ?? (0, 0) }

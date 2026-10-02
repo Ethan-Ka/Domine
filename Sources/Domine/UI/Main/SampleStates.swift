@@ -15,7 +15,7 @@ enum SampleStates {
         masterVolume: 0.62)
 
     static let monoFallback = MainWindowState(
-        statusLine: "Waiting for Front Right",
+        statusLine: "Mono fallback",
         isOn: true,
         speakers: [
             SpeakerCardState(
@@ -30,8 +30,8 @@ enum SampleStates {
         masterVolume: 0.62,
         bannerMessage: "Front Right disconnected. Front Left plays both sides until it reconnects.")
 
-    /// Routing on, Front Right dropped out (what the app shows today; mono
-    /// fallback is the planned behavior above).
+    /// Routing on, Front Right dropped out, before the engine has rebuilt
+    /// for mono fallback (a moment at most; see monoFallback above).
     static let disconnected = MainWindowState(
         statusLine: "Playing",
         isOn: true,

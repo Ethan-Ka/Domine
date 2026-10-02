@@ -140,6 +140,14 @@ void domine_kernel_set_click_test(DomineKernel *k, int mode);
 /// starts unmuted at full gain with no ramp.
 void domine_kernel_set_muted(DomineKernel *k, int muted);
 
+/// Puts the output gain at 0 at once, as if a mute fade had just finished.
+/// Unless muted, the next process calls then fade in over the same 50 ms
+/// ramp (1/L, 2/L, ... L/L). The engine calls it on a kernel built for a
+/// rebuild after a speaker came or went (SPEC section 7), so the new
+/// aggregate starts without a click. It writes render-thread state, so call
+/// it only while no IOProc is using the kernel, like domine_kernel_create.
+void domine_kernel_start_faded_out(DomineKernel *k);
+
 /// Renders one IOProc cycle. Real-time safe.
 ///
 /// in: float32 stereo from the tap, either interleaved (one buffer with 2 or

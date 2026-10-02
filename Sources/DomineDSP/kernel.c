@@ -314,6 +314,11 @@ void domine_kernel_set_muted(DomineKernel *k, int muted) {
     atomic_store_explicit(&k->muted, muted != 0, memory_order_relaxed);
 }
 
+void domine_kernel_start_faded_out(DomineKernel *k) {
+    if (k == NULL) return;
+    k->fadePosition = 0;
+}
+
 float domine_kernel_peak(DomineKernel *k, int position) {
     if (k == NULL) return 0.0f;
     if (position == 0) return bits_float(atomic_load_explicit(&k->peakABits, memory_order_relaxed));

@@ -8,26 +8,31 @@ struct AggregateLayout: Equatable, Sendable {
     let inFirstBuffer: Int
     /// Number of input buffers that belong to the tap.
     let tapBuffers: Int
-    let outAChannelOffset: Int
+    /// nil when the aggregate has no Device A (mono fallback).
+    let outAChannelOffset: Int?
     /// nil when the aggregate has no Device B (mono fallback).
     let outBChannelOffset: Int?
 
     /// Computes the layout from the sub-devices' stream configurations and
-    /// checks it against what the aggregate reports.
+    /// checks it against what the aggregate reports. A nil device is absent;
+    /// at least one must be present. The present devices are sub-devices in
+    /// A, B order.
     static func compute(
-        aOutput: [Int],
+        aOutput: [Int]?,
         bOutput: [Int]?,
         subDeviceInputBuffers: Int,
         aggregateOutput: [Int],
         aggregateInput: [Int]
     ) throws(EngineError) -> AggregateLayout {
-        let aChannels = aOutput.reduce(0, +)
+        let aChannels = aOutput?.reduce(0, +) ?? 0
         let bChannels = bOutput?.reduce(0, +) ?? 0
         let expectedOutput = aChannels + bChannels
         let actualOutput = aggregateOutput.reduce(0, +)
-        guard aChannels >= 1, bOutput == nil || bChannels >= 1, actualOutput == expectedOutput else {
+        guard aOutput != nil || bOutput != nil,
+              aOutput == nil || aChannels >= 1, bOutput == nil || bChannels >= 1,
+              actualOutput == expectedOutput else {
             throw .layoutMismatch(
-                "output channels: sub-devices \(aOutput) + \(bOutput ?? []), aggregate \(aggregateOutput)")
+                "output channels: sub-devices \(aOutput ?? []) + \(bOutput ?? []), aggregate \(aggregateOutput)")
         }
         let tapBuffers = aggregateInput.count - subDeviceInputBuffers
         guard tapBuffers >= 1 else {
@@ -37,7 +42,7 @@ struct AggregateLayout: Equatable, Sendable {
         return AggregateLayout(
             inFirstBuffer: subDeviceInputBuffers,
             tapBuffers: tapBuffers,
-            outAChannelOffset: 0,
+            outAChannelOffset: aOutput == nil ? nil : 0,
             outBChannelOffset: bOutput == nil ? nil : aChannels)
     }
 }
