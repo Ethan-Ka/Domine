@@ -66,8 +66,8 @@ struct DomineKernel {
     int playingToneSide;   // side the tone envelope belongs to, 0 = none
     uint32_t toneFadeLength;
     uint32_t toneLevel;    // 0 = program only, toneFadeLength = tone only
-    double tonePhase;      // cycles, in [0, 1)
-    double tonePhaseStep;  // cycles per sample
+    double tonePhase;      // seconds into the chime pattern, in [0, period)
+    double tonePhaseStep;  // seconds per sample
 
     // Input FIFO between the tap and the output.
     float *fifoL;
@@ -239,7 +239,7 @@ DomineKernel *domine_kernel_create(double sampleRate, uint32_t maxFrames) {
     uint32_t fade = (uint32_t)lround(sampleRate * DOMINE_FADE_MS / 1000.0);
     k->fadeLength = fade > 0 ? fade : 1;
     k->fadePosition = k->fadeLength;
-    k->tonePhaseStep = DOMINE_TONE_HZ / sampleRate;
+    k->tonePhaseStep = 1.0 / sampleRate;
     uint32_t toneFade = (uint32_t)lround(sampleRate * DOMINE_TONE_FADE_MS / 1000.0);
     k->toneFadeLength = toneFade > 0 ? toneFade : 1;
     uint32_t clickLength = (uint32_t)lround(sampleRate * DOMINE_CLICK_MS / 1000.0);
@@ -586,9 +586,9 @@ static RenderResult render(DomineKernel *k,
             k->tonePhase = 0.0;
         }
         if (k->playingToneSide != 0) {
-            const float tone = (float)(DOMINE_TONE_AMPLITUDE * sin(2.0 * M_PI * k->tonePhase));
+            const float tone = (float)domine_chime_sample(k->tonePhase);
             k->tonePhase += k->tonePhaseStep;
-            if (k->tonePhase >= 1.0) k->tonePhase -= 1.0;
+            if (k->tonePhase >= DOMINE_CHIME_PERIOD_S) k->tonePhase -= DOMINE_CHIME_PERIOD_S;
             const uint32_t toneTarget = toneSide == k->playingToneSide ? k->toneFadeLength : 0;
             if (k->toneLevel == k->toneFadeLength && toneTarget == k->toneFadeLength) {
                 outA = k->playingToneSide == 1 ? tone : 0.0f;
