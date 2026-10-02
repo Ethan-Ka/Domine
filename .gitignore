@@ -27,3 +27,4 @@ Tests/linux-dsp/test_*
 !Tests/linux-dsp/test_*.c
 linux/domine
 linux/selftest
+Tests/linux-dsp/obj/
