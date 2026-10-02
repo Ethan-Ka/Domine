@@ -24,6 +24,7 @@ extension AppModel {
     }
 
     func openTuning() {
+        applyInitialDelayIfUnset()
         reportedLatencyText = readReportedLatencies()
         clickTestMessage = nil
         showsTuning = true
@@ -97,6 +98,25 @@ extension AppModel {
             let volume = s.masterVolume
             s = PairSettings()
             s.masterVolume = volume
+        }
+    }
+
+    /// SPEC 4a: a pair with no saved tuning starts with the difference of the
+    /// speakers' reported latencies as its delay. A speaker that reports lower
+    /// latency plays early, so the right one being lower gives a positive delay.
+    /// Saving the result means a saved or user-set value is never replaced.
+    /// Does nothing when either latency is unknown.
+    func applyInitialDelayIfUnset() {
+        guard let left = leftUID, let right = rightUID, left != right,
+              !store.hasPairSettings(leftUID: left, rightUID: right),
+              let l = engine.reportedLatencyMs(uid: left),
+              let r = engine.reportedLatencyMs(uid: right) else { return }
+        let limit = Double(TuningState.extendedRange.upperBound)
+        let ms = Int(min(max((l - r).rounded(), -limit), limit))
+        guard ms != 0 else { return }
+        updatePairSettings { s in
+            s.extendedRange = !TuningState.normalRange.contains(ms)
+            s.delayMs = Float(ms)
         }
     }
 

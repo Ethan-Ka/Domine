@@ -221,6 +221,7 @@ final class AppModel {
         guard !engine.state.isActive else { return }
         tones.stop()
         routingRefusal = nil
+        applyInitialDelayIfUnset()
         if let left = leftUID, let right = rightUID, left != right,
            catalog.device(uid: left) != nil, catalog.device(uid: right) != nil {
             do throws(OutputRestorer.Failure) {

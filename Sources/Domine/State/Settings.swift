@@ -39,6 +39,11 @@ final class SettingsStore {
         return key.isSwapped ? stored.swapped : stored
     }
 
+    /// Whether tuning has ever been saved for this pair, in either order.
+    func hasPairSettings(leftUID: String, rightUID: String) -> Bool {
+        defaults.data(forKey: Self.storageKey(for: PairKey(leftUID: leftUID, rightUID: rightUID))) != nil
+    }
+
     func setPairSettings(_ settings: PairSettings, leftUID: String, rightUID: String) {
         let key = PairKey(leftUID: leftUID, rightUID: rightUID)
         let stored = key.isSwapped ? settings.swapped : settings
