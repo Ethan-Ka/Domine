@@ -115,7 +115,7 @@ final class Engine {
         applyControls()
     }
     /// The surround speaker playing the chime test tone, by UID; nil is off.
-    var surroundTestTone: String? { didSet { if surroundTestTone != oldValue { applyControls() } } }
+    var surroundTestTone: String? = nil { didSet { if surroundTestTone != oldValue { applyControls() } } }
     /// The UIDs of a surround routing in list order; nil in stereo.
     @ObservationIgnored fileprivate(set) var surroundRoute: [String]?
     /// Test hook: what the last control push gave the surround kernel, per

@@ -14,13 +14,13 @@ struct Room: Codable, Equatable, Identifiable, Sendable {
     var rearRightUID: String?
     /// The surround set in list order (SPEC 13). nil in rooms saved before it.
     var surroundUIDs: [String]?
-}
 
-extension Room {
     private enum CodingKeys: String, CodingKey {
         case id, name, mode, leftUID, rightUID, rearLeftUID, rearRightUID, surroundUIDs
     }
+}
 
+extension Room {
     /// A stored "quad" mode reads as surround, and a quad room without a
     /// surround set gets its four speakers as one (SPEC 13.7).
     init(from decoder: any Decoder) throws {

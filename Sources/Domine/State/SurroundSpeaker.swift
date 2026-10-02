@@ -13,6 +13,8 @@ struct SurroundSpeaker: Codable, Equatable, Hashable, Identifiable, Sendable {
 
     var id: String { uid }
 
+    private enum CodingKeys: String, CodingKey { case uid, azimuth, distance }
+
     static let maxCount = 16
     static let distanceRange: ClosedRange<Float> = 0.5...10
 
@@ -32,8 +34,6 @@ struct SurroundSpeaker: Codable, Equatable, Hashable, Identifiable, Sendable {
 }
 
 extension SurroundSpeaker {
-    private enum CodingKeys: String, CodingKey { case uid, azimuth, distance }
-
     /// A missing or mistyped azimuth or distance falls back to 0 and 2 m;
     /// values are wrapped and clamped. Only a missing UID fails.
     init(from decoder: any Decoder) throws {
