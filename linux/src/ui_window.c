@@ -43,9 +43,10 @@ static void on_master(GtkRange *r, gpointer data)
 {
     DLUi *ui = data;
     if (ui->syncing) return;
-    ui->s->master = (float)gtk_range_get_value(r) / 100.0f;
+    float pos = (float)gtk_range_get_value(r) / 100.0f;
+    ui->s->master = dl_slider_to_volume(pos);
     char t[16];
-    dl_percent_text(ui->s->master, t, sizeof t);
+    dl_percent_text(pos, t, sizeof t);
     gtk_label_set_text(GTK_LABEL(ui->w.masterText), t);
     dl_ui_params_changed(ui);
 }
@@ -333,7 +334,7 @@ static GtkWidget *build_bottom(DLUi *ui)
     w->presetsButton = presets_button(ui);
     gtk_box_append(GTK_BOX(row3), w->presetsButton);
     w->demoButton = gtk_button_new_with_label("Play Demo");
-    gtk_widget_set_tooltip_text(w->demoButton, "A 32 second piece that moves around your speakers");
+    gtk_widget_set_tooltip_text(w->demoButton, "A short piece that moves around your speakers");
     g_signal_connect(w->demoButton, "clicked", G_CALLBACK(on_demo), ui);
     gtk_box_append(GTK_BOX(row3), w->demoButton);
     gtk_box_append(GTK_BOX(bottom), row3);
@@ -420,9 +421,10 @@ static void sync_status(DLUi *ui)
     gtk_label_set_text(GTK_LABEL(w->subtitle), status);
     gtk_widget_set_tooltip_text(w->subtitle, status);
     gtk_button_set_label(GTK_BUTTON(w->demoButton), ui->demoOn ? "Stop Demo" : "Play Demo");
-    set_range(w->master, round(ui->s->master * 100.0));
+    float pos = dl_volume_to_slider(ui->s->master);
+    set_range(w->master, round(pos * 100.0));
     char t[16];
-    dl_percent_text(ui->s->master, t, sizeof t);
+    dl_percent_text(pos, t, sizeof t);
     gtk_label_set_text(GTK_LABEL(w->masterText), t);
 }
 

@@ -32,7 +32,7 @@ void dl_settings_defaults(DLSettings *s)
 {
     memset(s, 0, sizeof *s);
     s->mode = DL_MODE_STEREO;
-    s->master = 0.8f;
+    s->master = 0.512f;   // 80% on the slider
     card_init(&s->stereo[0], -DL_STEREO_AZIMUTH);
     card_init(&s->stereo[1], DL_STEREO_AZIMUTH);
     s->stereoLink = 1;
@@ -73,7 +73,7 @@ static void sanitize_card(DLCard *c)
 void dl_settings_sanitize(DLSettings *s)
 {
     if (s->mode != DL_MODE_SURROUND) s->mode = DL_MODE_STEREO;
-    s->master = clampf(s->master, 0.0f, 1.0f, 0.8f);
+    s->master = clampf(s->master, 0.0f, 1.0f, 0.512f);
     s->stereoDelay = clampf(s->stereoDelay, -DL_DELAY_LIMIT, DL_DELAY_LIMIT, 0.0f);
     s->stereoExtended = s->stereoExtended != 0;
     if (fabsf(s->stereoDelay) > DL_STEREO_DELAY_NORMAL) s->stereoExtended = 1;

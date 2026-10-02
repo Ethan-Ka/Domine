@@ -64,6 +64,19 @@ void dl_orbit_text(float turnsPerSecond, char *buf, uint32_t len)
     else snprintf(buf, len, "%.2f/s", turnsPerSecond);
 }
 
+float dl_volume_to_slider(float linear)
+{
+    if (!isfinite(linear) || linear <= 0.0f) return 0.0f;
+    return linear >= 1.0f ? 1.0f : cbrtf(linear);
+}
+
+float dl_slider_to_volume(float position)
+{
+    if (!isfinite(position) || position <= 0.0f) return 0.0f;
+    if (position >= 1.0f) return 1.0f;
+    return position * position * position;
+}
+
 void dl_percent_text(float unit, char *buf, uint32_t len)
 {
     float u = isfinite(unit) ? unit : 0.0f;

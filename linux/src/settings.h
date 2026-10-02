@@ -57,7 +57,7 @@ typedef struct {
 
 typedef struct {
     DLMode mode;
-    float master;                       // 0...1
+    float master;                       // linear gain 0...1 (slider shows its cube root)
 
     // Stereo: card 0 is Front Left (-30), card 1 Front Right (+30).
     DLCard stereo[2];

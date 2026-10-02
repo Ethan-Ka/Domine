@@ -23,6 +23,10 @@ float dl_balance_right_gain(float balance);
 void dl_stereo_delays(float signedMs, float *leftMs, float *rightMs);
 /// "Off" below 0.005, otherwise "0.25/s".
 void dl_orbit_text(float turnsPerSecond, char *buf, uint32_t len);
+/// Master and app volumes are linear gains; sliders show them on the
+/// desktop's cubic scale (slider 50% is gain 0.125), like PipeWire mixers.
+float dl_volume_to_slider(float linear);
+float dl_slider_to_volume(float position);
 /// "70%".
 void dl_percent_text(float unit, char *buf, uint32_t len);
 

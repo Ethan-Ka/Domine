@@ -705,7 +705,11 @@ void dl_ui_status_text(DLUi *ui, char *buf, uint32_t len)
     } else {
         DLState st = dl_engine_state(ui->engine);
         if (st == DL_STARTING) g_strlcpy(buf, "Starting", len);
-        else if (st == DL_ERROR) g_strlcpy(buf, "Audio error", len);
+        else if (st == DL_ERROR) {
+            char err[256] = "";
+            dl_engine_error(ui->engine, err, sizeof err);
+            g_strlcpy(buf, err[0] ? err : "Audio error", len);
+        }
         else if (any_missing(ui, missing) || st == DL_DEGRADED)
             g_strlcpy(buf, dl_ui_is_surround(ui) ? "Speaker disconnected" : "Mono fallback", len);
         else g_strlcpy(buf, "Playing", len);
@@ -725,7 +729,11 @@ void dl_ui_banner_text(DLUi *ui, char *buf, uint32_t len, int *isError)
     int missing[DL_MAX_SPEAKERS];
     uint32_t n;
     dl_ui_cards(ui, &n);
-    if (any_missing(ui, missing)) dl_fallback_banner(ui->s->mode, n, missing, buf, len);
+    if (any_missing(ui, missing)) {
+        dl_fallback_banner(ui->s->mode, n, missing, buf, len);
+    } else if (dl_engine_state(ui->engine) == DL_DEGRADED) {
+        dl_engine_error(ui->engine, buf, len);
+    }
 }
 
 static gboolean on_tick(gpointer data)
@@ -748,7 +756,8 @@ static gboolean on_tick(gpointer data)
         dl_ui_sync(ui);
     }
     float m = dl_engine_master(ui->engine);
-    if (isfinite(m) && m >= 0.0f && m <= 1.0f && fabsf(m - ui->s->master) > 0.004f) {
+    if (isfinite(m) && m >= 0.0f && m <= 1.0f &&
+        fabsf(dl_volume_to_slider(m) - dl_volume_to_slider(ui->s->master)) > 0.004f) {
         ui->s->master = m;   // desktop volume keys moved the Domine sink
         dl_ui_schedule_save(ui);
     }
