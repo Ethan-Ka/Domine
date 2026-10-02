@@ -3,11 +3,13 @@ struct GeneralSettingsState: Equatable, Sendable {
     enum CloseBehavior: String, CaseIterable, Sendable {
         case keepPlaying
         case stopPlaying
+        case stopAndUseMacSpeakers
 
         var title: String {
             switch self {
             case .keepPlaying: "Keep playing in the background"
             case .stopPlaying: "Stop playing"
+            case .stopAndUseMacSpeakers: "Stop and switch to the Mac's speakers"
             }
         }
     }

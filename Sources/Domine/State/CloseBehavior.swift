@@ -2,4 +2,5 @@
 enum CloseBehavior: String, Sendable {
     case keepPlaying
     case stopPlaying
+    case stopAndUseMacSpeakers
 }

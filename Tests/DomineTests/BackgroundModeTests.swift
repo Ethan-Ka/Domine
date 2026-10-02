@@ -68,6 +68,27 @@ final class BackgroundModeTests {
         #expect(model.engine.state == .idle)
     }
 
+    @Test func closingWithMacSpeakersStopsAndSetsTheBuiltInDefault() async {
+        model.generalSettings.closeBehavior = .stopAndUseMacSpeakers
+        model.generalSettings.restorePreviousOutput = false
+        await routeAndClose()
+        #expect(!model.isInBackground)
+        #expect(model.engine.state == .idle)
+        #expect(hal.defaultOutputUID == Self.speakers.uid)
+    }
+
+    @Test func closingWithMacSpeakersFallsBackWithoutABuiltInOutput() async {
+        model.generalSettings.closeBehavior = .stopAndUseMacSpeakers
+        hal.add(Self.gripA)
+        hal.add(Self.gripB)
+        hal.setDefault(uid: Self.gripA.uid)
+        model.start()
+        await model.startRouting()
+        model.mainWindowDidClose()
+        #expect(model.engine.state == .idle)
+        #expect(hal.defaultOutputUID != OutputRestorer.virtualOutputUID)
+    }
+
     @Test func closingTwiceSetsThePolicyOnce() async {
         await routeAndClose()
         model.mainWindowDidClose()

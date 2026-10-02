@@ -95,6 +95,7 @@ extension AppModel {
         switch value {
         case .keepPlaying: .keepPlaying
         case .stopPlaying: .stopPlaying
+        case .stopAndUseMacSpeakers: .stopAndUseMacSpeakers
         }
     }
 
@@ -102,6 +103,7 @@ extension AppModel {
         switch value {
         case .keepPlaying: .keepPlaying
         case .stopPlaying: .stopPlaying
+        case .stopAndUseMacSpeakers: .stopAndUseMacSpeakers
         }
     }
 

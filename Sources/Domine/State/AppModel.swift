@@ -362,11 +362,11 @@ final class AppModel {
         routingRefusal = nil
     }
 
-    func stopRouting() {
+    func stopRouting(toBuiltInOutput: Bool = false) {
         stopClickTest()
         cancelTone()
         engine.stop()
-        outputRestorer.restore(enabled: store.restorePreviousOutput)
+        outputRestorer.restore(enabled: store.restorePreviousOutput, preferBuiltIn: toBuiltInOutput)
         syncWithEngine()
     }
 

@@ -82,10 +82,24 @@ final class OutputRestorer {
 
     /// Restores the previous output when routing stops, if `enabled` and the
     /// device still exists. Otherwise the current default is left alone.
-    func restore(enabled: Bool) {
+    /// With `preferBuiltIn` the default goes to the built-in output regardless
+    /// of `enabled`; with no built-in output it falls back to the normal restore.
+    func restore(enabled: Bool, preferBuiltIn: Bool = false) {
         stopGuarding()
         guard store.outputNeedsRestore else { return }
         store.outputNeedsRestore = false
+        if preferBuiltIn,
+           let builtIn = outputs().first(where: {
+               $0.transportType == kAudioDeviceTransportTypeBuiltIn && $0.outputChannels > 0 }) {
+            do {
+                if try currentDefaultUID() != builtIn.uid {
+                    try setDefault(builtIn.uid, reason: "window closed")
+                }
+            } catch {
+                Self.log.error("Could not switch to the built-in output: \(String(describing: error), privacy: .public)")
+            }
+            return
+        }
         guard enabled else { return }
         guard let previous = store.previousOutputUID, isPresent(previous) else {
             Self.log.info("Previous output is gone; leaving the default output alone")

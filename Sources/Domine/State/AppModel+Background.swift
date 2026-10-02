@@ -14,6 +14,10 @@ extension AppModel {
             guard engine.state.isActive else { return }
             userTurnedRoutingOff = true
             stopRouting()
+        case .stopAndUseMacSpeakers:
+            guard engine.state.isActive else { return }
+            userTurnedRoutingOff = true
+            stopRouting(toBuiltInOutput: true)
         case .keepPlaying:
             guard engine.state.isActive else { return }
             enterBackground()
