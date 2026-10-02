@@ -22,8 +22,11 @@ extension AppModel {
     var wantsVolumeKeyTap: Bool { volumeKeyTapBlock == nil }
 
     /// Volume keys are on but cannot be caught, so they still reach macOS.
+    /// False when the virtual output handles the keys. Trust is read fresh,
+    /// never from the cached settings flag.
     var volumeKeysNeedAccessibility: Bool {
-        generalSettings.showsAccessibilityPrompt
+        store.volumeKeysEnabled && engine.state.isActive && virtualOutput == nil
+            && !services.isAccessibilityTrusted()
     }
 
     /// Starts or stops the tap to match `wantsVolumeKeyTap`. Called when the
