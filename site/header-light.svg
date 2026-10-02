@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="840" height="200" viewBox="0 0 840 200">
+  <svg x="60" y="20" width="160" height="160" viewBox="0 0 1024 1024">
+  
+  <defs>
+    <path id="tile" d="M924 512L924 620L924 654L923 679L922 699L921 717L920 732L919 746L918 758L916 770L914 780L912 790L909 799L907 808L904 816L901 824L898 832L894 839L891 845L887 851L882 857L878 863L873 868L868 873L863 878L857 882L851 887L845 891L839 894L832 898L824 901L816 904L808 907L799 909L790 912L780 914L770 916L758 918L746 919L732 920L717 921L699 922L679 923L654 924L620 924L512 924L404 924L370 924L345 923L325 922L307 921L292 920L278 919L266 918L254 916L244 914L234 912L225 909L216 907L208 904L200 901L192 898L185 894L179 891L173 887L167 882L161 878L156 873L151 868L146 863L142 857L137 851L133 845L130 839L126 832L123 824L120 816L117 808L115 799L112 790L110 780L108 770L106 758L105 746L104 732L103 717L102 699L101 679L100 654L100 620L100 512L100 404L100 370L101 345L102 325L103 307L104 292L105 278L106 266L108 254L110 244L112 234L115 225L117 216L120 208L123 200L126 192L130 185L133 179L137 173L142 167L146 161L151 156L156 151L161 146L167 142L173 137L179 133L185 130L192 126L200 123L208 120L216 117L225 115L234 112L244 110L254 108L266 106L278 105L292 104L307 103L325 102L345 101L370 100L404 100L512 100L620 100L654 100L679 101L699 102L717 103L732 104L746 105L758 106L770 108L780 110L790 112L799 115L808 117L816 120L824 123L832 126L839 130L845 133L851 137L857 142L863 146L868 151L873 156L878 161L882 167L887 173L891 179L894 185L898 192L901 200L904 208L907 216L909 225L912 234L914 244L916 254L918 266L919 278L920 292L921 307L922 325L923 345L924 370L924 404Z"/>
+    <linearGradient id="tileFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3B3835"/>
+      <stop offset="1" stop-color="#1E1D1B"/>
+    </linearGradient>
+    <linearGradient id="white" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F8F6F2"/>
+      <stop offset="1" stop-color="#D9D4CB"/>
+    </linearGradient>
+    <linearGradient id="red" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E24735"/>
+      <stop offset="1" stop-color="#AE2E21"/>
+    </linearGradient>
+    <filter id="tileShadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+    <filter id="lift" x="-25%" y="-10%" width="150%" height="130%">
+      <feDropShadow dx="0" dy="8" stdDeviation="9" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+    <clipPath id="tileClip"><use xlink:href="#tile"/></clipPath>
+  </defs>
+
+  <use xlink:href="#tile" fill="url(#tileFill)" filter="url(#tileShadow)"/>
+  <use xlink:href="#tile" fill="none" stroke="#FFFFFF" stroke-opacity="0.09" stroke-width="8" clip-path="url(#tileClip)"/>
+
+  
+  <g transform="translate(512 512) scale(0.78) translate(-512 -512)">
+  <clipPath id="leftHalf"><rect x="0" y="0" width="498" height="1024"/></clipPath>
+  <clipPath id="rightHalf"><rect x="526" y="0" width="498" height="1024"/></clipPath>
+  <path id="wave" d="M220.0 250.0L224.9 240.6L229.7 231.5L234.6 222.8L239.5 214.7L244.3 207.6L249.2 201.5L254.1 196.5L258.9 192.9L263.8 190.7L268.7 190.0L273.5 190.7L278.4 192.9L283.3 196.5L288.1 201.5L293.0 207.6L297.9 214.7L302.7 222.8L307.6 231.5L312.5 240.6L317.3 250.0L322.2 259.4L327.1 268.5L331.9 277.2L336.8 285.3L341.7 292.4L346.5 298.5L351.4 303.5L356.3 307.1L361.1 309.3L366.0 310.0L370.9 309.3L375.7 307.1L380.6 303.5L385.5 298.5L390.3 292.4L395.2 285.3L400.1 277.2L404.9 268.5L409.8 259.4L414.7 250.0L419.5 240.6L424.4 231.5L429.3 222.8L434.1 214.7L439.0 207.6L443.9 201.5L448.7 196.5L453.6 192.9L458.5 190.7L463.3 190.0L468.2 190.7L473.1 192.9L477.9 196.5L482.8 201.5L487.7 207.6L492.5 214.7L497.4 222.8L502.3 231.5L507.1 240.6L512.0 250.0L516.9 259.4L521.7 268.5L526.6 277.2L531.5 285.3L536.3 292.4L541.2 298.5L546.1 303.5L550.9 307.1L555.8 309.3L560.7 310.0L565.5 309.3L570.4 307.1L575.3 303.5L580.1 298.5L585.0 292.4L589.9 285.3L594.7 277.2L599.6 268.5L604.5 259.4L609.3 250.0L614.2 240.6L619.1 231.5L623.9 222.8L628.8 214.7L633.7 207.6L638.5 201.5L643.4 196.5L648.3 192.9L653.1 190.7L658.0 190.0L662.9 190.7L667.7 192.9L672.6 196.5L677.5 201.5L682.3 207.6L687.2 214.7L692.1 222.8L696.9 231.5L701.8 240.6L706.7 250.0L711.5 259.4L716.4 268.5L721.3 277.2L726.1 285.3L731.0 292.4L735.9 298.5L740.7 303.5L745.6 307.1L750.5 309.3L755.3 310.0L760.2 309.3L765.1 307.1L769.9 303.5L774.8 298.5L779.7 292.4L784.5 285.3L789.4 277.2L794.3 268.5L799.1 259.4L804.0 250.0" fill="none" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
+  <use xlink:href="#wave" stroke="#EEEBE5" clip-path="url(#leftHalf)"/>
+  <use xlink:href="#wave" stroke="#DA4330" clip-path="url(#rightHalf)"/>
+
+  
+  <g filter="url(#lift)">
+    <rect x="196" y="372" width="240" height="460" rx="120" fill="url(#white)"/>
+    <rect x="588" y="372" width="240" height="460" rx="120" fill="url(#red)"/>
+  </g>
+  <circle cx="316" cy="642" r="84" fill="#C8C2B8"/>
+  <circle cx="316" cy="642" r="34" fill="#A69F94"/>
+  <circle cx="316" cy="474" r="18" fill="#C8C2B8"/>
+  <circle cx="708" cy="642" r="84" fill="#93251A"/>
+  <circle cx="708" cy="642" r="34" fill="#761C12"/>
+  <circle cx="708" cy="474" r="18" fill="#93251A"/>
+  </g>
+</svg>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif">
+    <text x="236" y="104" font-size="60" font-weight="700" letter-spacing="-1" fill="#1F1E1C">Domine</text>
+    <text x="238" y="140" font-size="20" fill="#57534E">System audio, left channel on one speaker, right on the other.</text>
+  </g>
+</svg>
