@@ -30,7 +30,7 @@ extension AppModel {
     /// otherwise directly on that device.
     func playAssignTone(uid: String) {
         guard canPlayTone(uid: uid) else { return }
-        if engine.state == .running, uid == leftUID || uid == rightUID {
+        if engine.state.isRouting, uid == leftUID || uid == rightUID {
             playTones([(uid == leftUID ? .left : .right, Self.assignToneDuration)])
         } else {
             tones.play(uid: uid)
