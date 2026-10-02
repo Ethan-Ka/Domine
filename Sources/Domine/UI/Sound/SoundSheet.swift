@@ -86,17 +86,13 @@ struct SoundSheet: View {
             HStack(spacing: 0) {
                 ForEach(0..<5, id: \.self) { i in
                     VStack(spacing: 6) {
-                        Slider(
-                            value: Binding(
-                                get: { Double(current.eqBands[i].gainDb) },
-                                set: { v in edit { $0.eqBands[i].gainDb = Float(v.rounded()) } }),
-                            in: Double(SoundState.gainRange.lowerBound)...Double(SoundState.gainRange.upperBound))
-                            .labelsHidden()
-                            .frame(width: 110)
-                            .rotationEffect(.degrees(-90))
+                        VerticalGainSlider(
+                            value: Double(current.eqBands[i].gainDb),
+                            range: Double(SoundState.gainRange.lowerBound)...Double(SoundState.gainRange.upperBound),
+                            axLabel: "\(SoundState.bandLabels[i]) gain",
+                            axValue: "\(Int(current.eqBands[i].gainDb)) dB",
+                            onChange: { v in edit { $0.eqBands[i].gainDb = Float(v.rounded()) } })
                             .frame(width: 24, height: 110)
-                            .accessibilityLabel("\(SoundState.bandLabels[i]) hertz")
-                            .accessibilityValue("\(Int(current.eqBands[i].gainDb)) decibels")
                         Text(SoundState.bandLabels[i])
                             .font(.caption)
                             .foregroundStyle(.secondary)
