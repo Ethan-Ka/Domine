@@ -6,6 +6,7 @@
 #include "ui_widgets.h"
 
 static GtkWidget *gRoomButton;   // one main window per process
+static char *gRoomSignature;     // what the menu shows, to skip needless rebuilds
 
 static void close_popover(GtkWidget *w)
 {
@@ -168,6 +169,15 @@ void dl_rooms_sync(DLUi *ui)
 {
     if (!gRoomButton || !ui->w.window) return;
     DLSettings *s = ui->s;
+    GString *sig = g_string_new(NULL);
+    g_string_append_printf(sig, "%d", s->currentRoom);
+    for (uint32_t i = 0; i < s->roomCount; i++) g_string_append_printf(sig, "\n%s", s->rooms[i].name);
+    if (gRoomSignature && strcmp(gRoomSignature, sig->str) == 0) {
+        g_string_free(sig, TRUE);
+        return;
+    }
+    g_free(gRoomSignature);
+    gRoomSignature = g_string_free(sig, FALSE);
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     for (uint32_t i = 0; i < s->roomCount; i++) {
         char label[160];

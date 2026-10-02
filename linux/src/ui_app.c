@@ -40,6 +40,23 @@ DLUi *dl_ui_new(GtkApplication *app, const char *settingsPath)
     return ui;
 }
 
+int dl_ui_retry_engine(DLUi *ui)
+{
+    if (ui->engine) return 0;
+    ui->engineError[0] = '\0';
+    ui->engine = dl_engine_create(ui->engineError, sizeof ui->engineError);
+    if (!ui->engine) {
+        if (!ui->engineError[0]) g_strlcpy(ui->engineError, "Could not connect to PipeWire.", sizeof ui->engineError);
+        dl_ui_sync(ui);
+        return -1;
+    }
+    dl_engine_set_on_change(ui->engine, on_engine_change, ui);
+    dl_engine_set_master(ui->engine, ui->s->master);
+    dl_ui_refresh_sinks(ui);
+    dl_ui_sync(ui);
+    return 0;
+}
+
 void dl_ui_free(DLUi *ui)
 {
     if (!ui) return;

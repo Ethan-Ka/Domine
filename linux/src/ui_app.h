@@ -86,6 +86,9 @@ typedef struct DLUi {
 
 DLUi *dl_ui_new(GtkApplication *app, const char *settingsPath);
 void dl_ui_free(DLUi *ui);
+/// Tries to connect to PipeWire again after a failed start. Returns 0 when
+/// the engine is available.
+int dl_ui_retry_engine(DLUi *ui);
 
 /// Speaker cards of the current mode (2 in Stereo, settings count in Surround).
 DLCard *dl_ui_cards(DLUi *ui, uint32_t *count);
