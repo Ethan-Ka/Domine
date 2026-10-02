@@ -20,16 +20,18 @@ final class VolumeKeyTap {
     nonisolated static let systemDefinedEventType: UInt32 = 14
     nonisolated static let log = Logger(subsystem: "com.ethankawley.Domine", category: "VolumeKeys")
 
-    private var port: CFMachPort?
-    private var runLoopSource: CFRunLoopSource?
-    private var context: Unmanaged<VolumeKeyTapContext>?
+    nonisolated(unsafe) private var port: CFMachPort?
+    nonisolated(unsafe) private var runLoopSource: CFRunLoopSource?
+    nonisolated(unsafe) private var context: Unmanaged<VolumeKeyTapContext>?
 
     var isRunning: Bool { port != nil }
 
     init() {}
 
-    isolated deinit {
-        stop()
+    /// Plain deinit: only thread-safe teardown, no actor-isolated calls.
+    /// Owners should call `stop()` first.
+    deinit {
+        Self.teardown(port: port, source: runLoopSource, context: context)
     }
 
     // MARK: Accessibility
@@ -101,20 +103,25 @@ final class VolumeKeyTap {
 
     /// Removes the tap. Afterwards every event reaches the system untouched.
     func stop() {
+        Self.teardown(port: port, source: runLoopSource, context: context)
+        port = nil
+        runLoopSource = nil
+        context = nil
+    }
+
+    private nonisolated static func teardown(
+        port: CFMachPort?, source: CFRunLoopSource?, context: Unmanaged<VolumeKeyTapContext>?
+    ) {
         if let port {
             CGEvent.tapEnable(tap: port, enable: false)
             CFMachPortInvalidate(port)
         }
-        if let runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
+        if let source {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
         }
         if let context {
-            context.takeUnretainedValue().port = nil
             context.release()
         }
-        port = nil
-        runLoopSource = nil
-        context = nil
     }
 }
 

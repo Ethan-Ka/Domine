@@ -192,9 +192,9 @@ final class AppModel {
         observeActivationForVolumeKeys()
         observeSleepAndWake()
         // Never leave a muting tap behind on quit. AppKit posts this on the
-        // main thread; a nil queue runs the block before termination continues.
+        // main thread; a main-queue observer posted from the main thread runs inline.
         terminationObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.willTerminateNotification, object: nil, queue: nil
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.appWillTerminate() }
         }

@@ -76,7 +76,7 @@ extension AppModel {
         guard activationObserver == nil else { return }
         // AppKit posts this on the main thread.
         activationObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: nil
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.didBecomeActive()

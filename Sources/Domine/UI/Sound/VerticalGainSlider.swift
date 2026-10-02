@@ -27,9 +27,17 @@ struct VerticalGainSlider: NSViewRepresentable {
 
     func updateNSView(_ s: NSSlider, context: Context) {
         context.coordinator.parent = self
-        if s.doubleValue != value { s.doubleValue = value }
-        s.setAccessibilityLabel(axLabel)
-        s.setAccessibilityValueDescription(axValue)
+        Self.apply(value: value, axLabel: axLabel, axValue: axValue, to: s)
+    }
+
+    /// Never writes back into the slider during an active drag, and only
+    /// touches accessibility strings when they change.
+    @MainActor
+    static func apply(value: Double, axLabel: String, axValue: String, to s: NSSlider) {
+        let dragging = NSApp?.currentEvent?.type == .leftMouseDragged
+        if !dragging, s.doubleValue != value { s.doubleValue = value }
+        if s.accessibilityLabel() != axLabel { s.setAccessibilityLabel(axLabel) }
+        if s.accessibilityValueDescription() != axValue { s.setAccessibilityValueDescription(axValue) }
     }
 
     @MainActor
