@@ -153,7 +153,7 @@ final class BackgroundModeTests {
         model.mainWindowDidClose()
         model.appWillTerminate()
         #expect(model.engine.state == .idle)
-        #expect(hal.defaultOutputUID == Self.gripB.uid)
+        #expect(hal.defaultOutputUID == Self.speakers.uid)
     }
 
     // MARK: Auto-start in the background

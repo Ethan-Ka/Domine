@@ -54,10 +54,10 @@ final class OutputRestoreTests {
         await model.startRouting()
         #expect(model.engine.state == .running)
         #expect(hal.defaultOutputUID == Self.speakers.uid)
-        #expect(model.store.previousOutputUID == Self.gripB.uid)
+        #expect(model.store.previousOutputUID == nil)  // a routed speaker is never saved
 
         model.stopRouting()
-        #expect(hal.defaultOutputUID == Self.gripB.uid)
+        #expect(hal.defaultOutputUID == Self.speakers.uid)
     }
 
     static let virtualOutput = FakeHAL.Device(
@@ -72,16 +72,38 @@ final class OutputRestoreTests {
         hal.setDefault(uid: Self.gripB.uid)
         #expect(hal.defaultOutputUID == OutputRestorer.virtualOutputUID)
         model.stopRouting()
-        #expect(hal.defaultOutputUID == Self.gripA.uid)
+        #expect(hal.defaultOutputUID == Self.speakers.uid)
     }
 
-    @Test func virtualOutputAsPreviousOutputIsRestored() async {
-        add(Self.speakers, Self.virtualOutput, Self.gripA, Self.gripB, default: OutputRestorer.virtualOutputUID)
+    @Test func virtualOutputIsNeverSavedAsPreviousOutput() async {
+        model.store.previousOutputUID = Self.dac.uid
+        add(Self.speakers, Self.dac, Self.virtualOutput, Self.gripA, Self.gripB, default: OutputRestorer.virtualOutputUID)
+        #expect(hal.defaultOutputUID == Self.dac.uid)  // launch moved off the virtual output
+        hal.setDefault(uid: OutputRestorer.virtualOutputUID)
         await model.startRouting()
-        #expect(model.store.previousOutputUID == OutputRestorer.virtualOutputUID)
-        hal.setDefault(uid: Self.speakers.uid)
+        #expect(model.store.previousOutputUID == Self.dac.uid)
         model.stopRouting()
+        #expect(hal.defaultOutputUID == Self.dac.uid)
+    }
+
+    @Test func stopMovesOffVirtualEvenWhenRestoreIsOff() async {
+        model.store.restorePreviousOutput = false
+        add(Self.speakers, Self.dac, Self.virtualOutput, Self.gripA, Self.gripB, default: OutputRestorer.virtualOutputUID)
+        await model.startRouting()
         #expect(hal.defaultOutputUID == OutputRestorer.virtualOutputUID)
+        model.stopRouting()
+        #expect(hal.defaultOutputUID == Self.speakers.uid)  // built-in, nothing saved
+    }
+
+    @Test func fallsBackToAnyOutputWhenNoBuiltIn() {
+        add(Self.dac, Self.virtualOutput, default: OutputRestorer.virtualOutputUID)
+        model.outputRestorer.leaveVirtualOutput()
+        #expect(hal.defaultOutputUID == Self.dac.uid)
+    }
+
+    @Test func launchMovesOffVirtualWhenNotRouting() {
+        add(Self.speakers, Self.virtualOutput, default: OutputRestorer.virtualOutputUID)
+        #expect(hal.defaultOutputUID == Self.speakers.uid)
     }
 
     @Test func excludedAppsDeviceWinsWhenSet() async {
@@ -135,14 +157,14 @@ final class OutputRestoreTests {
         add(Self.speakers, Self.gripA, Self.gripB, default: Self.gripB.uid)
         await model.startRouting()
         #expect(model.engine.state != .running)
-        #expect(hal.defaultOutputUID == Self.gripB.uid)
+        #expect(hal.defaultOutputUID == Self.speakers.uid)
     }
 
     @Test func quitRestoresThePreviousOutput() async {
         add(Self.speakers, Self.gripA, Self.gripB, default: Self.gripA.uid)
         await model.startRouting()
         NotificationCenter.default.post(name: NSApplication.willTerminateNotification, object: nil)
-        #expect(hal.defaultOutputUID == Self.gripA.uid)
+        #expect(hal.defaultOutputUID == Self.speakers.uid)
     }
 
     @Test func launchAfterACrashRestoresThePreviousOutput() {

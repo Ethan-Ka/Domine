@@ -43,7 +43,7 @@ final class OutputRestorer {
                            exclusionsActive: Bool = false) throws(Failure) {
         self.exclusionsActive = exclusionsActive
         let current = try currentDefaultUID()
-        if let current, !Self.isDomine(current) {
+        if let current, !Self.isDomine(current), current != Self.virtualOutputUID, !pair.contains(current) {
             store.previousOutputUID = current
         }
         if let current, pair.contains(current) || Self.isDomine(current)
@@ -86,8 +86,14 @@ final class OutputRestorer {
     /// of `enabled`; with no built-in output it falls back to the normal restore.
     func restore(enabled: Bool, preferBuiltIn: Bool = false) {
         stopGuarding()
-        guard store.outputNeedsRestore else { return }
-        store.outputNeedsRestore = false
+        if store.outputNeedsRestore {
+            store.outputNeedsRestore = false
+            restoreSaved(enabled: enabled, preferBuiltIn: preferBuiltIn)
+        }
+        leaveVirtualOutput()
+    }
+
+    private func restoreSaved(enabled: Bool, preferBuiltIn: Bool) {
         if preferBuiltIn,
            let builtIn = outputs().first(where: {
                $0.transportType == kAudioDeviceTransportTypeBuiltIn && $0.outputChannels > 0 }) {
@@ -101,7 +107,8 @@ final class OutputRestorer {
             return
         }
         guard enabled else { return }
-        guard let previous = store.previousOutputUID, isPresent(previous) else {
+        guard let previous = store.previousOutputUID, previous != Self.virtualOutputUID,
+              !Self.isDomine(previous), isPresent(previous) else {
             Self.log.info("Previous output is gone; leaving the default output alone")
             return
         }
@@ -114,11 +121,30 @@ final class OutputRestorer {
         }
     }
 
+    /// Leaving sound on the virtual output while Domine is off means silence,
+    /// so whenever routing is not active and the default is the virtual
+    /// output it moves: the saved previous output, else the built-in output,
+    /// else any present output. Independent of the restore setting.
+    func leaveVirtualOutput() {
+        guard let current = try? currentDefaultUID(), current == Self.virtualOutputUID else { return }
+        guard let target = Self.fallbackOutput(
+            pair: [], playThroughUID: nil, previousUID: store.previousOutputUID, outputs: outputs()) else {
+            Self.log.error("Default output is the virtual output and no other output exists")
+            return
+        }
+        do {
+            try setDefault(target.uid, reason: "Domine is not routing")
+        } catch {
+            Self.log.error("Could not leave the virtual output: \(String(describing: error), privacy: .public)")
+        }
+    }
+
     /// At launch: a saved previous output that was never restored means
     /// Domine did not stop cleanly. Call only while routing is not active.
     func recoverAfterCrash(enabled: Bool) {
-        guard store.outputNeedsRestore else { return }
-        Self.log.info("Routing did not stop cleanly last time; restoring the previous output")
+        if store.outputNeedsRestore {
+            Self.log.info("Routing did not stop cleanly last time; restoring the previous output")
+        }
         restore(enabled: enabled)
     }
 
