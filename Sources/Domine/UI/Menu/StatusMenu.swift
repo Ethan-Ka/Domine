@@ -65,6 +65,16 @@ struct StatusMenu: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 2)
 
+            HStack {
+                Text("Room")
+                Spacer()
+                RoomMenu(
+                    rooms: state.rooms, currentRoomID: state.currentRoomID,
+                    select: actions.selectRoom, save: actions.saveRoom, manage: actions.manageRooms)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 2)
+
             StatusMenuSeparator()
 
             Button { actions.swapSides() } label: {

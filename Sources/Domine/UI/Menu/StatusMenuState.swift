@@ -12,4 +12,6 @@ struct StatusMenuState: Equatable, Sendable {
     var preset: PairSettings.Preset? = .flat
     /// Auto-calibrate is offered only while routing.
     var isRouting = false
+    var rooms: [Room] = []
+    var currentRoomID: Room.ID?
 }

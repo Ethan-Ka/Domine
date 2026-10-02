@@ -16,6 +16,11 @@ struct MainContentView: View {
         .navigationTitle("Domine")
         .navigationSubtitle(state.statusLine)
         .toolbar {
+            ToolbarItem(placement: .navigation) {
+                RoomMenu(
+                    rooms: state.rooms, currentRoomID: state.currentRoomID,
+                    select: actions.selectRoom, save: actions.saveRoom, manage: actions.manageRooms)
+            }
             ToolbarItemGroup(placement: .primaryAction) {
                 MainToolbarControls(state: state, actions: actions)
             }
