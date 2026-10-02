@@ -35,6 +35,7 @@ final class EngineDiagnostics {
     private var overloadsAtLastSample = 0
     private var clockReadings: [AudioObjectID: AudioTimeStamp] = [:]
     /// Rates measured with AudioDeviceGetCurrentTime, by device, for tests.
+    /// Only the aggregate is measured while running.
     private(set) var lastMeasuredRates: [AudioObjectID: Double] = [:]
 
     /// Processor overloads reported on the aggregate since `start`.
@@ -157,10 +158,13 @@ final class EngineDiagnostics {
             let actual = read { () throws(HALError) in try self.hal.actualSampleRate(of: device.id) }
             let latency = read { () throws(HALError) in try self.hal.latency(of: device.id, scope: .output) }
             let buffer = read { () throws(HALError) in try self.hal.bufferFrameSize(of: device.id) }
-            let measured = measureClock(device.id)
+            // No measured clock here: a sub-device is not running as a
+            // device of its own, so AudioDeviceGetCurrentTime on it fails
+            // with kAudioHardwareNotRunningError. The aggregate's measured
+            // clock below is the one that counts.
             Self.log.info("""
                 Device \(device.label, privacy: .public) \(device.uid, privacy: .public): nominal \(Self.text(nominal), privacy: .public) Hz, \
-                actual \(Self.text(actual), privacy: .public) Hz, measured clock \(measured, privacy: .public), \
+                actual \(Self.text(actual), privacy: .public) Hz, \
                 buffer \(Self.text(buffer), privacy: .public) frames, output latency \(Self.text(latency), privacy: .public)
                 """)
         }
@@ -168,7 +172,8 @@ final class EngineDiagnostics {
     }
 
     /// The device's real rate since the previous reading, from
-    /// AudioDeviceGetCurrentTime (sample time over host time).
+    /// AudioDeviceGetCurrentTime (sample time over host time). Works only on
+    /// a running device: the aggregate, not its sub-devices.
     func measureClock(_ device: AudioObjectID) -> String {
         let now: AudioTimeStamp
         do {

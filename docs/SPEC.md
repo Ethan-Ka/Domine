@@ -139,6 +139,14 @@ Sample rate: never set the nominal sample rate (`kAudioDevicePropertyNominalSamp
 - Setting in General: "Switch back to the previous output" (on by default).
 - The previous output is also the default device used for excluded apps, unless the user picks another one (section 3b).
 
+### 4d. Signal quality
+
+Everything Domine controls is transparent; the Bluetooth link is the only lossy stage.
+- **Float32 end to end.** The tap, the aggregate's streams, and the kernel all carry 32-bit float. No integer conversion, no dither, no limiter or clipper on program audio.
+- **No sample-rate conversion when the rates match.** macOS mixes every app at the default output's rate, and the tap delivers at that rate. The aggregate runs at Device A's rate. Domine sets the default output to Device A's rate (section 4a), waits up to 1 s for the device to report the new rate before creating the tap, then checks the tap's format. If the tap still came up at the old rate, Domine waits for the rate to settle and rebuilds the tap once. At start the Engine log prints the whole chain (default output rate, tap rate, aggregate rate, each speaker's rate) and either "no sample-rate conversion" or "SRC at" followed by the stage. Drift compensation stays on for the tap and Device B at the highest quality (`kAudioAggregateDriftCompensationMaxQuality`); at matching rates it only trims clock drift of a few ppm.
+- **Bit-exact kernel at unity.** With trim gains 1.0, delay 0, no swap, the test tone and click test off, and not muted, each speaker gets exactly the input samples of its side, bit for bit, once any fade has finished (every fade steps an integer counter that ends exactly at full or zero, and the multiply is then skipped). The kernel never adds gain: trim gains above 1.0 are held at 1.0, and the tone, click, and mute crossfades are convex blends, so they cannot push the output past the larger of the program peak and the test signal's own level. The mono fallback, (L + R) / 2, is the only mixing. Unit tests check all of this with exact bit-pattern equality.
+- **AAC over Bluetooth is the one lossy stage.** macOS encodes each speaker's stream for Bluetooth (AAC at 44.1 kHz for the JBL Grip) and picks the codec itself; Domine cannot choose a lossless one.
+
 ## 5. Real-time render kernel (C)
 
 Lives in `Sources/DomineDSP/` as a small C target exposed to Swift through a module map.

@@ -1,5 +1,13 @@
 // Domine real-time render kernel. See include/DomineDSP.h for the contract.
 //
+// Transparency: at unity gain, zero delay, no swap, no tone, no click, and no
+// mute, every program sample is copied, never multiplied or blended. Every
+// fade (mute, tone, click) steps an integer counter that lands exactly on its
+// end value, at which point its multiply or blend is skipped altogether. The
+// only intended mixing is the mono fallback, (L + R) * 0.5. Nothing adds gain
+// above 1, and every crossfade is a convex blend, so no path can exceed the
+// larger of the program peak and the test signal's own amplitude.
+//
 // Everything reachable from domine_kernel_process and domine_kernel_ioproc is
 // real-time safe: no allocation, no locks, no logging, no I/O. Parameters
 // arrive through C11 atomics written by other threads; the render thread
@@ -116,8 +124,11 @@ static inline float bits_float(uint32_t u) {
     return f;
 }
 
+// Trim gains only ever attenuate: Domine never adds gain (SPEC section 4,
+// Signal quality), so anything above 1 is stored as exactly 1.
 static inline float sanitize_gain(float g) {
-    return (isfinite(g) && g > 0.0f) ? g : 0.0f;
+    if (!isfinite(g) || !(g > 0.0f)) return 0.0f;
+    return g < 1.0f ? g : 1.0f;
 }
 
 static uint32_t next_pow2(uint32_t v) {
@@ -492,8 +503,12 @@ static RenderResult render(DomineKernel *k,
         k->ringB[w] = srcB;
         k->ringWrite = (w + 1) & mask;
 
-        float outA = k->ringA[(w - delayA) & mask] * gainA;
-        float outB = k->ringB[(w - delayB) & mask] * gainB;
+        // Unity gain skips the multiply, so program audio passes bit for bit
+        // even where the CPU flushes subnormals to zero.
+        float outA = k->ringA[(w - delayA) & mask];
+        float outB = k->ringB[(w - delayB) & mask];
+        if (gainA != 1.0f) outA *= gainA;
+        if (gainB != 1.0f) outB *= gainB;
 
         // A new request takes over only once the current tone has faded out.
         if (k->toneLevel == 0 && k->playingToneSide != toneSide) {
