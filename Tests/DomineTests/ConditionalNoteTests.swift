@@ -66,6 +66,49 @@ final class ConditionalNoteTests {
         model.stopRouting()
     }
 
+    @Test func statusLineHasNoAccessibilityNoteWhenTrusted() async {
+        hal.add(Self.speakers)
+        hal.add(Self.gripA)
+        hal.add(Self.gripB)
+        system.trusted = true
+        model.start()
+        model.generalSettings.volumeKeysEnabled = true
+        await model.startRouting()
+        #expect(model.mainWindowState.statusLine == "Playing")
+        model.stopRouting()
+    }
+
+    @Test func statusLineHasNoAccessibilityNoteWithVirtualOutputDefault() async {
+        let virtual = FakeHAL.Device(
+            uid: OutputRestorer.virtualOutputUID, name: "Domine",
+            transportType: kAudioDeviceTransportTypeVirtual)
+        hal.add(Self.speakers)
+        hal.add(virtual)
+        hal.add(Self.gripA)
+        hal.add(Self.gripB)
+        hal.setDefault(uid: Self.speakers.uid)
+        model.start()
+        model.generalSettings.volumeKeysEnabled = true
+        await model.startRouting()
+        let id = try! hal.deviceID(forUID: OutputRestorer.virtualOutputUID)
+        model.virtualOutput = VirtualOutputLink(hal: hal, device: id)
+        #expect(!system.trusted)
+        #expect(model.mainWindowState.statusLine == "Playing")
+        model.stopRouting()
+    }
+
+    @Test func statusLineNotesAccessibilityOnUntrustedFallback() async {
+        hal.add(Self.speakers)
+        hal.add(Self.gripA)
+        hal.add(Self.gripB)
+        model.start()
+        model.generalSettings.volumeKeysEnabled = true
+        await model.startRouting()
+        #expect(model.virtualOutput == nil)
+        #expect(model.mainWindowState.statusLine == "Playing, volume keys need Accessibility")
+        model.stopRouting()
+    }
+
     @Test func trustIsPolledWhileKeysWaitEvenWhenRoutingIsOff() {
         #expect(model.trustPollTask == nil)
         model.generalSettings.volumeKeysEnabled = true
