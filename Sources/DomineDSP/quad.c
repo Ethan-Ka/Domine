@@ -21,6 +21,11 @@ struct DomineQuad {
     _Atomic uint32_t rearMode;
     _Atomic uint32_t rearTrimBits;
     _Atomic uint32_t peakBits[NPOS];
+    // IOProc layout, set before the device starts.
+    _Atomic uint32_t layoutFirst;
+    _Atomic uint32_t layoutOut[NPOS];
+    _Atomic uint32_t inputChannels;
+    _Atomic uint32_t inputNonInterleaved;
     uint32_t maxDelay;
 
     // Render thread state.
@@ -65,6 +70,10 @@ DomineQuad *domine_quad_create(double sampleRate, uint32_t maxFrames) {
         atomic_init(&q->delaySamples[i], 0);
         atomic_init(&q->peakBits[i], 0);
     }
+    atomic_init(&q->layoutFirst, 0);
+    atomic_init(&q->inputChannels, 0);
+    atomic_init(&q->inputNonInterleaved, 0);
+    for (int i = 0; i < NPOS; i++) atomic_init(&q->layoutOut[i], DOMINE_NO_DEVICE);
     atomic_init(&q->rearMode, DOMINE_REAR_MIRROR);
     atomic_init(&q->rearTrimBits, f2u(1.0f));
     for (int i = 0; i < NPOS; i++) {
@@ -158,20 +167,10 @@ static int map_out(AudioBufferList *abl, uint32_t flat, OutCh *o) {
     return 0;
 }
 
-void domine_quad_process(DomineQuad *q, const AudioBufferList *in, AudioBufferList *out,
-                         uint32_t frames, const uint32_t *out_offsets) {
-    if (q == NULL || out == NULL || out_offsets == NULL) return;
-
+static void quad_render(DomineQuad *q, InCh inL, InCh inR, AudioBufferList *out,
+                        uint32_t frames, const uint32_t *out_offsets) {
     for (uint32_t b = 0; b < out->mNumberBuffers; b++) {
         if (out->mBuffers[b].mData != NULL) memset(out->mBuffers[b].mData, 0, out->mBuffers[b].mDataByteSize);
-    }
-
-    InCh inL = { NULL, 1, 0 }, inR = inL;
-    if (in != NULL && in->mNumberBuffers > 0) {
-        const AudioBuffer *b0 = &in->mBuffers[0];
-        if (b0->mNumberChannels >= 2) { inL = in_channel(b0, 0); inR = in_channel(b0, 1); }
-        else if (in->mNumberBuffers >= 2) { inL = in_channel(b0, 0); inR = in_channel(&in->mBuffers[1], 0); }
-        else { inL = in_channel(b0, 0); inR = inL; }
     }
 
     // Presence for folding follows the offsets; writing follows the buffers.
@@ -254,4 +253,68 @@ void domine_quad_process(DomineQuad *q, const AudioBufferList *in, AudioBufferLi
     for (int p = 0; p < NPOS; p++) {
         atomic_store_explicit(&q->peakBits[p], f2u(peak[p]), memory_order_relaxed);
     }
+}
+
+// Same input rules as the stereo kernel: first buffer with 2+ channels is
+// interleaved stereo; else two buffers (unless the format says mono) are
+// deinterleaved stereo; else mono feeds both sides.
+static void quad_resolve(const AudioBuffer *buffers, uint32_t count, uint32_t formatChannels,
+                         InCh *l, InCh *r) {
+    InCh none = { NULL, 1, 0 };
+    *l = none; *r = none;
+    if (buffers == NULL || count == 0) return;
+    const AudioBuffer *b0 = &buffers[0];
+    if (b0->mNumberChannels >= 2) { *l = in_channel(b0, 0); *r = in_channel(b0, 1); }
+    else if (count >= 2 && formatChannels != 1) { *l = in_channel(b0, 0); *r = in_channel(&buffers[1], 0); }
+    else { *l = in_channel(b0, 0); *r = *l; }
+}
+
+void domine_quad_process(DomineQuad *q, const AudioBufferList *in, AudioBufferList *out,
+                         uint32_t frames, const uint32_t *out_offsets) {
+    if (q == NULL || out == NULL || out_offsets == NULL) return;
+    InCh inL, inR;
+    quad_resolve(in != NULL ? in->mBuffers : NULL, in != NULL ? in->mNumberBuffers : 0, 0, &inL, &inR);
+    quad_render(q, inL, inR, out, frames, out_offsets);
+}
+
+void domine_quad_set_layout(DomineQuad *q, uint32_t inFirstBuffer, const uint32_t *out_offsets) {
+    atomic_store_explicit(&q->layoutFirst, inFirstBuffer, memory_order_relaxed);
+    for (int i = 0; i < NPOS; i++)
+        atomic_store_explicit(&q->layoutOut[i], out_offsets[i], memory_order_relaxed);
+}
+
+void domine_quad_set_input_format(DomineQuad *q, uint32_t channelsPerFrame, int nonInterleaved) {
+    atomic_store_explicit(&q->inputChannels, channelsPerFrame, memory_order_relaxed);
+    atomic_store_explicit(&q->inputNonInterleaved, nonInterleaved ? 1 : 0, memory_order_relaxed);
+}
+
+OSStatus domine_quad_ioproc(AudioObjectID inDevice, const AudioTimeStamp *inNow,
+                            const AudioBufferList *inInputData, const AudioTimeStamp *inInputTime,
+                            AudioBufferList *outOutputData, const AudioTimeStamp *inOutputTime,
+                            void *inClientData) {
+    (void)inDevice; (void)inNow; (void)inInputTime; (void)inOutputTime;
+    DomineQuad *q = (DomineQuad *)inClientData;
+    if (q == NULL || outOutputData == NULL) return 0;
+    const uint32_t first = atomic_load_explicit(&q->layoutFirst, memory_order_relaxed);
+    const uint32_t fmt = atomic_load_explicit(&q->inputChannels, memory_order_relaxed);
+    uint32_t offsets[NPOS];
+    for (int i = 0; i < NPOS; i++) offsets[i] = atomic_load_explicit(&q->layoutOut[i], memory_order_relaxed);
+
+    uint32_t frames = 0;
+    for (uint32_t b = 0; b < outOutputData->mNumberBuffers; b++) {
+        const AudioBuffer *buf = &outOutputData->mBuffers[b];
+        if (buf->mNumberChannels == 0) continue;
+        const uint32_t n = buf->mDataByteSize / (uint32_t)(sizeof(float) * buf->mNumberChannels);
+        if (n > frames) frames = n;
+    }
+    const AudioBuffer *inBuffers = NULL;
+    uint32_t inCount = 0;
+    if (inInputData != NULL && first < inInputData->mNumberBuffers) {
+        inBuffers = inInputData->mBuffers + first;
+        inCount = inInputData->mNumberBuffers - first;
+    }
+    InCh inL, inR;
+    quad_resolve(inBuffers, inCount, fmt, &inL, &inR);
+    quad_render(q, inL, inR, outOutputData, frames, offsets);
+    return 0;
 }

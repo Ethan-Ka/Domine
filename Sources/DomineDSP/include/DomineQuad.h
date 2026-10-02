@@ -67,6 +67,22 @@ void domine_quad_process(DomineQuad *q,
                          uint32_t frames,
                          const uint32_t *out_offsets);
 
+/// IOProc layout (set before the device starts): index of the tap's first
+/// input buffer, the 4 output offsets (DOMINE_NO_DEVICE if absent), and the tap
+/// format (channels per frame, 0 unknown).
+void domine_quad_set_layout(DomineQuad *q, uint32_t inFirstBuffer, const uint32_t *out_offsets);
+void domine_quad_set_input_format(DomineQuad *q, uint32_t channelsPerFrame, int nonInterleaved);
+
+/// AudioDeviceIOProc for the quad kernel; client data is the DomineQuad. Same
+/// input-buffer handling as domine_kernel_ioproc. Always returns 0.
+OSStatus domine_quad_ioproc(AudioObjectID inDevice,
+                            const AudioTimeStamp *inNow,
+                            const AudioBufferList *inInputData,
+                            const AudioTimeStamp *inInputTime,
+                            AudioBufferList *outOutputData,
+                            const AudioTimeStamp *inOutputTime,
+                            void *_Nullable inClientData);
+
 /// Peak absolute value written to a position in the last process call.
 float domine_quad_peak(DomineQuad *q, int pos);
 

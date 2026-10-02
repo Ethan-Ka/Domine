@@ -192,4 +192,21 @@ struct QuadKernelTests {
         #expect(out.channel(2) == Self.right)
         #expect(out.channel(3) == Self.right)
     }
+
+    @Test func ioprocSkipsSubDeviceInputsAndUsesLayout() {
+        let q = domine_quad_create(48000, 256)!
+        defer { domine_quad_destroy(q) }
+        var offsets = Self.full
+        offsets.withUnsafeMutableBufferPointer { domine_quad_set_layout(q, 1, $0.baseAddress!) }
+        domine_quad_set_input_format(q, 2, 0)
+        // Buffer 0 is a sub-device input and must be ignored; buffer 1 is the tap.
+        let input = TestBufferList(channelsPerBuffer: [2, 2], frames: Self.frames, fill: 0.9)
+        input.setChannel(buffer: 1, channel: 0, Self.left)
+        input.setChannel(buffer: 1, channel: 1, Self.right)
+        let out = TestBufferList(channelsPerBuffer: [2, 2, 2, 2], frames: Self.frames)
+        var t = AudioTimeStamp()
+        #expect(domine_quad_ioproc(0, &t, input.pointer, &t, out.pointer, &t, UnsafeMutableRawPointer(q)) == 0)
+        let expected = [Self.left, Self.left, Self.right, Self.right, Self.left, Self.left, Self.right, Self.right]
+        for c in 0..<8 { #expect(out.channel(c) == expected[c]) }
+    }
 }
