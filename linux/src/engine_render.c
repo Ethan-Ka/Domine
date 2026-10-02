@@ -92,7 +92,8 @@ void dl_render_destroy(DLRender *r) {
 static void apply_locked(DLRender *r) {
     const uint32_t n = r->count;
     uint32_t presentCount = 0, last = DL_NO_SPEAKER;
-    float az[DL_MAX_SPEAKERS], dist[DL_MAX_SPEAKERS], delayMs[DL_MAX_SPEAKERS], distGain[DL_MAX_SPEAKERS];
+    float az[DL_MAX_SPEAKERS] = {0}, dist[DL_MAX_SPEAKERS] = {0};
+    float delayMs[DL_MAX_SPEAKERS] = {0}, distGain[DL_MAX_SPEAKERS] = {0};
     for (uint32_t i = 0; i < n; i++) {
         if (atomic_load_explicit(&r->present[i], memory_order_relaxed)) { presentCount++; last = i; }
         az[i] = r->speakers[i].azimuth;

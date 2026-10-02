@@ -12,8 +12,8 @@ struct AggregateLayout: Equatable, Sendable {
     var outAChannelOffset: Int? { outOffsets[0] }
     /// nil when the aggregate has no Device B (mono fallback).
     var outBChannelOffset: Int? { outOffsets.count > 1 ? outOffsets[1] : nil }
-    /// One flat channel offset per position (A, B, then rear left and right
-    /// in quad mode). nil when that position is absent.
+    /// One flat channel offset per position (A, B in stereo; one per speaker
+    /// in list order in surround). nil when that position is absent.
     let outOffsets: [Int?]
 
     init(inFirstBuffer: Int, tapBuffers: Int, outAChannelOffset: Int?, outBChannelOffset: Int?) {

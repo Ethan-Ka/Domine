@@ -46,6 +46,9 @@ void dl_engine_set_on_change(DLEngine *e, void (*on_change)(void *ctx), void *ct
 int dl_engine_start(DLEngine *e, const DLSpeaker *speakers, uint32_t count, char *err, uint32_t errLen);
 void dl_engine_stop(DLEngine *e);
 DLState dl_engine_state(DLEngine *e);
+/// Text explaining DL_ERROR (or which speakers are missing in DL_DEGRADED),
+/// "" when there is nothing to say. Added for the UI's status line.
+void dl_engine_error(DLEngine *e, char *out, uint32_t len);
 
 /// Live changes while playing (no restart): positions, trims, master volume
 /// (0...1, applied in the kernel as a gain on every speaker), stage width,

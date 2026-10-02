@@ -11,8 +11,8 @@
 // `target` frames before it starts (priming), zero-fills and primes again on
 // an underrun, and when the ring holds more than `high` frames it discards
 // the oldest frames down to `target`. Each correction is an audible glitch,
-// rare with a few ppm of drift (about one every 40 s at 50 ppm with the
-// default watermarks). Adaptive resampling per speaker is the follow-up.
+// rare with typical drift (at 50 ppm, 2.4 frames per second at 48 kHz,
+// one correction every few minutes with the default watermarks). Adaptive resampling per speaker is the follow-up.
 //
 // Post-kernel stages on the capture thread, in order:
 //   click test: a click on every present speaker, delayed by that speaker's
