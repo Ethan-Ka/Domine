@@ -28,6 +28,8 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
         /// Grip: no main element, channels 1 and 2 only. Empty means the
         /// device has no settable volume.
         var volumes: [AudioObjectPropertyElement: Float] = [1: 0.5, 2: 0.5]
+        /// `kAudioDevicePropertyDeviceIsAlive`. Change it with `setAlive`.
+        var isAlive = true
 
         var outputLayout: [Int] { outputStreams ?? (outputChannels > 0 ? [outputChannels] : []) }
     }
@@ -130,6 +132,19 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
         guard let removed else { return }
         fire(.isAlive(removed))
         fire(.devices)
+    }
+
+    /// Marks a device dead (or alive again) without removing it from the
+    /// device list, and notifies `.isAlive` listeners, like a Bluetooth
+    /// speaker that stops responding before the HAL drops it.
+    @MainActor
+    func setAlive(uid: String, _ alive: Bool) {
+        let id: AudioObjectID? = lock.withLock {
+            guard let id = devices.first(where: { $0.value.uid == uid })?.key else { return nil }
+            devices[id]?.isAlive = alive
+            return id
+        }
+        if let id { fire(.isAlive(id)) }
     }
 
     @MainActor
@@ -269,6 +284,9 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
     }
     func transportType(of device: AudioObjectID) throws(HALError) -> UInt32 {
         try self.device(device, kAudioDevicePropertyTransportType).transportType
+    }
+    func isAlive(_ device: AudioObjectID) throws(HALError) -> Bool {
+        try self.device(device, kAudioDevicePropertyDeviceIsAlive).isAlive
     }
 
     func streamChannels(of device: AudioObjectID, scope: StreamScope) throws(HALError) -> [Int] {

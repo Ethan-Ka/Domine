@@ -13,6 +13,12 @@ import os
 /// and store the layout in it, create the IOProc, start the device, log the
 /// signal chain. Any failure unwinds what was created, in reverse, and ends
 /// in `.error`.
+/// Speakers coming and going (SPEC section 7): while routing, the engine
+/// watches the device list and each speaker's IsAlive, by UID. When the set
+/// of present speakers changes it fades out over 50 ms, tears everything
+/// down, and builds a fresh tap and aggregate for the speakers that are
+/// left, fading back in: one speaker is `.degraded(.monoFallback)`, both
+/// are `.running`, none stops the engine (`onRoutingEnded`).
 /// Stop: stop the device, destroy the IOProc, the aggregate, the tap, and
 /// last the kernel, once no IOProc can call into it.
 @MainActor
@@ -44,6 +50,11 @@ final class Engine {
     var delayMs: Float = 0 { didSet { applyControls() } }
     /// Fades the output out (or back in) over 50 ms in the kernel.
     var muted = false { didSet { applyControls() } }
+    /// Called when the engine stops routing on its own: both speakers
+    /// disconnected, or a rebuild failed. The caller restores the output.
+    @ObservationIgnored var onRoutingEnded: (@MainActor () -> Void)?
+    /// The running speaker check, so tests can wait for it.
+    @ObservationIgnored private(set) var speakerCheck: Task<Void, Never>?
     let monoPerSpeaker = true
     /// Process objects the next tap leaves out besides Domine itself
     /// (SPEC 3b). Empty until excluded apps are resolved to processes.
@@ -72,6 +83,13 @@ final class Engine {
         /// What the tap delivered at start, to notice a change while running.
         var tapFormat: AudioStreamBasicDescription?
         var defaultOutputUID: String?
+        /// The speakers' device IDs in the aggregate; nil for one left out.
+        var speakerIDs = SpeakerIDs(a: nil, b: nil)
+    }
+
+    private struct SpeakerIDs: Equatable {
+        var a: AudioObjectID?
+        var b: AudioObjectID?
     }
 
     /// Kernel input format chosen at start (for tests and the log).
@@ -94,6 +112,8 @@ final class Engine {
         let id: AudioObjectID
         let output: [Int]
         let inputBuffers: Int
+        /// "A" or "B", for the log and diagnostics.
+        let label: String
     }
 
     private static let log = Logger(subsystem: "com.ethankawley.Domine", category: "Engine")
@@ -116,6 +136,18 @@ final class Engine {
     /// device cannot rebuild forever.
     @ObservationIgnored private var formatRebuilds = 0
     static let maxFormatRebuilds = 3
+    /// The kernel plays (L + R) / 2 because one speaker is left out.
+    @ObservationIgnored private var kernelMonoFallback = false
+    /// The kernel is fading out before a rebuild.
+    @ObservationIgnored private var fadingOut = false
+    @ObservationIgnored private var speakerCheckPending = false
+    /// Speakers a stereo rebuild failed for; not retried until they change.
+    @ObservationIgnored private var refusedSpeakerIDs: SpeakerIDs?
+    /// Waits out the kernel's fade before a rebuild. Tests replace it.
+    @ObservationIgnored private let fadeWait: @MainActor (Duration) async -> Void
+    /// How long a fade out before a rebuild is given: the kernel's 50 ms
+    /// ramp plus room for the IO cycle that plays its end.
+    static let rebuildFadeWait: Duration = .milliseconds(60)
 
     /// The aggregate may publish its streams a moment after creation, so the
     /// layout read is retried up to `layoutAttempts` times. A new default
@@ -123,7 +155,8 @@ final class Engine {
     /// `rateSettlePoll` apart (1 s in all by default).
     init(hal: any AudioHAL, layoutAttempts: Int = 10, layoutRetryDelay: Duration = .milliseconds(50),
          diagnosticsInterval: Duration = .seconds(2), formatCheckDelay: Duration = .milliseconds(300),
-         rateSettleAttempts: Int = 100, rateSettlePoll: Duration = .milliseconds(10)) {
+         rateSettleAttempts: Int = 100, rateSettlePoll: Duration = .milliseconds(10),
+         fadeWait: @escaping @MainActor (Duration) async -> Void = { try? await Task.sleep(for: $0) }) {
         self.hal = hal
         self.taps = TapController(hal: hal)
         self.layoutAttempts = max(1, layoutAttempts)
@@ -132,6 +165,7 @@ final class Engine {
         self.formatCheckDelay = formatCheckDelay
         self.rateSettleAttempts = max(1, rateSettleAttempts)
         self.rateSettlePoll = rateSettlePoll
+        self.fadeWait = fadeWait
     }
 
     // MARK: - Start and stop
@@ -139,7 +173,7 @@ final class Engine {
     func start(left uidA: String?, right uidB: String?) async {
         switch state {
         case .idle, .error: break
-        case .starting, .running, .stopping: return
+        case .starting, .running, .degraded, .stopping: return
         }
         idleReason = nil
         guard let uidA else { return refuse(.noLeftSpeaker) }
@@ -159,37 +193,65 @@ final class Engine {
 
         state = .starting
         generation &+= 1
+        refusedSpeakerIDs = nil
+        if let error = await build(uidA: uidA, uidB: uidB, ids: SpeakerIDs(a: idA, b: idB), fadeIn: false) {
+            state = .error(error.description)
+        }
+    }
+
+    /// Creates the tap, the aggregate, the kernel, and the IOProc for the
+    /// present speakers in `ids` (at least one), and ends in `.running`
+    /// (both) or `.degraded(.monoFallback)` (one). Bump `generation` first.
+    /// On failure it tears down what it made and returns the error without
+    /// changing `state`. A stop while it waits ends it quietly (nil).
+    /// `fadeIn` starts the kernel silent so it ramps up over 50 ms.
+    private func build(uidA: String, uidB: String, ids: SpeakerIDs, fadeIn: Bool) async -> EngineError? {
         let current = generation
         do throws(EngineError) {
-            let a = try inspect(uid: uidA, id: idA)
-            let b = try inspect(uid: uidB, id: idB)
-            matchSpeakerRates(a: a, b: b)
-            let targetRate = try? hal.nominalSampleRate(of: a.id)
-            if let targetRate, matchDefaultOutputRate(a: a, b: b, target: targetRate) {
+            var a: SubDevice?, b: SubDevice?
+            if let id = ids.a { a = try inspect(uid: uidA, id: id, label: "A") }
+            if let id = ids.b { b = try inspect(uid: uidB, id: id, label: "B") }
+            let present = [a, b].compactMap { $0 }
+            guard let main = present.first else { throw .kernelUnavailable }
+            if let a, let b { matchSpeakerRates(a: a, b: b) }
+            let targetRate = try? hal.nominalSampleRate(of: main.id)
+            if let targetRate, matchDefaultOutputRate(speakers: present, target: targetRate) {
                 // The tap takes the default output's rate when it is created,
                 // so wait for the new rate before creating it.
                 if !(await waitForDefaultOutputRate(targetRate)) {
                     Self.log.warning("Default output did not report \(targetRate, privacy: .public) Hz within the wait; creating the tap anyway")
                 }
-                guard current == generation else { return }
+                guard current == generation else { return nil }
             }
-            guard try await createTap(expectedRate: targetRate, generation: current) else { return }
-            try createAggregate(a: a, b: b)
+            guard try await createTap(expectedRate: targetRate, generation: current) else { return nil }
+            try createAggregate(present)
             guard let layout = try await readLayout(a: a, b: b, generation: current),
-                  current == generation else { return }
-            try startIO(layout: layout)
+                  current == generation else { return nil }
+            kernelMonoFallback = present.count == 1
+            try startIO(layout: layout, fadeIn: fadeIn)
             self.layout = layout
             speakers = (uidA, uidB)
-            state = .running
-            Self.log.info("Running: A \(a.uid, privacy: .public), B \(b.uid, privacy: .public), layout \(String(describing: layout), privacy: .public)")
-            logSignalChain(a: a, b: b)
-            startDiagnostics(a: a, b: b)
+            resources.speakerIDs = ids
+            if a == nil {
+                state = .degraded(.monoFallback(missing: .left))
+            } else if b == nil {
+                state = .degraded(.monoFallback(missing: .right))
+            } else {
+                state = .running
+            }
+            let summary = present.map { "\($0.label) \($0.uid)" }.joined(separator: ", ")
+            Self.log.info("\(self.kernelMonoFallback ? "Mono fallback" : "Running", privacy: .public): \(summary, privacy: .public), layout \(String(describing: layout), privacy: .public)")
+            logSignalChain(present)
+            startDiagnostics(present)
             watchFormat()
+            watchSpeakers()
+            return nil
         } catch {
-            guard current == generation else { return }
+            guard current == generation else { return nil }
             teardown()
-            state = .error(error.description)
+            layout = nil
             Self.log.error("Start failed: \(error.description, privacy: .public)")
+            return error
         }
     }
 
@@ -221,7 +283,7 @@ final class Engine {
 
     /// Reads a sub-device's streams. Refuses a Bluetooth device with input
     /// streams, because the aggregate would open that input (SPEC section 9).
-    private func inspect(uid: String, id: AudioObjectID) throws(EngineError) -> SubDevice {
+    private func inspect(uid: String, id: AudioObjectID, label: String) throws(EngineError) -> SubDevice {
         let (transport, input, output) = try EngineError.hal { () throws(HALError) in
             (try hal.transportType(of: id),
              try hal.streamChannels(of: id, scope: .input),
@@ -230,7 +292,7 @@ final class Engine {
         if OutputDevice.isBluetooth(transportType: transport) && !input.isEmpty {
             throw .bluetoothInput(uid: uid)
         }
-        return SubDevice(uid: uid, id: id, output: output, inputBuffers: input.count)
+        return SubDevice(uid: uid, id: id, output: output, inputBuffers: input.count, label: label)
     }
 
     /// The speakers keep the rate they report and Domine never sets it
@@ -283,9 +345,14 @@ final class Engine {
         return true
     }
 
-    private func createAggregate(a: SubDevice, b: SubDevice) throws(EngineError) {
-        guard let tap = resources.tap else { throw .kernelUnavailable }
-        let description = AggregateBuilder.description(uidA: a.uid, uidB: b.uid, tapUID: tap.uid)
+    /// The first present speaker is the main sub-device. A clock device
+    /// that is not in the aggregate falls back to that speaker.
+    private func createAggregate(_ present: [SubDevice]) throws(EngineError) {
+        guard let tap = resources.tap, let main = present.first else { throw .kernelUnavailable }
+        var clock = AggregateBuilder.clock
+        if case .device(let uid) = clock, !present.contains(where: { $0.uid == uid }) { clock = .leftSpeaker }
+        let description = AggregateBuilder.description(
+            uidA: main.uid, uidB: present.dropFirst().first?.uid, tapUID: tap.uid, clock: clock)
         EngineDiagnostics.logAggregateDescription(description)
         resources.aggregate = try EngineError.hal { () throws(HALError) in
             try hal.createAggregateDevice(description)
@@ -293,7 +360,7 @@ final class Engine {
     }
 
     /// Returns nil if a stop arrived while waiting.
-    private func readLayout(a: SubDevice, b: SubDevice, generation current: Int) async throws(EngineError) -> AggregateLayout? {
+    private func readLayout(a: SubDevice?, b: SubDevice?, generation current: Int) async throws(EngineError) -> AggregateLayout? {
         guard let aggregate = resources.aggregate else { return nil }
         var attempt = 1
         while true {
@@ -303,8 +370,8 @@ final class Engine {
             }
             do {
                 return try AggregateLayout.compute(
-                    aOutput: a.output, bOutput: b.output,
-                    subDeviceInputBuffers: a.inputBuffers + b.inputBuffers,
+                    aOutput: a?.output, bOutput: b?.output,
+                    subDeviceInputBuffers: (a?.inputBuffers ?? 0) + (b?.inputBuffers ?? 0),
                     aggregateOutput: output, aggregateInput: input)
             } catch {
                 if attempt >= layoutAttempts { throw error }
@@ -316,7 +383,7 @@ final class Engine {
         }
     }
 
-    private func startIO(layout: AggregateLayout) throws(EngineError) {
+    private func startIO(layout: AggregateLayout, fadeIn: Bool) throws(EngineError) {
         guard let aggregate = resources.aggregate else { throw .kernelUnavailable }
         let rate = try EngineError.hal { () throws(HALError) in try hal.nominalSampleRate(of: aggregate) }
         guard rate.isFinite, rate > 0 else { throw .invalidSampleRate(rate) }
@@ -325,12 +392,13 @@ final class Engine {
         domine_kernel_set_layout(
             kernel,
             UInt32(layout.inFirstBuffer),
-            UInt32(layout.outAChannelOffset),
+            layout.outAChannelOffset.map { UInt32($0) } ?? DOMINE_NO_DEVICE,
             layout.outBChannelOffset.map { UInt32($0) } ?? DOMINE_NO_DEVICE)
         let format = tapStreamFormat(aggregate: aggregate, layout: layout)
         domine_kernel_set_input_format(kernel, format.channels, format.nonInterleaved ? 1 : 0)
         inputFormat = format
         applyControls()
+        if fadeIn { domine_kernel_start_faded_out(kernel) }
 
         let proc = try EngineError.hal { () throws(HALError) in
             try hal.createIOProc(on: aggregate, proc: domine_kernel_ioproc, clientData: UnsafeMutableRawPointer(kernel))
@@ -377,10 +445,10 @@ final class Engine {
     /// not one of the speakers and runs at another rate than Device A
     /// (`target`), set it to `target` when it supports it, and remember the
     /// old rate. Returns whether it set the rate.
-    private func matchDefaultOutputRate(a: SubDevice, b: SubDevice, target: Double) -> Bool {
+    private func matchDefaultOutputRate(speakers: [SubDevice], target: Double) -> Bool {
         do throws(HALError) {
             let device = try hal.defaultOutputDevice()
-            guard device != kAudioObjectUnknown, device != a.id, device != b.id else { return false }
+            guard device != kAudioObjectUnknown, !speakers.contains(where: { $0.id == device }) else { return false }
             // Never set a Bluetooth device's rate (see matchSpeakerRates).
             guard !OutputDevice.isBluetooth(transportType: try hal.transportType(of: device)) else { return false }
             let uid = try hal.uid(of: device)
@@ -431,15 +499,15 @@ final class Engine {
     }
 
     /// Logs the rate at every stage and whether any of them converts.
-    private func logSignalChain(a: SubDevice, b: SubDevice) {
+    private func logSignalChain(_ present: [SubDevice]) {
         guard let rate = kernelSampleRate, let tapRate = resources.tapFormat?.mSampleRate else { return }
         let chain = SignalChain(
             sourceUID: currentDefaultOutputUID(),
             sourceRate: defaultOutputRate(),
             tapRate: tapRate,
             aggregateRate: rate,
-            speakers: [("A", a), ("B", b)].map { label, device in
-                SignalChain.Speaker(label: label, uid: device.uid, rate: try? hal.nominalSampleRate(of: device.id))
+            speakers: present.map { device in
+                SignalChain.Speaker(label: device.label, uid: device.uid, rate: try? hal.nominalSampleRate(of: device.id))
             })
         signalChain = chain
         if chain.isConversionFree {
@@ -463,12 +531,9 @@ final class Engine {
 
     // MARK: - Diagnostics and format watch
 
-    private func startDiagnostics(a: SubDevice, b: SubDevice) {
+    private func startDiagnostics(_ present: [SubDevice]) {
         guard let kernel = resources.kernel, let aggregate = resources.aggregate, let tap = resources.tap else { return }
-        let devices = [
-            EngineDiagnostics.Device(label: "A", uid: a.uid, id: a.id),
-            EngineDiagnostics.Device(label: "B", uid: b.uid, id: b.id),
-        ]
+        let devices = present.map { EngineDiagnostics.Device(label: $0.label, uid: $0.uid, id: $0.id) }
         EngineDiagnostics.logStartup(hal: hal, aggregate: aggregate, tap: tap, kernel: kernel, devices: devices)
         let diagnostics = EngineDiagnostics(
             hal: hal, kernel: kernel, aggregate: aggregate, devices: devices, tap: tap, interval: diagnosticsInterval)
@@ -485,9 +550,13 @@ final class Engine {
         if let id = try? hal.defaultOutputDevice(), id != kAudioObjectUnknown {
             properties.append(.nominalSampleRate(id))
         }
+        watch(properties) { [weak self] in self?.scheduleFormatCheck() }
+    }
+
+    private func watch(_ properties: [HALProperty], handler: @escaping @MainActor @Sendable () -> Void) {
         for property in properties {
             do {
-                let token = try hal.addListener(property) { [weak self] in self?.scheduleFormatCheck() }
+                let token = try hal.addListener(property, handler: handler)
                 resources.watchTokens.append(token)
             } catch {
                 Self.log.error("Could not watch \(String(describing: property), privacy: .public): \(error.description, privacy: .public)")
@@ -514,7 +583,7 @@ final class Engine {
     /// start. Returns whether it rebuilt.
     @discardableResult
     func checkFormat() async -> Bool {
-        guard state == .running, let tap = resources.tap, let speakers else { return false }
+        guard state.isRouting, let tap = resources.tap, let speakers else { return false }
         let defaultUID = currentDefaultOutputUID()
         let format: AudioStreamBasicDescription
         do {
@@ -535,6 +604,11 @@ final class Engine {
         }
         formatRebuilds += 1
         Self.log.info("Rebuilding: default output \(defaultUID ?? "none", privacy: .public), tap \(EngineDiagnostics.describe(format), privacy: .public)")
+        if state != .running {
+            // Mono fallback cannot go through start, which needs both speakers.
+            await rebuild(uidA: speakers.left, uidB: speakers.right, ids: resources.speakerIDs)
+            return true
+        }
         halt()
         await start(left: speakers.left, right: speakers.right)
         return true
@@ -544,6 +618,111 @@ final class Engine {
         a.mSampleRate == b.mSampleRate && a.mChannelsPerFrame == b.mChannelsPerFrame
             && a.mFormatFlags == b.mFormatFlags && a.mBytesPerFrame == b.mBytesPerFrame
             && a.mFormatID == b.mFormatID
+    }
+
+    // MARK: - Speakers coming and going
+
+    /// Listens for the device list and for the IsAlive of each speaker the
+    /// HAL lists, including a listed one that is not alive, so its return
+    /// is noticed too.
+    private func watchSpeakers() {
+        guard let speakers else { return }
+        var properties: [HALProperty] = [.devices]
+        for uid in [speakers.left, speakers.right] {
+            if let id = try? hal.deviceID(forUID: uid), id != kAudioObjectUnknown {
+                properties.append(.isAlive(id))
+            }
+        }
+        watch(properties) { [weak self] in self?.scheduleSpeakerCheck() }
+    }
+
+    /// Runs `checkSpeakers` now, or again after the check in progress.
+    private func scheduleSpeakerCheck() {
+        speakerCheckPending = true
+        guard speakerCheck == nil else { return }
+        speakerCheck = Task { [weak self] in await self?.runSpeakerChecks() }
+    }
+
+    /// A rebuild drops the listeners for a moment, so after one the speakers
+    /// are checked once more. Capped so a flapping device cannot loop.
+    private func runSpeakerChecks() async {
+        var rounds = 0
+        while speakerCheckPending, rounds < 8 {
+            speakerCheckPending = false
+            rounds += 1
+            if await checkSpeakers() { speakerCheckPending = true }
+        }
+        speakerCheck = nil
+    }
+
+    /// The speaker's current device ID if it is in the device list and
+    /// alive, else nil. Matched by UID, since IDs change on reconnect.
+    private func presentID(_ uid: String) -> AudioObjectID? {
+        guard let id = try? hal.deviceID(forUID: uid), id != kAudioObjectUnknown,
+              (try? hal.isAlive(id)) == true else { return nil }
+        return id
+    }
+
+    /// Compares the selected speakers with what the HAL reports and rebuilds
+    /// when the set of present speakers, or a speaker's device ID, changed
+    /// (SPEC section 7). Both gone stops the engine. Returns whether it
+    /// rebuilt or stopped.
+    @discardableResult
+    func checkSpeakers() async -> Bool {
+        guard state.isRouting, let speakers else { return false }
+        let ids = SpeakerIDs(a: presentID(speakers.left), b: presentID(speakers.right))
+        // A pair that just failed to build is not retried until something changes.
+        guard ids != resources.speakerIDs, ids != refusedSpeakerIDs else { return false }
+        refusedSpeakerIDs = nil
+        if ids.a == nil && ids.b == nil {
+            Self.log.warning("Both speakers disconnected; stopping")
+            stop()
+            idleReason = .speakersDisconnected
+            onRoutingEnded?()
+            return true
+        }
+        await rebuild(uidA: speakers.left, uidB: speakers.right, ids: ids)
+        return true
+    }
+
+    /// Fades out, tears everything down, and builds a fresh tap and
+    /// aggregate for the speakers in `ids`, fading in. If both speakers were
+    /// asked for and that fails, it falls back to the one that was playing.
+    private func rebuild(uidA: String, uidB: String, ids: SpeakerIDs) async {
+        let previous = resources.speakerIDs
+        await fadeOut()
+        guard state.isRouting, resources.speakerIDs == previous else { return }
+        Self.log.info("Rebuilding for speakers A \(ids.a.map { "\($0)" } ?? "missing", privacy: .public), B \(ids.b.map { "\($0)" } ?? "missing", privacy: .public)")
+        generation &+= 1
+        teardown()
+        layout = nil
+        guard var error = await build(uidA: uidA, uidB: uidB, ids: ids, fadeIn: true) else { return }
+        if ids.a != nil, ids.b != nil, previous.a == nil || previous.b == nil {
+            var single = previous
+            if let id = single.a { single.a = presentID(uidA) == id ? id : nil }
+            if let id = single.b { single.b = presentID(uidB) == id ? id : nil }
+            if single.a != nil || single.b != nil {
+                Self.log.warning("Stereo rebuild failed (\(error.description, privacy: .public)); staying in mono fallback")
+                generation &+= 1
+                guard let again = await build(uidA: uidA, uidB: uidB, ids: single, fadeIn: true) else {
+                    refusedSpeakerIDs = ids
+                    return
+                }
+                error = again
+            }
+        }
+        stop()
+        state = .error(error.description)
+        onRoutingEnded?()
+    }
+
+    /// Ramps the kernel to silence over its 50 ms fade and waits it out.
+    private func fadeOut() async {
+        guard let kernel = resources.kernel else { return }
+        fadingOut = true
+        defer { fadingOut = false }
+        domine_kernel_set_muted(kernel, 1)
+        await fadeWait(Self.rebuildFadeWait)
     }
 
     // MARK: - Teardown
@@ -601,7 +780,7 @@ final class Engine {
     /// Linear peaks the kernel last wrote to position A (Front Left device)
     /// and position B (Front Right device). Both 0 when not running.
     func peaks() -> (Float, Float) {
-        guard state == .running, let kernel = resources.kernel else { return (0, 0) }
+        guard state.isRouting, let kernel = resources.kernel else { return (0, 0) }
         return (domine_kernel_peak(kernel, 0), domine_kernel_peak(kernel, 1))
     }
 
@@ -623,11 +802,11 @@ final class Engine {
 
     private func applyControls() {
         guard let kernel = resources.kernel else { return }
-        domine_kernel_set_mode(kernel, monoPerSpeaker ? 1 : 0, swapSides ? 1 : 0, 0)
+        domine_kernel_set_mode(kernel, monoPerSpeaker ? 1 : 0, swapSides ? 1 : 0, kernelMonoFallback ? 1 : 0)
         domine_kernel_set_test_tone(kernel, testTone.rawValue)
         domine_kernel_set_click_test(kernel, clickTest ? 1 : 0)
         domine_kernel_set_gains(kernel, leftGain, rightGain)
         domine_kernel_set_delay_ms(kernel, delayMs)
-        domine_kernel_set_muted(kernel, muted ? 1 : 0)
+        domine_kernel_set_muted(kernel, muted || fadingOut ? 1 : 0)
     }
 }

@@ -114,6 +114,10 @@ final class CoreAudioHAL: AudioHAL {
         try readScalar(device, address(kAudioDevicePropertyTransportType), as: UInt32.self)
     }
 
+    func isAlive(_ device: AudioObjectID) throws(HALError) -> Bool {
+        try readScalar(device, address(kAudioDevicePropertyDeviceIsAlive), as: UInt32.self) != 0
+    }
+
     // MARK: - Hardware volume
 
     func volumeElements(of device: AudioObjectID) throws(HALError) -> [AudioObjectPropertyElement] {

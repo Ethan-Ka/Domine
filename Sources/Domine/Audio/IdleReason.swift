@@ -5,6 +5,8 @@ enum IdleReason: Equatable, Sendable {
     case leftMissing
     case rightMissing
     case sameSpeaker
+    /// Routing stopped because both speakers disconnected.
+    case speakersDisconnected
 
     var description: String {
         switch self {
@@ -13,6 +15,7 @@ enum IdleReason: Equatable, Sendable {
         case .leftMissing: "Left speaker is not connected"
         case .rightMissing: "Right speaker is not connected"
         case .sameSpeaker: "Left and right must be different speakers"
+        case .speakersDisconnected: "Both speakers disconnected"
         }
     }
 }
