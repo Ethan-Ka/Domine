@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build the Debug virtual output driver and install it into Core Audio's plug-in folder.
 # ./scripts/install-driver.sh [--dry-run]
-# Needs an admin password (sudo). Restarting coreaudiod drops all audio for a few seconds.
+# Asks for an admin password once (system dialog). Restarting coreaudiod drops all audio for a few seconds.
 # --dry-run prints the commands without running them.
 source "$(dirname "$0")/_common.sh"
 
@@ -32,12 +32,22 @@ if [ "$DRY_RUN" -eq 0 ] && [ ! -d "$DRIVER" ]; then
 fi
 run codesign --verify --strict "$DRIVER"
 
-run sudo mkdir -p "$HAL"
-run sudo rm -rf "$DEST"
-run sudo ditto "$DRIVER" "$DEST"
-run sudo chown -R root:wheel "$DEST"
+# Root cannot read ~/Documents, so stage the driver in /private/tmp as the user first.
+STAGE="/private/tmp/domine-driver-stage"
+run rm -rf "$STAGE"
+run mkdir -p "$STAGE"
+run ditto "$DRIVER" "$STAGE/Domine.driver"
 
-echo "Restarting coreaudiod. All audio stops for a few seconds."
-run sudo killall coreaudiod
+echo "Restarting coreaudiod. Audio drops for a few seconds."
+CMD="mkdir -p $HAL && rm -rf $DEST && ditto $STAGE/Domine.driver $DEST && chown -R root:wheel $DEST && killall coreaudiod"
+run osascript -e "do shell script \"$CMD\" with administrator privileges with prompt \"Domine needs to install its audio driver.\""
+run rm -rf "$STAGE"
 
-[ "$DRY_RUN" -eq 1 ] || echo "Installed $DEST. Audio MIDI Setup should now list \"Domine\"."
+[ "$DRY_RUN" -eq 1 ] && exit 0
+sleep 6
+if system_profiler SPAudioDataType 2>/dev/null | grep -q "Domine"; then
+    echo "Installed $DEST. The Domine virtual output (com.ethankawley.Domine.VirtualOutput) is present."
+else
+    echo "Installed, but the Domine device did not appear. Check: log show --last 5m --predicate 'process CONTAINS \"coreaudiod\"'" >&2
+    exit 1
+fi
