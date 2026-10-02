@@ -21,13 +21,12 @@
 // Demo voices are not rotated, so roll-call kicks sit on the speakers.
 //
 // Headroom: the pan gains G[source][speaker] of the program sources (0 to 3)
-// are VBAP gains (each source has unit power). Each speaker's program column
-// is then scaled by 1 / max(1, sum over program sources of |G|), so a speaker
-// never exceeds full scale for program inputs within +-1 (before effects).
-// The surround level scales the ambience signal, not G, so it does not enter
-// the sum. The matrix is recomputed at the start of every process call (orbit
-// phase at the end of the call) and ramps linearly from the previous one
-// across the call.
+// are VBAP gains (each source has unit power), times the surround level for
+// sources 2 and 3. Each speaker's program column is then scaled by
+// 1 / max(1, sum over program sources of |G|), so a speaker never exceeds
+// full scale for program inputs within +-1 (before effects). The matrix is
+// recomputed at the start of every process call (orbit phase at the end of
+// the call) and ramps linearly from the previous one across the call.
 //
 // Azimuth convention: degrees, 0 is straight ahead of the listener, positive
 // is clockwise seen from above (to the right), range (-180, 180]. Any finite

@@ -532,6 +532,11 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
                                   -(double)DOMINE_SURROUND_REAR_AZ, (double)DOMINE_SURROUND_REAR_AZ };
     const int nsrc = nPresent >= 3 ? NPROG : 2;
     for (int src = 0; src < nsrc; src++) pan_source(&pan, srcAz[src] + field, gT[src]);
+    // The surround level is part of the ambience gains, so it ramps with the
+    // matrix and a lowered level frees headroom for the direct sources.
+    if (nsrc > 2 && level != 1.0f)
+        for (int src = 2; src < nsrc; src++)
+            for (uint32_t k = 0; k < n; k++) gT[src][k] *= level;
     for (uint32_t k = 0; k < n; k++) {
         float sum = 0.0f;
         for (int src = 0; src < nsrc; src++) sum += fabsf(gT[src][k]);
@@ -600,7 +605,6 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
         else { L = read_in(&inL, f); R = read_in(&inR, f); }
         float rl, rr;
         domine_spatial_tick(s->spatial, L, R, &rl, &rr); // always, so its state stays warm
-        if (level != 1.0f) { rl *= level; rr *= level; }
         const float src[NPROG] = { L, R, rl, rr };
 
         // Demo voices and the program/demo crossfade.
