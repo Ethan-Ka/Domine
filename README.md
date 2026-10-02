@@ -28,7 +28,9 @@ Status: in development. Progress is tracked in [the milestones](docs/SPEC.md#10-
 | `./scripts/xcode.sh` | Open the project in Xcode for breakpoints |
 | `./scripts/reset-permissions.sh` | Forget the audio capture and microphone grants so macOS asks again |
 | `./scripts/clean.sh` | Delete `build/` and the generated project |
-| `./scripts/release.sh` | Archive, Developer ID sign, notarize, and staple into `build/release/` (see [Releasing](#releasing)) |
+| `./scripts/install-driver.sh` | Build and install the virtual output driver, then restart coreaudiod (needs sudo) |
+| `./scripts/uninstall-driver.sh` | Remove the virtual output driver and restart coreaudiod (needs sudo) |
+| `./scripts/release.sh` | Archive, Developer ID sign the app and driver, notarize, and staple into `build/release/` (see [Releasing](#releasing)) |
 
 A typical loop: edit, `./scripts/test.sh`, then `./scripts/run.sh --logs` to try it.
 
@@ -42,6 +44,21 @@ The same commands without the scripts:
 xcodegen generate
 xcodebuild -scheme Domine -configuration Debug -destination 'platform=macOS' build
 xcodebuild -scheme Domine -destination 'platform=macOS' test
+```
+
+## Virtual output
+
+Optional. `Domine.driver` adds an output device named "Domine" that discards its audio. While Domine routes, it makes this device the system output, so the volume keys and the macOS volume overlay work as usual and Domine applies that volume to both speakers. Without it, Domine falls back to its own volume key handling (Settings > General).
+
+```sh
+./scripts/install-driver.sh      # add --dry-run to print the commands
+./scripts/uninstall-driver.sh
+```
+
+Both ask for an admin password and restart coreaudiod, so all audio stops for a few seconds. After installing, Audio MIDI Setup lists "Domine". If it does not appear, check the driver host's log for a signature error:
+
+```sh
+log show --last 5m --predicate 'process CONTAINS "Core Audio Driver"'
 ```
 
 ## Releasing
@@ -61,7 +78,7 @@ Each release:
 DEVELOPMENT_TEAM=TEAMID NOTARY_PROFILE=NAME ./scripts/release.sh
 ```
 
-The stapled app is `build/release/export/Domine.app` and the zip to distribute is `build/release/Domine.zip`. Add `--dry-run` to print the commands without running them.
+The stapled app and the signed driver are in `build/release/dist/`, and the zip to distribute (both together) is `build/release/Domine.zip`. Add `--dry-run` to print the commands without running them.
 
 ## Using two JBL Grips
 
