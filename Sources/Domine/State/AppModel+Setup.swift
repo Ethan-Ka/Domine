@@ -1,8 +1,17 @@
+import CoreAudio
+
 /// Replaying the first-run checklist and its prompts from Settings > General.
 extension AppModel {
     /// Output devices named "JBL Grip" in the catalog right now.
     var connectedGripCount: Int {
         catalog.outputs.filter { $0.name == DeviceCatalog.gripName }.count
+    }
+
+    /// Reading `catalog.outputs` ties this to device list changes.
+    var virtualOutputInstalled: Bool {
+        _ = catalog.outputs
+        guard let id = try? hal.deviceID(forUID: OutputRestorer.virtualOutputUID) else { return false }
+        return id != kAudioObjectUnknown
     }
 
     /// Reads Accessibility trust fresh on every render. When it disagrees
@@ -18,7 +27,8 @@ extension AppModel {
             accessibilityGranted: trusted,
             accessibilityLikelyStale: accessibilityLikelyStale && !trusted,
             connectedGrips: connectedGripCount,
-            loginItemNeedsApproval: loginItemNeedsApproval)
+            loginItemNeedsApproval: loginItemNeedsApproval,
+            virtualOutputInstalled: virtualOutputInstalled)
     }
 
     /// `showMainWindow` brings the main window forward; it needs the SwiftUI
@@ -37,7 +47,8 @@ extension AppModel {
             grantAccessibility: { [weak self] in self?.grantAccessibility() },
             revealApp: { [weak self] in self?.revealAppInFinder() },
             openBluetoothSettings: { [weak self] in self?.services.openURL(SystemServices.bluetoothSettingsURL) },
-            openLoginItems: { [weak self] in self?.services.openLoginItemsSettings() })
+            openLoginItems: { [weak self] in self?.services.openLoginItemsSettings() },
+            showInstallSteps: { [weak self] in self?.services.openURL(SystemServices.virtualOutputInstallURL) })
     }
 
     /// Clears the first-run flag and presents the checklist again.

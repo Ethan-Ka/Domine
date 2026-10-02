@@ -28,6 +28,7 @@ struct SystemServices: Sendable {
     /// Where sleep and wake notifications arrive. Tests pass their own center.
     var sleepWakeCenter: NotificationCenter = NSWorkspace.shared.notificationCenter
 
+    static let virtualOutputInstallURL = URL(string: "https://github.com/Ethan-Ka/Domine#virtual-output")!
     static let bluetoothSettingsURL = URL(string: "x-apple.systempreferences:com.apple.Bluetooth")!
     /// Privacy & Security > Screen & System Audio Recording. On macOS 15 and
     /// later its "System Audio Recording Only" list holds process-tap apps.

@@ -10,4 +10,5 @@ struct SetupActions {
     var revealApp: @MainActor () -> Void = {}
     var openBluetoothSettings: @MainActor () -> Void = {}
     var openLoginItems: @MainActor () -> Void = {}
+    var showInstallSteps: @MainActor () -> Void = {}
 }
