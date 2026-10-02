@@ -5,7 +5,8 @@ import Testing
 struct RecorderTests {
     func feed(_ r: OpaquePointer, _ input: TestBufferList) {
         var now = AudioTimeStamp(), t = AudioTimeStamp(), o = AudioTimeStamp()
-        _ = domine_recorder_ioproc(0, &now, input.pointer, &t, nil, &o, UnsafeMutableRawPointer(r))
+        var output = AudioBufferList()
+        _ = domine_recorder_ioproc(0, &now, input.pointer, &t, &output, &o, UnsafeMutableRawPointer(r))
     }
 
     func contents(_ r: OpaquePointer) -> [Float] {
