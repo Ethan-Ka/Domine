@@ -114,7 +114,9 @@ final class AppModel {
     @ObservationIgnored var isSettingsVisible = false
     /// How often trust is re-read while a "not granted" note shows.
     @ObservationIgnored var trustPollInterval: Duration = .seconds(2)
-    @ObservationIgnored private let hal: any AudioHAL
+    @ObservationIgnored let hal: any AudioHAL
+    /// Follows the Domine virtual output's volume and mute (AppModel+VirtualOutput).
+    @ObservationIgnored var virtualOutput: VirtualOutputLink?
 
     init(hal: any AudioHAL = CoreAudioHAL(), defaults: UserDefaults = .standard,
          services: SystemServices = .live) {
@@ -321,6 +323,7 @@ final class AppModel {
                          balance: s.balance, masterVolume: s.masterVolume)
         guard s != pairSettings else { return }
         pairSettings = s
+        mirrorMasterToVirtualOutput()
         if let left = leftUID, let right = rightUID, left != right {
             store.setPairSettings(s, leftUID: left, rightUID: right)
         }
@@ -419,7 +422,7 @@ final class AppModel {
             meters.stop()
         }
         if engine.state != .running && engine.clickTest { engine.clickTest = false }
-        updateVolumeKeyTap()
+        syncVirtualOutput()
     }
 
     private func observeCatalog() {

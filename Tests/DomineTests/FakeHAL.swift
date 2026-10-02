@@ -28,6 +28,8 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
         /// Grip: no main element, channels 1 and 2 only. Empty means the
         /// device has no settable volume.
         var volumes: [AudioObjectPropertyElement: Float] = [1: 0.5, 2: 0.5]
+        /// Output mute state; nil means the device has no mute control.
+        var mute: Bool? = nil
 
         var outputLayout: [Int] { outputStreams ?? (outputChannels > 0 ? [outputChannels] : []) }
     }
@@ -71,6 +73,7 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
     private var aggregateStreamReads = 0
     private var _volumeWrites: [VolumeWrite] = []
     private var _defaultOutputWrites: [String] = []
+    private var _muteWrites: [Bool] = []
 
     struct VolumeWrite: Equatable {
         let uid: String
@@ -167,6 +170,20 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
     /// The device's volume on each element, keyed by element.
     func volumes(uid: String) -> [AudioObjectPropertyElement: Float] {
         lock.withLock { devices.values.first { $0.uid == uid }?.volumes ?? [:] }
+    }
+
+    /// Every mute write Domine made, in order.
+    var muteWrites: [Bool] { lock.withLock { _muteWrites } }
+
+    /// Changes a device's mute from outside Domine, like the mute key.
+    @MainActor
+    func pressMute(uid: String, to muted: Bool) {
+        let id: AudioObjectID? = lock.withLock {
+            guard let id = devices.first(where: { $0.value.uid == uid })?.key else { return nil }
+            devices[id]?.mute = muted
+            return id
+        }
+        if let id { fire(.mute(id)) }
     }
 
     /// Every volume write Domine made, in order.
@@ -417,6 +434,21 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
             _volumeWrites.append(VolumeWrite(uid: d.uid, element: element, volume: volume))
         }
         MainActor.assumeIsolated { fire(.volume(device, element: element)) }
+    }
+
+    func isMuted(of device: AudioObjectID) throws(HALError) -> Bool? {
+        try self.device(device, kAudioDevicePropertyMute).mute
+    }
+
+    func setMuted(_ muted: Bool, of device: AudioObjectID) throws(HALError) {
+        try locked { () throws(HALError) in
+            guard let d = devices[device], d.mute != nil else {
+                throw HALError(kAudioHardwareUnknownPropertyError, "AudioObjectSetPropertyData", selector: kAudioDevicePropertyMute)
+            }
+            devices[device]?.mute = muted
+            _muteWrites.append(muted)
+        }
+        MainActor.assumeIsolated { fire(.mute(device)) }
     }
 
     func defaultOutputDevice() throws(HALError) -> AudioObjectID { lock.withLock { defaultOutput } }
