@@ -49,8 +49,8 @@ final class AppModel {
     private(set) var pairSettings = PairSettings()
 
     /// Saved speaker setups. `currentRoomID` is the one matching the current setup.
-    private(set) var rooms: [Room] = []
-    private(set) var currentRoomID: UUID?
+    var rooms: [Room] = []
+    var currentRoomID: UUID?
     var showsSaveRoom = false
     var showsManageRooms = false
 
