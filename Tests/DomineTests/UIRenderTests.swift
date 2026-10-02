@@ -19,14 +19,24 @@ struct UIRenderTests {
         try renderWindow(MainContentView(state: SampleStates.playing), name: "main-playing")
     }
 
-    @Test func mainWindowQuad() throws {
-        try renderWindow(MainContentView(state: SampleStates.quad), name: "main-quad")
+    @Test func mainWindowSurround() throws {
+        try renderWindow(MainContentView(state: SampleStates.surround), name: "main-surround")
     }
 
-    @Test func mainWindowQuadSpatial() throws {
-        var state = SampleStates.quad
-        state.rearMode = .spatial
-        try renderWindow(MainContentView(state: state), name: "main-quad-spatial")
+    @Test func mainWindowSurroundDemo() throws {
+        try renderWindow(MainContentView(state: SampleStates.surroundDemo), name: "main-surround-demo")
+    }
+
+    @Test func mainWindowStereoDemo() throws {
+        var state = SampleStates.playing
+        state.demo = DemoState(isPlaying: true, azimuth: -90, sectionTitle: "Ping-pong")
+        try renderWindow(MainContentView(state: state), name: "main-stereo-demo")
+    }
+
+    @Test func mainWindowSurroundEmpty() throws {
+        var state = SampleStates.surround
+        state.speakers = []
+        try renderWindow(MainContentView(state: state), name: "main-surround-empty")
     }
 
     @Test func mainWindowMonoFallback() throws {
@@ -49,6 +59,14 @@ struct UIRenderTests {
 
     @Test func assignSheet() throws {
         try renderView(AssignSheet(state: SampleStates.assign), name: "assign")
+    }
+
+    @Test func assignSheetSurroundAdd() throws {
+        try renderView(AssignSheet(state: SampleStates.assignSurroundAdd), name: "assign-surround-add")
+    }
+
+    @Test func tuningSheetDemo() throws {
+        try renderView(TuningSheet(state: SampleStates.tuningDemo), name: "tuning-demo")
     }
 
     @Test func tuningSheet() throws {

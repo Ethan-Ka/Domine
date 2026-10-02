@@ -35,7 +35,8 @@ extension AppModel {
             surround: SurroundControls(
                 width: Double(settings.width),
                 level: Double(settings.surroundLevel),
-                orbitRate: Double(settings.orbitRate),
+                // The model counts degrees per second; the slider turns.
+                orbitRate: Double(settings.orbitRate) / 360,
                 rotation: Double(settings.rotation),
                 showsBluetoothWarning: showsBluetoothBandwidthWarning),
             canAddSurroundSpeaker: surroundSpeakers.count < SurroundSpeaker.maxCount,
@@ -70,7 +71,7 @@ extension AppModel {
             applySurroundPreset: { [weak self] in self?.applySurroundPreset($0) },
             setSurroundWidth: { [weak self] in self?.setSurroundWidth(Float($0)) },
             setSurroundLevel: { [weak self] in self?.setSurroundLevel(Float($0)) },
-            setOrbitRate: { [weak self] in self?.setOrbitRate(Float($0)) },
+            setOrbitRate: { [weak self] in self?.setOrbitRate(Float($0 * 360)) },
             setSurroundRotation: { [weak self] in self?.setSurroundRotation(Float($0)) },
             toggleDemo: { [weak self] in self?.toggleDemo() },
             selectRoom: { [weak self] in self?.selectRoom($0) },

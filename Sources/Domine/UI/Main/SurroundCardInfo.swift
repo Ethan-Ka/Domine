@@ -26,7 +26,7 @@ struct SurroundCardInfo: Equatable, Sendable {
         switch magnitude {
         case ..<15: return "Center"
         case ..<60: return "Front \(side)"
-        case ..<120: return "Side \(side)"
+        case ..<100: return "Side \(side)"
         case ..<165: return "Rear \(side)"
         default: return "Rear Center"
         }
