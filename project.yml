@@ -30,6 +30,11 @@ targets:
     dependencies:
       - target: DomineDSP
       - package: Sparkle
+    # Hardened runtime blocks the microphone without this (auto-calibration).
+    entitlements:
+      path: Sources/Domine/Domine.entitlements
+      properties:
+        com.apple.security.device.audio-input: true
     info:
       path: Sources/Domine/Info.plist
       properties:
@@ -37,6 +42,7 @@ targets:
         CFBundleShortVersionString: "0.1"
         CFBundleVersion: "1"
         LSApplicationCategoryType: public.app-category.music
+        NSMicrophoneUsageDescription: Domine listens to its own test sounds through the built-in microphone to line up the two speakers.
         NSAudioCaptureUsageDescription: Domine captures system audio to send the left channel to one speaker and the right channel to another.
         # Sparkle updates (SPEC 8c). Both values come from the build settings below.
         SUFeedURL: $(SPARKLE_FEED_URL)

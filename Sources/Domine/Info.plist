@@ -24,6 +24,8 @@
 	<string>public.app-category.music</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>Domine captures system audio to send the left channel to one speaker and the right channel to another.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Domine listens to its own test sounds through the built-in microphone to line up the two speakers.</string>
 	<key>SUEnableInstallerLauncherService</key>
 	<true/>
 	<key>SUFeedURL</key>
