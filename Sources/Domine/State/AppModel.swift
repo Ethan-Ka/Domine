@@ -105,6 +105,8 @@ final class AppModel {
     @ObservationIgnored private(set) var knownNames: [String: String] = [:]
     @ObservationIgnored var toneTask: Task<Void, Never>?
     @ObservationIgnored let sleepState = SleepState()
+    @ObservationIgnored private var hasStarted = false
+    @ObservationIgnored private var isStartingRouting = false
     @ObservationIgnored private var terminationObserver: (any NSObjectProtocol)?
 
     /// The main window is closed and routing goes on, with a menu bar item
@@ -187,7 +189,11 @@ final class AppModel {
         appAudio.onRefresh = { [weak self] in self?.applyAppVolumesToEngine() }
     }
 
+    /// Runs once per process. A reopened window must never repeat this: the
+    /// stale-aggregate cleanup would destroy the running aggregate.
     func start() {
+        guard !hasStarted else { return }
+        hasStarted = true
         StaleAggregateCleaner.clean(hal: hal)
         if engine.state.isActive {
             _ = exclusionResolver.start(exclusions: store.exclusions)
@@ -353,7 +359,9 @@ final class AppModel {
     /// and starts the engine. A start that does not end up routing puts the
     /// previous output back.
     func startRouting() async {
-        guard !engine.state.isActive else { return }
+        guard !engine.state.isActive, !isStartingRouting else { return }
+        isStartingRouting = true
+        defer { isStartingRouting = false }
         let quad = quadRouteUIDs
         tones.stop()
         routingRefusal = nil

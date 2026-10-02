@@ -275,6 +275,23 @@ final class BackgroundModeTests {
         #expect(model.engine.state == .idle)
         #expect(model.userTurnedRoutingOff)
     }
+
+    @Test func reopeningTheWindowNeverStartsASecondEngine() async {
+        await routeAndClose()
+        let taps = hal.liveTapCount, aggs = hal.liveAggregateCount, procs = hal.liveIOProcCount
+        #expect(aggs == 1 && procs == 1)
+        model.start()
+        model.start()
+        model.showMainWindow()
+        model.leaveBackground()
+        async let a: Void = model.startRouting()
+        async let b: Void = model.startRouting()
+        _ = await (a, b)
+        #expect(model.engine.state == .running)
+        #expect(hal.liveTapCount == taps)
+        #expect(hal.liveAggregateCount == aggs)
+        #expect(hal.liveIOProcCount == procs)
+    }
 }
 
 /// Reopening from the menu bar is ordered and reuses the one main window.
