@@ -3,22 +3,20 @@ extension AppModel {
     static let assignToneDuration: Duration = .milliseconds(1500)
 
     func openAssign(_ position: SpeakerPosition) {
-        guard position.isFront else { return }
+        guard position.isFront || routingMode == .quad else { return }
         assignSelection = uid(at: position)
         assignPosition = position
     }
 
-    /// Puts `uid` at a front position. Picking the device that is on the
-    /// other side swaps the two.
+    /// Puts `uid` at a position. Picking a device that is already at another
+    /// position swaps the two.
     func assign(_ uid: String, to position: SpeakerPosition) {
-        switch position {
-        case .frontLeft:
-            setSpeakers(left: uid, right: uid == rightUID ? leftUID : rightUID)
-        case .frontRight:
-            setSpeakers(left: uid == leftUID ? rightUID : leftUID, right: uid)
-        case .rearLeft, .rearRight:
-            break
-        }
+        var slots = SpeakerPosition.allCases.map { self.uid(at: $0) }
+        let index = SpeakerPosition.allCases.firstIndex(of: position)!
+        if let from = slots.firstIndex(of: uid) { slots[from] = slots[index] }
+        slots[index] = uid
+        setSpeakers(left: slots[0], right: slots[1])
+        setRear(left: slots[2], right: slots[3])
     }
 
     /// Any connected output can play its identification tone.
@@ -38,11 +36,11 @@ extension AppModel {
     }
 
     func assignSheetState(for position: SpeakerPosition) -> AssignSheetState {
-        let other: SpeakerPosition = position == .frontLeft ? .frontRight : .frontLeft
-        let otherUID = uid(at: other)
         let rows = catalog.outputs.map { device in
             var details = [device.transportName]
-            if device.uid == otherUID { details.append("In use as \(other.title)") }
+            if let other = SpeakerPosition.allCases.first(where: { $0 != position && uid(at: $0) == device.uid }) {
+                details.append("In use as \(other.title)")
+            }
             return AssignRow(
                 uid: device.uid, name: device.name, suffix: device.uidSuffix,
                 details: details, isSelected: device.uid == assignSelection,

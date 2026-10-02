@@ -9,7 +9,7 @@ final class SettingsStore {
     nonisolated static let keyPrefix = "Domine."
 
     private enum Key: String {
-        case lastLeftUID, lastRightUID
+        case lastLeftUID, lastRightUID, lastRearLeftUID, lastRearRightUID, routingMode
         case volumeKeysEnabled, restorePreviousOutput, closeBehavior, startWhenBothConnect
         case previousOutputUID, outputNeedsRestore, excludedAppsPlayThroughUID, exclusions
         case hasCompletedWelcome, audioCaptureWorking, audioCaptureSignature
@@ -65,6 +65,33 @@ final class SettingsStore {
     var lastRightUID: String? {
         get { string(.lastRightUID) }
         set { set(newValue, .lastRightUID) }
+    }
+
+    var lastRearLeftUID: String? {
+        get { string(.lastRearLeftUID) }
+        set { set(newValue, .lastRearLeftUID) }
+    }
+
+    var lastRearRightUID: String? {
+        get { string(.lastRearRightUID) }
+        set { set(newValue, .lastRearRightUID) }
+    }
+
+    /// "stereo" or "quad". Stereo by default.
+    var routingMode: RoutingMode {
+        get { string(.routingMode).flatMap(RoutingMode.init(rawValue:)) ?? .stereo }
+        set { set(newValue.rawValue, .routingMode) }
+    }
+
+    /// Quad tuning for a set of four speakers; defaults when unknown or corrupt.
+    func quadSettings(uids: [String]) -> QuadSettings {
+        defaults.data(forKey: QuadSettings.storageKey(uids: uids))
+            .flatMap { try? JSONDecoder().decode(QuadSettings.self, from: $0) } ?? QuadSettings()
+    }
+
+    func setQuadSettings(_ settings: QuadSettings, uids: [String]) {
+        guard let data = try? JSONEncoder().encode(settings) else { return }
+        defaults.set(data, forKey: QuadSettings.storageKey(uids: uids))
     }
 
     /// SPEC section 4b. Off by default.

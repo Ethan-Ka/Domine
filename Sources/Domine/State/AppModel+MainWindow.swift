@@ -1,5 +1,6 @@
 /// Main window state and actions (docs/mockups/Main.dc.html).
 extension AppModel {
+    static let quadNotReadyMessage = "Quad playback is not ready yet"
     static let routingErrorMessage = "Could not start routing"
     nonisolated static let gripPairingHint = "Only one JBL Grip found. Turn off stereo pairing in the JBL Portable app."
 
@@ -13,13 +14,10 @@ extension AppModel {
         MainWindowState(
             statusLine: statusLine,
             isOn: engine.state.isActive,
+            mode: routingMode,
+            isQuadAvailable: isQuadAvailable,
             canSwap: true,
-            speakers: [
-                card(for: .frontLeft),
-                card(for: .frontRight),
-                .placeholder(.rearLeft),
-                .placeholder(.rearRight),
-            ],
+            speakers: SpeakerPosition.positions(in: routingMode).map { card(for: $0) },
             masterVolume: Double(pairSettings.masterVolume),
             isMuted: isMuted,
             testToneSide: testToneSide,
@@ -31,7 +29,7 @@ extension AppModel {
     var mainWindowActions: MainWindowActions {
         MainWindowActions(
             setOn: { [weak self] in self?.setRouting($0) },
-            setMode: { _ in },
+            setMode: { [weak self] in self?.setRoutingMode($0) },
             swap: { [weak self] in self?.swapSides() },
             setMasterVolume: { [weak self] volume in
                 // Moving the slider unmutes, as the system volume slider does.
@@ -57,6 +55,7 @@ extension AppModel {
 
     /// One short phrase for the window subtitle.
     var statusLine: String {
+        if routingMode == .quad, !Self.engineSupportsQuad { return Self.quadNotReadyMessage }
         switch engine.state {
         case .idle:
             if leftUID == nil || rightUID == nil { return "Choose two speakers" }
@@ -64,6 +63,7 @@ extension AppModel {
         case .starting: return "Starting"
         case .running:
             if volumeKeysNeedAccessibility { return "Playing, volume keys need Accessibility" }
+            if routingMode == .quad { return "Quad" }
             return engine.swapSides ? "Playing, sides swapped" : "Playing"
         case .degraded(.monoFallback): return "Mono fallback"
         case .stopping: return "Stopping"
@@ -94,9 +94,8 @@ extension AppModel {
     /// In mono fallback the missing speaker reads "Not connected" (even if
     /// it is still listed but no longer alive) and the other one plays L+R.
     func card(for position: SpeakerPosition) -> SpeakerCardState {
-        guard position.isFront else { return .placeholder(position) }
         let isA = position == .frontLeft
-        let tag = isA != engine.swapSides ? "L" : "R"
+        let tag = position.isFront ? (isA != engine.swapSides ? "L" : "R") : (position == .rearLeft ? "RL" : "RR")
         guard let uid = uid(at: position) else {
             return SpeakerCardState(
                 position: position, sideTag: tag, statusText: "Choose a speaker", connection: .unassigned)
@@ -108,7 +107,7 @@ extension AppModel {
                 deviceName: knownNames[uid], uidSuffix: OutputDevice.suffix(forUID: uid),
                 statusText: "Not connected", connection: .disconnected)
         }
-        let level = engine.state.isRouting ? (isA ? meters.levelA : meters.levelB) : 0
+        let level = engine.state.isRouting && position.isFront ? (isA ? meters.levelA : meters.levelB) : 0
         let isMonoFallback = missing != nil
         return SpeakerCardState(
             position: position, sideTag: isMonoFallback ? "L+R" : tag,
