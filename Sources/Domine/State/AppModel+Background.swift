@@ -81,7 +81,8 @@ extension AppModel {
             masterVolume: Double(pairSettings.masterVolume),
             isMuted: isMuted,
             preset: matched,
-            isRouting: engine.state.isRouting)
+            isRouting: engine.state.isRouting,
+            apps: statusMenuApps)
     }
 
     /// Applies an edit made through the menu's switch or volume slider.
@@ -98,6 +99,11 @@ extension AppModel {
         }
         if let preset = edited.preset, preset != current.preset {
             applyPreset(preset)
+        }
+        for app in edited.apps {
+            guard let old = current.apps.first(where: { $0.bundleID == app.bundleID }) else { continue }
+            if app.volume != old.volume { setAppVolume(bundleID: app.bundleID, app.volume) }
+            if app.isExcluded != old.isExcluded { setAppExcluded(bundleID: app.bundleID, app.isExcluded) }
         }
     }
 

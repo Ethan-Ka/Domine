@@ -11,7 +11,7 @@ final class SettingsStore {
     private enum Key: String {
         case lastLeftUID, lastRightUID, lastRearLeftUID, lastRearRightUID, routingMode
         case volumeKeysEnabled, restorePreviousOutput, closeBehavior, startWhenBothConnect
-        case previousOutputUID, outputNeedsRestore, excludedAppsPlayThroughUID, exclusions
+        case previousOutputUID, outputNeedsRestore, excludedAppsPlayThroughUID, exclusions, appVolumes
         case hasCompletedWelcome, audioCaptureWorking, audioCaptureSignature
 
         var name: String { SettingsStore.keyPrefix + rawValue }
@@ -169,6 +169,15 @@ final class SettingsStore {
             guard let data = try? JSONEncoder().encode(newValue) else { return }
             defaults.set(data, forKey: Key.exclusions.name)
         }
+    }
+
+    /// Per-app volume by bundle ID, 0...1. A missing app plays at 1.
+    var appVolumes: [String: Double] {
+        get {
+            let raw = defaults.dictionary(forKey: Key.appVolumes.name) ?? [:]
+            return raw.compactMapValues { ($0 as? Double).map { min(max($0, 0), 1) } }
+        }
+        set { defaults.set(newValue, forKey: Key.appVolumes.name) }
     }
 
     // MARK: Helpers

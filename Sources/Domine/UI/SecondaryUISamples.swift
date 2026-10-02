@@ -62,6 +62,15 @@ extension StatusMenuState {
         masterVolume: 0.62
     )
 
+    static var sampleWithApps: StatusMenuState {
+        var state = sample
+        state.apps = [
+            StatusMenuApp(bundleID: "com.apple.Music", name: "Music", volume: 0.8),
+            StatusMenuApp(bundleID: "us.zoom.xos", name: "zoom.us", volume: 0.5, isExcluded: true),
+        ]
+        return state
+    }
+
     static var sampleLeftOff: StatusMenuState {
         var state = sample
         state.statusText = "Left speaker off"

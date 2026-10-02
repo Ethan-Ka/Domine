@@ -135,6 +135,9 @@ final class AppModel {
     @ObservationIgnored var virtualOutput: VirtualOutputLink?
     /// Resolves excluded apps to process objects for the tap (SPEC 3b).
     @ObservationIgnored let exclusionResolver: ExclusionResolver
+    /// Apps playing audio now, and their saved volumes by bundle ID (AppModel+AppAudio).
+    let appAudio: AppAudioList
+    var appVolumes: [String: Double]
 
     init(hal: any AudioHAL = CoreAudioHAL(), defaults: UserDefaults = .standard,
          services: SystemServices = .live) {
@@ -146,6 +149,8 @@ final class AppModel {
         outputRestorer = OutputRestorer(hal: hal, store: store, outputs: { catalog.outputs })
         engine = Engine(hal: hal)
         exclusionResolver = ExclusionResolver(hal: hal)
+        appAudio = AppAudioList(hal: hal)
+        appVolumes = store.appVolumes
         captureAccess = AudioCapturePermission(hal: hal, store: store, signature: services.codeSignature())
         tones = DeviceTonePlayer(hal: hal)
         calibration = CalibrationController(hal: hal)
@@ -179,6 +184,7 @@ final class AppModel {
         } else {
             engine.excludedProcesses = exclusionResolver.start(exclusions: store.exclusions)
         }
+        appAudio.start()
         catalog.start()
         if !engine.state.isActive {
             outputRestorer.recoverAfterCrash(enabled: store.restorePreviousOutput)

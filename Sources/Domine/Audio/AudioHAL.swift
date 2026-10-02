@@ -70,6 +70,8 @@ protocol AudioHAL: AnyObject, Sendable {
     func processBundleID(of process: AudioObjectID) throws(HALError) -> String
     /// `kAudioProcessPropertyIsRunningInput`: the process has an input stream running.
     func processIsRunningInput(of process: AudioObjectID) throws(HALError) -> Bool
+    /// `kAudioProcessPropertyIsRunningOutput`: the process has an output stream running.
+    func processIsRunningOutput(of process: AudioObjectID) throws(HALError) -> Bool
     /// A private stereo global tap of every process except `processes`.
     /// A muting tap silences the tapped audio on its normal output; the
     /// engine's tap mutes, the capture permission probe's does not.

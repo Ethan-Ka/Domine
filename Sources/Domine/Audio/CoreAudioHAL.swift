@@ -241,6 +241,10 @@ final class CoreAudioHAL: AudioHAL {
         try readScalar(process, address(kAudioProcessPropertyIsRunningInput), as: UInt32.self) != 0
     }
 
+    func processIsRunningOutput(of process: AudioObjectID) throws(HALError) -> Bool {
+        try readScalar(process, address(kAudioProcessPropertyIsRunningOutput), as: UInt32.self) != 0
+    }
+
     func createProcessTap(excluding processes: [AudioObjectID], muted: Bool) throws(HALError) -> ProcessTap {
         let description = CATapDescription(stereoGlobalTapButExcludeProcesses: processes)
         description.name = "Domine"

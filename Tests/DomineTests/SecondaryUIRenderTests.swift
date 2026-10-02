@@ -43,6 +43,7 @@ struct SecondaryUIRenderTests {
     @Test func rendersStatusMenu() throws {
         try render(StatusMenu(state: .constant(.sample)), named: "statusmenu")
         try render(StatusMenu(state: .constant(.sampleLeftOff)), named: "statusmenu-leftoff")
+        try render(StatusMenu(state: .constant(.sampleWithApps)), named: "statusmenu-apps")
         var muted = StatusMenuState.sample
         muted.isMuted = true
         muted.preset = nil

@@ -67,6 +67,10 @@ struct StatusMenu: View {
 
             StatusMenuSeparator()
 
+            appsSection
+
+            StatusMenuSeparator()
+
             Button { actions.swapSides() } label: {
                 StatusMenuItemLabel(title: "Swap Left and Right")
             }
@@ -96,6 +100,27 @@ struct StatusMenu: View {
         .buttonStyle(StatusMenuItemStyle())
         .padding(6)
         .frame(width: 300)
+    }
+
+    private var appsSection: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Apps")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 10)
+            if state.apps.isEmpty {
+                Text("No apps playing")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+            } else {
+                ForEach($state.apps) { $app in
+                    StatusMenuAppRow(app: $app)
+                }
+            }
+        }
+        .padding(.vertical, 4)
     }
 
     private var muteSymbol: String {

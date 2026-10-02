@@ -515,17 +515,18 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
     struct Process {
         var bundleID: String
         var isRunningInput = false
+        var isRunningOutput = false
     }
     private var processes: [AudioObjectID: Process] = [:]
     private var processOrder: [AudioObjectID] = []
 
     /// Adds a process object, as when an app starts using audio, and notifies the process-list listeners.
     @discardableResult
-    @MainActor func addProcess(bundleID: String, isRunningInput: Bool = false) -> AudioObjectID {
+    @MainActor func addProcess(bundleID: String, isRunningInput: Bool = false, isRunningOutput: Bool = false) -> AudioObjectID {
         let id: AudioObjectID = lock.withLock {
             let id = nextID
             nextID += 1
-            processes[id] = Process(bundleID: bundleID, isRunningInput: isRunningInput)
+            processes[id] = Process(bundleID: bundleID, isRunningInput: isRunningInput, isRunningOutput: isRunningOutput)
             processOrder.append(id)
             return id
         }
@@ -544,6 +545,18 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
     @MainActor func setRunningInput(_ id: AudioObjectID, _ running: Bool) {
         lock.withLock { processes[id]?.isRunningInput = running }
         fire(.processIsRunningInput(id))
+    }
+
+    @MainActor func setRunningOutput(_ id: AudioObjectID, _ running: Bool) {
+        lock.withLock { processes[id]?.isRunningOutput = running }
+        fire(.processIsRunningOutput(id))
+    }
+
+    func processIsRunningOutput(of process: AudioObjectID) throws(HALError) -> Bool {
+        guard let p = lock.withLock({ processes[process] }) else {
+            throw HALError(kAudioHardwareBadObjectError, "AudioObjectGetPropertyData", selector: kAudioProcessPropertyIsRunningOutput)
+        }
+        return p.isRunningOutput
     }
 
     func processObjects() throws(HALError) -> [AudioObjectID] { lock.withLock { processOrder } }
