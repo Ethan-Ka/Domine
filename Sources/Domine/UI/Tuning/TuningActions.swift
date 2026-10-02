@@ -4,9 +4,10 @@ struct TuningActions: Sendable {
     var setExtendedRange: @MainActor @Sendable (Bool) -> Void = { _ in }
     var setBalance: @MainActor @Sendable (Double) -> Void = { _ in }
     var playClickTest: @MainActor @Sendable () -> Void = {}
-    /// Mic-based calibration (SPEC section 12). The button stays disabled
-    /// while this is nil.
+    /// Mic-based calibration (SPEC section 12). Nil without a built-in
+    /// microphone, which keeps the button disabled.
     var autoCalibrate: (@MainActor @Sendable () -> Void)? = nil
+    var openMicrophoneSettings: @MainActor @Sendable () -> Void = {}
     var reset: @MainActor @Sendable () -> Void = {}
     var done: @MainActor @Sendable () -> Void = {}
 

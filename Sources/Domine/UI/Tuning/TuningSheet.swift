@@ -57,9 +57,10 @@ struct TuningSheet: View {
                        action: actions.playClickTest)
                     .disabled(!state.isClickTestAvailable)
                 Button("Auto-calibrate") { actions.autoCalibrate?() }
-                    .disabled(actions.autoCalibrate == nil)
-                    .help(actions.autoCalibrate == nil ? "Coming in a later version" : "")
+                    .disabled(actions.autoCalibrate == nil || state.calibrationStatus == .listening)
+                    .help(actions.autoCalibrate == nil ? "Needs the Mac's built-in microphone" : "")
             }
+            calibrationLine
             if let message = state.clickTestMessage {
                 Text(message)
                     .font(.subheadline)
@@ -74,6 +75,39 @@ struct TuningSheet: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var calibrationLine: some View {
+        switch state.calibrationStatus {
+        case .listening:
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Listening…")
+                }
+                Text("Place the Mac where you sit.")
+                    .foregroundStyle(.secondary)
+            }
+            .font(.subheadline)
+        case .done(let message):
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        case .failed(let reason, let offersPrivacySettings):
+            HStack(spacing: 8) {
+                Text(reason)
+                    .foregroundStyle(.red)
+                    .lineLimit(1)
+                if offersPrivacySettings {
+                    Button("Open Privacy Settings", action: actions.openMicrophoneSettings)
+                        .controlSize(.small)
+                }
+            }
+            .font(.subheadline)
+        case nil:
+            EmptyView()
         }
     }
 

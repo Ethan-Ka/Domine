@@ -44,7 +44,7 @@ final class AppModel {
     var assignSelection: String?
     /// Closing the tuning sheet stops the click test.
     var showsTuning = false {
-        didSet { if !showsTuning { stopClickTest() } }
+        didSet { if !showsTuning { stopClickTest(); cancelCalibration() } }
     }
     /// Read from the HAL each time the tuning sheet opens.
     var reportedLatencyText: String?
@@ -52,6 +52,11 @@ final class AppModel {
     var clickTestMessage: String?
     /// Starting routing for the click test. Tests await it.
     @ObservationIgnored var clickTestTask: Task<Void, Never>?
+    @ObservationIgnored let calibration: CalibrationController
+    var calibrationStatus: CalibrationStatus?
+    /// Whether a built-in microphone exists; read when the tuning sheet opens.
+    var isCalibrationAvailable = false
+    @ObservationIgnored var calibrationTask: Task<Void, Never>?
 
     /// First-run checklist sheet.
     var showsWelcome: Bool
@@ -132,6 +137,7 @@ final class AppModel {
         exclusionResolver = ExclusionResolver(hal: hal)
         captureAccess = AudioCapturePermission(hal: hal, store: store, signature: services.codeSignature())
         tones = DeviceTonePlayer(hal: hal)
+        calibration = CalibrationController(hal: hal)
         self.store = store
         self.services = services
         showsWelcome = !store.hasCompletedWelcome
