@@ -73,8 +73,18 @@ DLStageFrame dl_geom_frame(double width, double height, double cardW, double car
     double ry = height / 2.0 - cardH / 2.0 - pad;
     f.outer = rx < ry ? rx : ry;
     if (f.outer < 20.0) f.outer = 20.0;
-    f.inner = f.outer * 0.22;
+    f.inner = f.outer * 0.4;
     return f;
+}
+
+void dl_geom_stereo_point(const DLStageFrame *f, double width, double cardW, uint32_t card, double *x, double *y)
+{
+    double dx = dl_geom_distance_to_radius(f, DL_DISTANCE_DEFAULT) + cardW / 2.0 + 12.0;
+    double maxDx = width / 2.0 - cardW / 2.0 - 8.0;
+    if (dx > maxDx) dx = maxDx;
+    if (dx < cardW / 2.0 + 24.0) dx = cardW / 2.0 + 24.0;
+    *x = card == 0 ? f->cx - dx : f->cx + dx;
+    *y = f->cy;
 }
 
 static const float kQuad[] = { -45.0f, 45.0f, -135.0f, 135.0f };

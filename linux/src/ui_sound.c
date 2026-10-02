@@ -12,7 +12,7 @@ typedef struct {
     GtkWidget *win;
     GtkWidget *preset, *link, *speaker;
     GtkWidget *eqOn, *eq[DL_EQ_BANDS], *eqBox;
-    GtkWidget *bassOn, *bass;
+    GtkWidget *bassOn, *bass, *bassRow;
     GtkWidget *compOn, *comp, *compRow;
     GtkWidget *spatialGroup, *spatial, *room;
     DLMode builtMode;
@@ -241,8 +241,7 @@ static void build(DLSound *d, GtkWidget *content)
         gtk_scale_set_draw_value(GTK_SCALE(s), TRUE);
         gtk_scale_set_value_pos(GTK_SCALE(s), GTK_POS_TOP);
         gtk_scale_set_format_value_func(GTK_SCALE(s), fmt_db, NULL, NULL);
-        gtk_scale_add_mark(GTK_SCALE(s), 0, GTK_POS_RIGHT, NULL);
-        gtk_widget_set_size_request(s, -1, 120);
+        gtk_widget_set_size_request(s, -1, 150);
         gtk_widget_set_halign(s, GTK_ALIGN_CENTER);
         char a11y[32];
         g_snprintf(a11y, sizeof a11y, "%s gain", dl_eq_band_labels[i]);
@@ -263,7 +262,8 @@ static void build(DLSound *d, GtkWidget *content)
     d->bassOn = gtk_check_button_new_with_label("Bass");
     g_signal_connect(d->bassOn, "toggled", G_CALLBACK(on_toggle), d);
     gtk_box_append(GTK_BOX(inner), d->bassOn);
-    gtk_box_append(GTK_BOX(inner), labeled_scale(d, "Amount", 0, 100, 1, fmt_percent, G_CALLBACK(on_value), &d->bass));
+    d->bassRow = labeled_scale(d, "Amount", 0, 100, 1, fmt_percent, G_CALLBACK(on_value), &d->bass);
+    gtk_box_append(GTK_BOX(inner), d->bassRow);
 
     // Compressor.
     gtk_box_append(GTK_BOX(content), dl_group_new(NULL, &inner));
@@ -317,7 +317,7 @@ void dl_sound_sync(DLUi *ui)
     gtk_widget_set_sensitive(d->eqBox, fx->eqOn);
     gtk_check_button_set_active(GTK_CHECK_BUTTON(d->bassOn), fx->bassOn);
     gtk_range_set_value(GTK_RANGE(d->bass), fx->bass * 100.0);
-    gtk_widget_set_sensitive(d->bass, fx->bassOn);
+    gtk_widget_set_sensitive(d->bassRow, fx->bassOn);
     gtk_check_button_set_active(GTK_CHECK_BUTTON(d->compOn), fx->compOn);
     gtk_range_set_value(GTK_RANGE(d->comp), fx->comp * 100.0);
     gtk_widget_set_sensitive(d->compRow, fx->compOn);

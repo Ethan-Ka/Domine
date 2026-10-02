@@ -314,7 +314,6 @@ static GtkWidget *build_bottom(DLUi *ui)
     w->surroundLevel = param_scale(ui, GTK_GRID(grid), 1, 0, "Surround", 0, 100, 1, fmt_percent);
     w->orbit = param_scale(ui, GTK_GRID(grid), 0, 1, "Orbit", 0, 2, 0.05, fmt_orbit);
     w->rotation = param_scale(ui, GTK_GRID(grid), 1, 1, "Rotation", -180, 180, 1, fmt_degrees);
-    gtk_scale_add_mark(GTK_SCALE(w->rotation), 0, GTK_POS_BOTTOM, NULL);
     w->surroundControls = grid;
     gtk_box_append(GTK_BOX(bottom), grid);
 
@@ -365,7 +364,7 @@ void dl_window_build(DLUi *ui)
 
     w->window = gtk_application_window_new(ui->gtkApp);
     gtk_window_set_title(GTK_WINDOW(w->window), "Domine");
-    gtk_window_set_default_size(GTK_WINDOW(w->window), 720, 560);
+    gtk_window_set_default_size(GTK_WINDOW(w->window), 760, 680);
     gtk_window_set_titlebar(GTK_WINDOW(w->window), build_header(ui));
     g_signal_connect(w->window, "close-request", G_CALLBACK(on_close_request), ui);
 

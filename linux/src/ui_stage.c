@@ -9,8 +9,14 @@
 #include "ui_geometry.h"
 #include "ui_logic.h"
 
-#define CARD_W 150.0
-#define CARD_H 70.0
+// Stereo cards carry a status line; surround cards are compact so that
+// neighbours at +-30 degrees do not cover each other.
+#define STEREO_W 160.0
+#define STEREO_H 70.0
+#define SURROUND_W 128.0
+#define SURROUND_H 50.0
+#define CARD_W card_w(self->ui)
+#define CARD_H card_h(self->ui)
 #define CARD_R 10.0
 #define METER_SEGMENTS 16
 #define DRAG_THRESHOLD 4.0
@@ -30,14 +36,30 @@ G_DEFINE_FINAL_TYPE(DomineStage, domine_stage, GTK_TYPE_WIDGET)
 static const GdkRGBA kAccent = { 0.21f, 0.52f, 0.89f, 1.0f };
 static const GdkRGBA kRed = { 0.88f, 0.11f, 0.14f, 1.0f };
 
-static DLStageFrame stage_frame(GtkWidget *w)
+static double card_w(DLUi *ui)
 {
+    return dl_ui_is_surround(ui) ? SURROUND_W : STEREO_W;
+}
+
+static double card_h(DLUi *ui)
+{
+    return dl_ui_is_surround(ui) ? SURROUND_H : STEREO_H;
+}
+
+static DLStageFrame stage_frame(DomineStage *self)
+{
+    GtkWidget *w = GTK_WIDGET(self);
     return dl_geom_frame(gtk_widget_get_width(w), gtk_widget_get_height(w), CARD_W, CARD_H, 6.0);
 }
 
 static void card_centre(DomineStage *self, uint32_t card, double *x, double *y)
 {
-    DLStageFrame f = stage_frame(GTK_WIDGET(self));
+    DLStageFrame f = stage_frame(self);
+    if (!dl_ui_is_surround(self->ui)) {
+        // Stereo, as on the Mac: the two cards sit level with the listener.
+        dl_geom_stereo_point(&f, gtk_widget_get_width(GTK_WIDGET(self)), CARD_W, card, x, y);
+        return;
+    }
     uint32_t n;
     DLCard *c = dl_ui_cards(self->ui, &n);
     dl_geom_to_point(&f, c[card].sp.azimuth, c[card].sp.distance, x, y);
@@ -162,20 +184,29 @@ static void draw_card(DomineStage *self, cairo_t *cr, uint32_t i, const GdkRGBA 
     else if (ui->playing) g_strlcpy(status, ui->cardToEngine[i] >= 0 ? "Playing" : "Not playing", sizeof status);
     else g_strlcpy(status, "Connected", sizeof status);
 
-    double pad = 10.0, inner = CARD_W - 2 * pad;
-    char *m = g_markup_printf_escaped("<b>%s</b>", name);
-    draw_text(w, cr, m, x + pad, y + 5, (int)(inner - 40), fg, 1.0, 0);
+    double pad = surround ? 8.0 : 10.0, inner = CARD_W - 2 * pad;
+    int tagW = surround ? 36 : 20;
+    char *m = g_markup_printf_escaped(surround ? "<small><b>%s</b></small>" : "<b>%s</b>", name);
+    draw_text(w, cr, m, x + pad, y + 4, (int)(inner - tagW - 2), fg, 1.0, 0);
     g_free(m);
-    m = g_markup_printf_escaped("<b>%s</b>", tag);
-    draw_text(w, cr, m, x + pad + inner - 44, y + 5, 44, missing ? &kRed : &kAccent, 1.0, 1);
+    m = g_markup_printf_escaped(surround ? "<small><b>%s</b></small>" : "<b>%s</b>", tag);
+    draw_text(w, cr, m, x + pad + inner - tagW, y + 4, tagW, missing ? &kRed : &kAccent, 1.0, 1);
     g_free(m);
-    m = g_markup_printf_escaped("<small>%s</small>", assigned ? sink : "No speaker");
-    draw_text(w, cr, m, x + pad, y + 23, (int)inner, fg, assigned ? 0.9 : 0.5, 0);
-    g_free(m);
-    m = g_markup_printf_escaped("<small>%s</small>", status);
-    draw_text(w, cr, m, x + pad, y + 38, (int)inner, missing ? &kRed : fg, missing ? 1.0 : 0.55, 0);
-    g_free(m);
-    draw_meter(cr, x + pad, y + CARD_H - 11, inner, missing ? 0.0f : dl_ui_card_peak(ui, i), fg);
+    if (surround) {
+        // Compact: one line for the speaker (or its problem), then the meter.
+        const char *line = !assigned ? "Click to choose" : missing ? "Not connected" : sink;
+        m = g_markup_printf_escaped("<small>%s</small>", line);
+        draw_text(w, cr, m, x + pad, y + 20, (int)inner, missing ? &kRed : fg, assigned ? 0.85 : 0.5, 0);
+        g_free(m);
+    } else {
+        m = g_markup_printf_escaped("<small>%s</small>", assigned ? sink : "No speaker");
+        draw_text(w, cr, m, x + pad, y + 23, (int)inner, fg, assigned ? 0.9 : 0.5, 0);
+        g_free(m);
+        m = g_markup_printf_escaped("<small>%s</small>", status);
+        draw_text(w, cr, m, x + pad, y + 38, (int)inner, missing ? &kRed : fg, missing ? 1.0 : 0.55, 0);
+        g_free(m);
+    }
+    draw_meter(cr, x + pad, y + CARD_H - 10, inner, missing ? 0.0f : dl_ui_card_peak(ui, i), fg);
 }
 
 static void stage_snapshot(GtkWidget *widget, GtkSnapshot *snapshot)
@@ -188,7 +219,7 @@ static void stage_snapshot(GtkWidget *widget, GtkSnapshot *snapshot)
     gtk_widget_get_color(widget, &fg);
     double lum = 0.299 * fg.red + 0.587 * fg.green + 0.114 * fg.blue;
     GdkRGBA bg = lum > 0.5 ? (GdkRGBA){ 0.19f, 0.19f, 0.21f, 1.0f } : (GdkRGBA){ 1.0f, 1.0f, 1.0f, 1.0f };
-    DLStageFrame f = stage_frame(widget);
+    DLStageFrame f = stage_frame(self);
 
     // Guide circle at the default listening distance.
     double guide = dl_geom_distance_to_radius(&f, DL_DISTANCE_DEFAULT);
@@ -404,7 +435,7 @@ static void on_drag_update(GtkGestureDrag *g, double ox, double oy, gpointer dat
     if (!self->moved && hypot(ox, oy) < DRAG_THRESHOLD) return;
     if (!dl_ui_is_surround(ui)) return;
     self->moved = 1;
-    DLStageFrame f = stage_frame(GTK_WIDGET(self));
+    DLStageFrame f = stage_frame(self);
     float az, dist;
     dl_geom_from_point(&f, self->cardX + ox, self->cardY + oy, &az, &dist);
     GdkModifierType mods = gtk_event_controller_get_current_event_state(GTK_EVENT_CONTROLLER(g));

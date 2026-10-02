@@ -87,6 +87,11 @@ static void test_mapping(void)
         CHECK(near(dl_geom_wrap(a - az[i]), 0, 1e-3));
         CHECK(near(d, dist[i], 1e-3));
     }
+    double lx, ly, rx, ry;
+    dl_geom_stereo_point(&f, 720, 160, 0, &lx, &ly);
+    dl_geom_stereo_point(&f, 720, 160, 1, &rx, &ry);
+    CHECK(lx < f.cx && rx > f.cx && near(f.cx - lx, rx - f.cx, 1e-9) && ly == f.cy && ry == f.cy);
+    CHECK(rx + 80 <= 720 && rx - lx >= 160);
     float a, d;
     dl_geom_from_point(&f, f.cx, f.cy, &a, &d);
     CHECK(near(a, 0, 0) && near(d, DL_DISTANCE_MIN, 1e-6));

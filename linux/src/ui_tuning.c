@@ -218,7 +218,6 @@ static void build_stereo(DLTuning *t, GtkWidget *body)
     gtk_box_append(GTK_BOX(body), dl_group_new("TIMING", &inner));
     gtk_box_append(GTK_BOX(inner), dl_readout_row("Delay offset", &t->delayValue));
     t->delay = hscale(-DL_STEREO_DELAY_NORMAL, DL_STEREO_DELAY_NORMAL, 1, "Delay offset");
-    gtk_scale_add_mark(GTK_SCALE(t->delay), 0, GTK_POS_BOTTOM, NULL);
     g_signal_connect(t->delay, "value-changed", G_CALLBACK(on_delay), t);
     gtk_box_append(GTK_BOX(inner), t->delay);
     gtk_box_append(GTK_BOX(inner), dl_end_labels("Delay left", "Delay right"));
@@ -231,7 +230,6 @@ static void build_stereo(DLTuning *t, GtkWidget *body)
     gtk_box_append(GTK_BOX(body), dl_group_new("LEVEL", &inner));
     gtk_box_append(GTK_BOX(inner), dl_readout_row("Balance", &t->balanceValue));
     t->balance = hscale(-100, 100, 1, "Balance");
-    gtk_scale_add_mark(GTK_SCALE(t->balance), 0, GTK_POS_BOTTOM, NULL);
     g_signal_connect(t->balance, "value-changed", G_CALLBACK(on_balance), t);
     gtk_box_append(GTK_BOX(inner), t->balance);
     gtk_box_append(GTK_BOX(inner), dl_end_labels("Left", "Right"));

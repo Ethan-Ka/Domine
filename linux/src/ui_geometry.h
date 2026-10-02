@@ -50,6 +50,10 @@ void dl_geom_from_point(const DLStageFrame *f, double x, double y, float *azimut
 /// half a card (cardW x cardH) plus pad on every side.
 DLStageFrame dl_geom_frame(double width, double height, double cardW, double cardH, double pad);
 
+/// Stereo card centre (card 0 left, 1 right): level with the listener,
+/// a little outside the guide circle, kept inside a widget `width` wide.
+void dl_geom_stereo_point(const DLStageFrame *f, double width, double cardW, uint32_t card, double *x, double *y);
+
 /// Writes the azimuths of a preset for `count` speakers (count is needed for
 /// the ring). Returns how many positions the preset defines (Quad 4,
 /// 5 Speakers 5, 7 Speakers 7, Ring max(count, 3)); at most `max` are written.
