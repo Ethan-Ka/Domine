@@ -761,7 +761,7 @@ DLEngine *dl_engine_create(char *err, uint32_t errLen) {
     if (e->loop == NULL) { set_err(err, errLen, "Could not create the PipeWire thread loop"); goto fail; }
     e->context = pw_context_new(pw_thread_loop_get_loop(e->loop), NULL, 0);
     if (e->context == NULL) {
-        set_err(err, errLen, "Could not create a PipeWire context: %s", strerror(errno));
+        set_err(err, errLen, "Could not create a PipeWire context (%s). Is PipeWire installed?", strerror(errno));
         goto fail;
     }
     if (pw_thread_loop_start(e->loop) < 0) { set_err(err, errLen, "Could not start the PipeWire thread"); goto fail; }

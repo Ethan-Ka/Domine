@@ -94,7 +94,7 @@ void dl_engine_set_spatial(DLEngine *e, float amount, float roomMs);
 typedef struct {
     char key[256];
     char label[256];     // application.name
-    float volume;        // 0...1
+    float volume;        // 0...1, linear (the stream's channelVolumes)
     int excluded;        // plays through excludeSinkId instead of Domine
 } DLApp;
 uint32_t dl_engine_apps(DLEngine *e, DLApp *out, uint32_t max);
@@ -104,9 +104,13 @@ void dl_engine_set_app_volume(DLEngine *e, const char *key, float volume);
 void dl_engine_set_app_excluded(DLEngine *e, const char *key, int excluded, const char *excludeSinkId);
 
 /// Volume keys: the Domine virtual sink's own volume (what the desktop's
-/// volume keys and sliders change) drives the master volume. The engine keeps
-/// the sink at 100% internally and reports the requested level here; the UI
-/// shows it and dl_engine_set_master updates the sink volume too.
+/// volume keys and sliders change) drives the master volume. The engine
+/// captures the sink's monitor before the sink's volume (monitor.channel-volumes
+/// false), so the signal stays at unity and the sink's volume (linear
+/// channelVolumes, 0 when muted) is applied once, as the kernel master gain.
+/// dl_engine_master returns that level; dl_engine_set_master also writes it to
+/// the sink, so the desktop slider follows the UI. on_change fires when the
+/// desktop changes it.
 float dl_engine_master(DLEngine *e);
 
 #endif

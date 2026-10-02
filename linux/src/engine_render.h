@@ -14,14 +14,9 @@
 // rare with typical drift (at 50 ppm, 2.4 frames per second at 48 kHz,
 // one correction every few minutes with the default watermarks). Adaptive resampling per speaker is the follow-up.
 //
-// Post-kernel stages on the capture thread, in order:
-//   click test: a click on every present speaker, delayed by that speaker's
-//     delay (distance compensation plus manual offset) and scaled by its gain,
-//     crossfaded with program audio exactly like the macOS kernel's click test
-//     (DomineDSP.h, domine_kernel_set_click_test mode 1).
-//   test tone: the shared chime (DomineChime.h) on one speaker, the others
-//     silent, crossfaded over DOMINE_TONE_FADE_MS like the macOS kernel. The
-//     tone ignores gain and delay.
+// Test tone and click test come from the kernel (domine_surround_set_test_tone
+// and domine_surround_set_click_test), so they match the macOS kernels: the
+// click goes through each speaker's gain and delay, the tone ignores them.
 //
 // Mono fallback: when a layout of 2 or more speakers has exactly one present,
 // the kernel is reconfigured as a 1-speaker layout on that speaker, so it
@@ -63,26 +58,17 @@ typedef struct {
     DomineEQParams eq[DL_MAX_SPEAKERS];
     DomineBassParams bass[DL_MAX_SPEAKERS];
     DomineCompressorParams comp[DL_MAX_SPEAKERS];
+    int tone;                  // test tone speaker or -1
     uint32_t appliedMono;      // speaker the kernel is configured for in mono mode, or DL_NO_SPEAKER
 
     // Crossing threads (atomics).
     _Atomic uint32_t present[DL_MAX_SPEAKERS];
     _Atomic uint32_t mono;                       // DL_NO_SPEAKER or the single present speaker
-    _Atomic uint32_t gainBits[DL_MAX_SPEAKERS];  // effective gain, for the click
-    _Atomic uint32_t delayFrames[DL_MAX_SPEAKERS];
     _Atomic uint32_t peakBits[DL_MAX_SPEAKERS];
-    _Atomic int32_t toneReq;                     // speaker or -1
-    _Atomic uint32_t clickReq;
     _Atomic uint32_t underruns[DL_MAX_SPEAKERS];
     _Atomic uint32_t drops[DL_MAX_SPEAKERS];     // high-watermark corrections
     _Atomic uint32_t overflows[DL_MAX_SPEAKERS]; // frames lost because a ring was full
 
-    // Capture thread only.
-    uint32_t fadeLen;          // DOMINE_TONE_FADE_MS in frames
-    uint32_t toneP, clickC;
-    int32_t toneCur;
-    uint64_t toneT;
-    uint32_t clickN, clickPeriod, clickLen;
     // Playback threads only (one entry each).
     uint8_t primed[DL_MAX_SPEAKERS];
 } DLRender;
@@ -119,9 +105,5 @@ void dl_render_capture(DLRender *r, const float *in, uint32_t frames);
 /// Playback thread of speaker i: writes `frames` interleaved stereo frames
 /// to dst, zero-filling what the ring cannot supply.
 void dl_render_pull(DLRender *r, uint32_t speaker, float *dst, uint32_t frames);
-
-/// The click test sample n frames after a click starts (0 past its end), as
-/// in DomineDSP.h. Exposed for the self-test.
-float dl_click_sample(uint32_t n, double sampleRate);
 
 #endif

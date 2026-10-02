@@ -89,6 +89,14 @@ static void test_ring_threads(void) {
 
 #define N_FRAMES 512
 
+// The click test sample n frames after a click starts (DomineDSP.h).
+static float dl_click_sample(uint32_t n, double sampleRate) {
+    const uint32_t len = (uint32_t)llround(0.002 * sampleRate);
+    if (n >= len) return 0.0f;
+    const double w = 0.5 - 0.5 * cos(2.0 * M_PI * n / len);
+    return (float)(0.5 * w * sin(2.0 * M_PI * 2000.0 * n / sampleRate));
+}
+
 static float g_in[2 * 8192];
 
 static void make_input(uint32_t frames) {
@@ -160,6 +168,12 @@ static void test_render_four(void) {
     float gl[4], gr[4];
     domine_surround_vbap(4, az, NULL, -30.0f, gl);
     domine_surround_vbap(4, az, NULL, 30.0f, gr);
+    // The kernel keeps headroom: a speaker whose source gains sum (in
+    // absolute value) above 1 has them scaled down to sum 1.
+    for (int s = 0; s < 4; s++) {
+        const float sum = fabsf(gl[s]) + fabsf(gr[s]);
+        if (sum > 1.0f) { gl[s] /= sum; gr[s] /= sum; }
+    }
     double maxErr = 0.0;
     for (uint32_t s = 0; s < 4; s++) {
         pull_all(r, s, N_FRAMES);

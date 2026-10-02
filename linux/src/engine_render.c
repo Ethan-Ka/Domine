@@ -1,7 +1,6 @@
 // Domine for Linux: render path between the capture stream, the surround
 // kernel and the per-speaker rings. See engine_render.h.
 #include "engine_render.h"
-#include "DomineChime.h"
 #include "DomineDSP.h"
 
 #include <math.h>
@@ -20,13 +19,6 @@ static uint32_t next_pow2(uint32_t v) {
 static float clamp01(float v) {
     if (!isfinite(v) || v < 0.0f) return 0.0f;
     return v > 1.0f ? 1.0f : v;
-}
-
-float dl_click_sample(uint32_t n, double sampleRate) {
-    const uint32_t len = (uint32_t)llround(DOMINE_CLICK_MS / 1000.0 * sampleRate);
-    if (n >= len || len == 0) return 0.0f;
-    const double w = 0.5 - 0.5 * cos(2.0 * M_PI * n / len);
-    return (float)(DOMINE_CLICK_AMPLITUDE * w * sin(2.0 * M_PI * DOMINE_CLICK_HZ * n / sampleRate));
 }
 
 DLRender *dl_render_create(double sampleRate, uint32_t count, uint32_t maxFrames,
@@ -56,8 +48,6 @@ DLRender *dl_render_create(double sampleRate, uint32_t count, uint32_t maxFrames
     }
     for (uint32_t i = 0; i < DL_MAX_SPEAKERS; i++) {
         atomic_init(&r->present[i], 0);
-        atomic_init(&r->gainBits[i], f2u(1.0f));
-        atomic_init(&r->delayFrames[i], 0);
         atomic_init(&r->peakBits[i], 0);
         atomic_init(&r->underruns[i], 0);
         atomic_init(&r->drops[i], 0);
@@ -66,15 +56,9 @@ DLRender *dl_render_create(double sampleRate, uint32_t count, uint32_t maxFrames
         r->speakers[i].trim = 1.0f;
     }
     atomic_init(&r->mono, DL_NO_SPEAKER);
-    atomic_init(&r->toneReq, -1);
-    atomic_init(&r->clickReq, 0);
     r->master = 1.0f;
     r->appliedMono = DL_NO_SPEAKER;
-    r->fadeLen = (uint32_t)llround(DOMINE_TONE_FADE_MS / 1000.0 * sampleRate);
-    if (r->fadeLen == 0) r->fadeLen = 1;
-    r->toneCur = -1;
-    r->clickPeriod = (uint32_t)llround(DOMINE_CLICK_PERIOD_MS / 1000.0 * sampleRate);
-    r->clickLen = (uint32_t)llround(DOMINE_CLICK_MS / 1000.0 * sampleRate);
+    r->tone = -1;
     return r;
 }
 
@@ -109,8 +93,6 @@ static void apply_locked(DLRender *r) {
         if (!(d > 0.0f)) d = 0.0f;
         if (d > DOMINE_MAX_DELAY_MS) d = DOMINE_MAX_DELAY_MS;
         delay[i] = d;
-        atomic_store_explicit(&r->gainBits[i], f2u(gain[i]), memory_order_relaxed);
-        atomic_store_explicit(&r->delayFrames[i], (uint32_t)llround(d / 1000.0 * r->rate), memory_order_relaxed);
     }
 
     // Kernel slot k plays speaker map[k].
@@ -132,6 +114,13 @@ static void apply_locked(DLRender *r) {
         if (r->hasBass[s] || remapped) domine_surround_set_bass(r->kernel, k, r->hasBass[s] ? &r->bass[s] : &bassOff);
         if (r->hasComp[s] || remapped) domine_surround_set_compressor(r->kernel, k, r->hasComp[s] ? &r->comp[s] : &compOff);
     }
+    // Test tone on the kernel slot that plays the requested speaker.
+    int toneSlot = -1;
+    if (r->tone >= 0 && (uint32_t)r->tone < n) {
+        if (mono == DL_NO_SPEAKER) toneSlot = r->tone;
+        else if ((uint32_t)r->tone == mono) toneSlot = 0;
+    }
+    domine_surround_set_test_tone(r->kernel, toneSlot);
     r->appliedMono = mono;
     atomic_store_explicit(&r->mono, mono, memory_order_release);
 }
@@ -186,71 +175,20 @@ void dl_render_set_present(DLRender *r, uint32_t speaker, int present) {
 void dl_render_set_test_tone(DLRender *r, int speaker) {
     if (r == NULL) return;
     if (speaker < 0 || (uint32_t)speaker >= r->count) speaker = -1;
-    atomic_store_explicit(&r->toneReq, speaker, memory_order_relaxed);
+    pthread_mutex_lock(&r->lock);
+    r->tone = speaker;
+    apply_locked(r);
+    pthread_mutex_unlock(&r->lock);
 }
 
 void dl_render_set_click_test(DLRender *r, int on) {
     if (r == NULL) return;
-    atomic_store_explicit(&r->clickReq, on == 1 ? 1u : 0u, memory_order_relaxed);
+    domine_surround_set_click_test(r->kernel, on == 1);
 }
 
 float dl_render_peak(DLRender *r, uint32_t speaker) {
     if (r == NULL || speaker >= r->count) return 0.0f;
     return u2f(atomic_load_explicit(&r->peakBits[speaker], memory_order_relaxed));
-}
-
-// Click test and test tone over one chunk of kernel output (capture thread).
-static void post_process(DLRender *r, uint32_t frames, const uint32_t *present) {
-    const uint32_t n = r->count, stride = 2 * n, L = r->fadeLen;
-    const int32_t treq = atomic_load_explicit(&r->toneReq, memory_order_relaxed);
-    const uint32_t creq = atomic_load_explicit(&r->clickReq, memory_order_relaxed);
-    if (r->toneP == 0 && treq < 0 && r->toneCur < 0 && r->clickC == 0 && !creq) return;
-    float gain[DL_MAX_SPEAKERS];
-    uint32_t delay[DL_MAX_SPEAKERS];
-    for (uint32_t s = 0; s < n; s++) {
-        gain[s] = u2f(atomic_load_explicit(&r->gainBits[s], memory_order_relaxed));
-        delay[s] = atomic_load_explicit(&r->delayFrames[s], memory_order_relaxed) % r->clickPeriod;
-    }
-    const double period = DOMINE_CHIME_PERIOD_S;
-    for (uint32_t f = 0; f < frames; f++) {
-        float *frame = r->scratch + (size_t)stride * f;
-        // Click test.
-        if (r->clickC > 0 || creq) {
-            const float e = (float)r->clickC / (float)L;
-            const int emit = creq && r->clickC == L;
-            for (uint32_t s = 0; s < n; s++) {
-                if (!present[s]) continue;
-                float c = 0.0f;
-                if (emit) {
-                    const uint32_t m = (r->clickN + r->clickPeriod - delay[s]) % r->clickPeriod;
-                    c = dl_click_sample(m, r->rate) * gain[s];
-                }
-                frame[2 * s] = frame[2 * s] * (1.0f - e) + c;
-                frame[2 * s + 1] = frame[2 * s + 1] * (1.0f - e) + c;
-            }
-            if (emit) r->clickN = (r->clickN + 1) % r->clickPeriod;
-            if (creq) { if (r->clickC < L) r->clickC++; }
-            else { r->clickN = 0; if (r->clickC > 0) r->clickC--; }
-        } else {
-            r->clickN = 0;
-        }
-        // Test tone.
-        if (r->toneP == 0 && r->toneCur != treq) { r->toneCur = treq; r->toneT = 0; }
-        if (r->toneP > 0 || r->toneCur >= 0) {
-            const float e = (float)r->toneP / (float)L;
-            float tone = 0.0f;
-            if (r->toneCur >= 0) tone = (float)domine_chime_sample(fmod((double)r->toneT / r->rate, period));
-            for (uint32_t s = 0; s < n; s++) {
-                const float t = (int32_t)s == r->toneCur ? tone * e : 0.0f;
-                frame[2 * s] = frame[2 * s] * (1.0f - e) + t;
-                frame[2 * s + 1] = frame[2 * s + 1] * (1.0f - e) + t;
-            }
-            const uint32_t goal = (r->toneCur >= 0 && r->toneCur == treq) ? L : 0;
-            if (r->toneP < goal) r->toneP++;
-            else if (r->toneP > goal) r->toneP--;
-            if (r->toneCur >= 0) r->toneT++;
-        }
-    }
 }
 
 void dl_render_capture(DLRender *r, const float *in, uint32_t frames) {
@@ -280,7 +218,6 @@ void dl_render_capture(DLRender *r, const float *in, uint32_t frames) {
         outList.mBuffers[0].mDataByteSize = (UInt32)(sizeof(float) * 2 * n * chunk);
         outList.mBuffers[0].mData = r->scratch;
         domine_surround_process(r->kernel, in != NULL ? &inList : NULL, &outList, chunk, offsets);
-        post_process(r, chunk, present);
         const uint32_t stride = 2 * n;
         for (uint32_t i = 0; i < n; i++) {
             if (!present[i]) continue;
