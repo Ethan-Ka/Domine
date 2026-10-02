@@ -52,6 +52,7 @@ extension AppModel {
         let new = exclusionsSettings
         if new.items != old.items {
             store.exclusions = new.items.map { AppExclusion(bundleID: $0.bundleID, mode: Self.exclusionMode($0.mode)) }
+            exclusionResolver.update(exclusions: store.exclusions)
         }
         if new.playThroughDeviceUID != old.playThroughDeviceUID {
             store.excludedAppsPlayThroughUID = new.playThroughDeviceUID

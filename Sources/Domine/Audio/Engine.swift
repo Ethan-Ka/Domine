@@ -637,6 +637,17 @@ final class Engine {
     }
 
     /// Runs `checkSpeakers` now, or again after the check in progress.
+    /// Applies a new set of excluded processes (SPEC 3b). Rebuilds the tap
+    /// only when the set changed and the engine is routing; otherwise the
+    /// set is used by the next build.
+    func setExcludedProcesses(_ processes: [AudioObjectID]) async {
+        guard processes != excludedProcesses else { return }
+        excludedProcesses = processes
+        guard state.isRouting, let speakers else { return }
+        Self.log.info("Excluded processes changed to \(processes.count, privacy: .public); rebuilding the tap")
+        await rebuild(uidA: speakers.left, uidB: speakers.right, ids: resources.speakerIDs)
+    }
+
     private func scheduleSpeakerCheck() {
         speakerCheckPending = true
         guard speakerCheck == nil else { return }

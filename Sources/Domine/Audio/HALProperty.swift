@@ -13,11 +13,15 @@ enum HALProperty: Hashable, Sendable {
     case nominalSampleRate(AudioObjectID)
     /// `kAudioDevicePropertyMute`, output scope, main element.
     case mute(AudioObjectID)
+    /// `kAudioHardwarePropertyProcessObjectList`: apps starting or quitting audio.
+    case processObjects
+    /// `kAudioProcessPropertyIsRunningInput` on one process object.
+    case processIsRunningInput(AudioObjectID)
 
     var object: AudioObjectID {
         switch self {
-        case .devices, .defaultOutputDevice: AudioObjectID(kAudioObjectSystemObject)
-        case .name(let id), .isAlive(let id), .volume(let id, _), .processorOverload(let id), .nominalSampleRate(let id), .mute(let id): id
+        case .devices, .defaultOutputDevice, .processObjects: AudioObjectID(kAudioObjectSystemObject)
+        case .name(let id), .isAlive(let id), .volume(let id, _), .processorOverload(let id), .nominalSampleRate(let id), .mute(let id), .processIsRunningInput(let id): id
         }
     }
 
@@ -27,6 +31,8 @@ enum HALProperty: Hashable, Sendable {
         case .defaultOutputDevice: Self.global(kAudioHardwarePropertyDefaultOutputDevice)
         case .name: Self.global(kAudioObjectPropertyName)
         case .isAlive: Self.global(kAudioDevicePropertyDeviceIsAlive)
+        case .processObjects: Self.global(kAudioHardwarePropertyProcessObjectList)
+        case .processIsRunningInput: Self.global(kAudioProcessPropertyIsRunningInput)
         case .processorOverload: Self.global(kAudioDeviceProcessorOverload)
         case .nominalSampleRate: Self.global(kAudioDevicePropertyNominalSampleRate)
         case .mute:

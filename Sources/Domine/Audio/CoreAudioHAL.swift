@@ -229,6 +229,18 @@ final class CoreAudioHAL: AudioHAL {
         return object
     }
 
+    func processObjects() throws(HALError) -> [AudioObjectID] {
+        try readArray(system, address(kAudioHardwarePropertyProcessObjectList), of: AudioObjectID.self)
+    }
+
+    func processBundleID(of process: AudioObjectID) throws(HALError) -> String {
+        try readString(process, kAudioProcessPropertyBundleID)
+    }
+
+    func processIsRunningInput(of process: AudioObjectID) throws(HALError) -> Bool {
+        try readScalar(process, address(kAudioProcessPropertyIsRunningInput), as: UInt32.self) != 0
+    }
+
     func createProcessTap(excluding processes: [AudioObjectID], muted: Bool) throws(HALError) -> ProcessTap {
         let description = CATapDescription(stereoGlobalTapButExcludeProcesses: processes)
         description.name = "Domine"
