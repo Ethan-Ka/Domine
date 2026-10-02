@@ -502,6 +502,58 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
         }
     }
 
+    // MARK: Fake processes (SPEC 3b)
+
+    struct Process {
+        var bundleID: String
+        var isRunningInput = false
+    }
+    private var processes: [AudioObjectID: Process] = [:]
+    private var processOrder: [AudioObjectID] = []
+
+    /// Adds a process object, as when an app starts using audio, and notifies the process-list listeners.
+    @discardableResult
+    @MainActor func addProcess(bundleID: String, isRunningInput: Bool = false) -> AudioObjectID {
+        let id: AudioObjectID = lock.withLock {
+            let id = nextID
+            nextID += 1
+            processes[id] = Process(bundleID: bundleID, isRunningInput: isRunningInput)
+            processOrder.append(id)
+            return id
+        }
+        fire(.processObjects)
+        return id
+    }
+
+    @MainActor func removeProcess(_ id: AudioObjectID) {
+        lock.withLock {
+            processes[id] = nil
+            processOrder.removeAll { $0 == id }
+        }
+        fire(.processObjects)
+    }
+
+    @MainActor func setRunningInput(_ id: AudioObjectID, _ running: Bool) {
+        lock.withLock { processes[id]?.isRunningInput = running }
+        fire(.processIsRunningInput(id))
+    }
+
+    func processObjects() throws(HALError) -> [AudioObjectID] { lock.withLock { processOrder } }
+
+    func processBundleID(of process: AudioObjectID) throws(HALError) -> String {
+        guard let p = lock.withLock({ processes[process] }) else {
+            throw HALError(kAudioHardwareBadObjectError, "AudioObjectGetPropertyData", selector: kAudioProcessPropertyBundleID)
+        }
+        return p.bundleID
+    }
+
+    func processIsRunningInput(of process: AudioObjectID) throws(HALError) -> Bool {
+        guard let p = lock.withLock({ processes[process] }) else {
+            throw HALError(kAudioHardwareBadObjectError, "AudioObjectGetPropertyData", selector: kAudioProcessPropertyIsRunningInput)
+        }
+        return p.isRunningInput
+    }
+
     func createProcessTap(excluding processes: [AudioObjectID], muted: Bool) throws(HALError) -> ProcessTap {
         try locked { () throws(HALError) -> ProcessTap in
             try fail(.createTap, "AudioHardwareCreateProcessTap")

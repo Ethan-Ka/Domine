@@ -117,6 +117,8 @@ final class AppModel {
     @ObservationIgnored let hal: any AudioHAL
     /// Follows the Domine virtual output's volume and mute (AppModel+VirtualOutput).
     @ObservationIgnored var virtualOutput: VirtualOutputLink?
+    /// Resolves excluded apps to process objects for the tap (SPEC 3b).
+    @ObservationIgnored let exclusionResolver: ExclusionResolver
 
     init(hal: any AudioHAL = CoreAudioHAL(), defaults: UserDefaults = .standard,
          services: SystemServices = .live) {
@@ -127,6 +129,7 @@ final class AppModel {
         volumeLink = SpeakerVolumeLink(hal: hal)
         outputRestorer = OutputRestorer(hal: hal, store: store, outputs: { catalog.outputs })
         engine = Engine(hal: hal)
+        exclusionResolver = ExclusionResolver(hal: hal)
         captureAccess = AudioCapturePermission(hal: hal, store: store, signature: services.codeSignature())
         tones = DeviceTonePlayer(hal: hal)
         self.store = store
@@ -141,10 +144,22 @@ final class AppModel {
         applyPairSettingsToEngine()
         volumeLink.onExternalChange = { [weak self] volume in self?.adoptHardwareVolume(volume) }
         engine.onRoutingEnded = { [weak self] in self?.engineEndedRouting() }
+        let engine = engine
+        exclusionResolver.onChange = { processes in await engine.setExcludedProcesses(processes) }
+        exclusionResolver.defaultOutputIsVirtual = { [weak self] in
+            guard let hal = self?.hal, let current = try? hal.defaultOutputDevice(),
+                  let virtual = try? hal.deviceID(forUID: OutputRestorer.virtualOutputUID) else { return false }
+            return virtual != kAudioObjectUnknown && current == virtual
+        }
     }
 
     func start() {
         StaleAggregateCleaner.clean(hal: hal)
+        if engine.state.isActive {
+            _ = exclusionResolver.start(exclusions: store.exclusions)
+        } else {
+            engine.excludedProcesses = exclusionResolver.start(exclusions: store.exclusions)
+        }
         catalog.start()
         if !engine.state.isActive {
             outputRestorer.recoverAfterCrash(enabled: store.restorePreviousOutput)
