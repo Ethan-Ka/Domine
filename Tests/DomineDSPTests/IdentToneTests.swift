@@ -14,7 +14,7 @@ struct IdentToneTests {
     }
 
     private func expected(frame: Int, total: Int, fade: Int) -> Float {
-        let s = Float(DOMINE_IDENT_TONE_AMPLITUDE * sin(2.0 * Double.pi * Double(frame) * DOMINE_IDENT_TONE_HZ / Self.rate))
+        let s = Float(ChimeReference.sample(Double(frame) / Self.rate))
         let env: Float
         if frame < fade { env = Float(frame) / Float(fade) }
         else if total - frame <= fade { env = Float(total - frame - 1) / Float(fade) }

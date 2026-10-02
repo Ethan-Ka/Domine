@@ -6,9 +6,9 @@ struct ToneTests {
     /// 40 ms at 48 kHz.
     static let fade = 1920
 
-    /// The bare sine, n samples after the tone (re)started at phase 0.
+    /// The bare chime, n samples after the tone (re)started at phase 0.
     static func tone(_ n: Int, sampleRate: Double = 48_000) -> Float {
-        Float(DOMINE_TONE_AMPLITUDE * sin(2 * Double.pi * DOMINE_TONE_HZ * Double(n) / sampleRate))
+        Float(ChimeReference.repeating(Double(n) / sampleRate))
     }
 
     /// The playing position at tone level `level` (0...fade) over `program`.
@@ -257,13 +257,15 @@ struct PeakTests {
     @Test func toneOnAShowsOnlyOnA() {
         let kernel = Kernel()
         domine_kernel_set_test_tone(kernel.raw, 1)
-        // Past the fade in, one full 440 Hz cycle (about 109 frames).
+        // Past the fade in, 110 frames of the chime.
         _ = ToneTests.run(kernel, frames: ToneTests.fade, program: 0.9)
         let program = Array(repeating: Float(0.9), count: 110)
         let out = TestBufferList(channelsPerBuffer: [4], frames: 110)
         kernel.process(.interleaved(left: program, right: program), out)
         #expect(kernel.peak(0) == out.channel(0).map(abs).max())
-        #expect(kernel.peak(0) > Float(DOMINE_TONE_AMPLITUDE) * 0.999)
+        let expectedPeak = (0..<110).map { abs(ToneTests.tone(ToneTests.fade + $0)) }.max()!
+        #expect(abs(kernel.peak(0) - expectedPeak) < 1e-6)
+        #expect(kernel.peak(0) > 0.05 && kernel.peak(0) <= Float(DOMINE_CHIME_PEAK))
         #expect(kernel.peak(1) == 0)
     }
 }
@@ -301,5 +303,29 @@ struct FrameCountTests {
         #expect(domine_kernel_create(0, 512) == nil)
         #expect(domine_kernel_create(-48_000, 512) == nil)
         domine_kernel_destroy(nil)
+    }
+}
+
+struct ToneChimeLoopTests {
+    @Test func engineToneRepeatsEvery1500msAndStaysContinuousAcrossCalls() {
+        let rate = 48_000
+        let kernel = Kernel(sampleRate: Double(rate), maxFrames: 1024)
+        domine_kernel_set_test_tone(kernel.raw, 1)
+        let total = rate * 3 + 500
+        var n = 0
+        var peak: Float = 0
+        while n < total {
+            let size = min(777, total - n)
+            let out = TestBufferList(channelsPerBuffer: [4], frames: size)
+            kernel.process(.interleaved(left: Array(repeating: 0, count: size), right: Array(repeating: 0, count: size)), out)
+            let got = out.channel(0)
+            for i in 0..<size {
+                let want = ToneTests.playing(ToneTests.tone(n + i), program: 0, level: ToneTests.levelIn(n + i))
+                #expect(abs(got[i] - want) < 1e-5)
+                peak = max(peak, abs(got[i]))
+            }
+            n += size
+        }
+        #expect(peak <= Float(DOMINE_CHIME_PEAK) + 1e-6)
     }
 }

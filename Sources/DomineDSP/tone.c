@@ -2,6 +2,7 @@
 // allocation, no locks, no logging, no I/O.
 
 #include "include/DomineTone.h"
+#include "include/DomineChime.h"
 
 #include <math.h>
 #include <stdatomic.h>
@@ -9,8 +10,7 @@
 #include <string.h>
 
 struct DomineTone {
-    double phase;          // cycles, in [0, 1)
-    double phaseStep;      // cycles per frame
+    double secondsPerFrame;
     uint32_t totalFrames;
     uint32_t fadeFrames;
     _Atomic uint32_t written;
@@ -20,7 +20,7 @@ DomineTone *domine_tone_create(double sampleRate, double seconds) {
     if (!(sampleRate > 0.0) || !(seconds > 0.0)) return NULL;
     DomineTone *t = calloc(1, sizeof *t);
     if (t == NULL) return NULL;
-    t->phaseStep = DOMINE_IDENT_TONE_HZ / sampleRate;
+    t->secondsPerFrame = 1.0 / sampleRate;
     t->totalFrames = (uint32_t)lround(seconds * sampleRate);
     t->fadeFrames = (uint32_t)lround(DOMINE_IDENT_TONE_FADE_MS * sampleRate / 1000.0);
     if (t->fadeFrames * 2 > t->totalFrames) t->fadeFrames = t->totalFrames / 2;
@@ -67,9 +67,7 @@ OSStatus domine_tone_ioproc(AudioObjectID inDevice,
 
     uint32_t written = atomic_load_explicit(&t->written, memory_order_relaxed);
     for (uint32_t i = 0; i < frames && written < t->totalFrames; i++, written++) {
-        const float s = (float)(DOMINE_IDENT_TONE_AMPLITUDE * sin(2.0 * M_PI * t->phase)) * envelope(t, written);
-        t->phase += t->phaseStep;
-        if (t->phase >= 1.0) t->phase -= 1.0;
+        const float s = (float)domine_chime_sample((double)written * t->secondsPerFrame) * envelope(t, written);
         for (UInt32 b = 0; b < outOutputData->mNumberBuffers; b++) {
             AudioBuffer *buf = &outOutputData->mBuffers[b];
             if (buf->mData == NULL || buf->mNumberChannels == 0) continue;

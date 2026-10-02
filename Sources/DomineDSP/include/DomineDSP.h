@@ -16,6 +16,7 @@
 //   changes which side feeds which position; positions never move.
 
 #include <stdint.h>
+#include "DomineChime.h"
 #include <CoreAudio/CoreAudioTypes.h>
 #include <CoreAudio/AudioHardwareBase.h> // AudioObjectID only; no Core Audio calls
 
@@ -34,9 +35,8 @@ typedef struct DomineKernel DomineKernel;
 /// Largest delay magnitude accepted by domine_kernel_set_delay_ms.
 #define DOMINE_MAX_DELAY_MS 300.0f
 
-/// Test tone frequency and amplitude (-14 dBFS).
-#define DOMINE_TONE_HZ 440.0
-#define DOMINE_TONE_AMPLITUDE 0.2
+/// Test tone: the shared chime (DomineChime.h), peak amplitude 0.3, repeating
+/// every DOMINE_CHIME_PERIOD_S (1.5 s) while on.
 /// Length of the test tone's linear fade in and fade out.
 #define DOMINE_TONE_FADE_MS 40.0
 
@@ -95,10 +95,11 @@ void domine_kernel_set_mode(DomineKernel *k, int monoPerSpeaker, int swapSides, 
 
 /// Test tone: 0 off, 1 position A (left speaker), 2 position B (right
 /// speaker). Positions are not affected by swapSides. While the tone is on,
-/// the chosen position plays a 440 Hz sine at -14 dBFS (amplitude 0.2) in
+/// the chosen position plays domine_chime_sample(t) (peak 0.3, repeating every
+/// 1.5 s, t = seconds since the tone started, wrapped at the period) in
 /// place of program audio, on the same channels program audio would use, and
 /// the other position is silent. The tone ignores trim gain and delay but
-/// follows the mute fade. Its phase starts at 0 when the tone turns on (or
+/// follows the mute fade. Its time starts at 0 when the tone turns on (or
 /// changes position) and stays continuous across process calls.
 /// Other values are treated as 0.
 ///

@@ -31,7 +31,7 @@ struct SampleRateTests {
         #expect(a == (0..<2300).map { Float(max(0, fade - ($0 + 1))) / Float(fade) })
     }
 
-    @Test func toneIs440HzAt44k() {
+    @Test func toneUsesChimeTimeAt44k() {
         let kernel = Kernel(sampleRate: Self.rate)
         domine_kernel_set_test_tone(kernel.raw, 1)
         let frames = 1764 + 441 // fade in (40 ms), then 10 ms of full tone
@@ -41,7 +41,7 @@ struct SampleRateTests {
         kernel.process(input, out)
         let a = out.channel(0)
         for n in 1764..<frames {
-            let expected = Float(0.2 * sin(2 * Double.pi * 440 * Double(n) / Self.rate))
+            let expected = Float(ChimeReference.sample(Double(n) / Self.rate))
             #expect(abs(a[n] - expected) < 1e-5)
         }
     }
