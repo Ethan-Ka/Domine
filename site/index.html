@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Domine</title>
-<meta name="description" content="Domine plays your Mac's left channel on one speaker and the right channel on another.">
+<meta name="description" content="Turn two Bluetooth speakers into one stereo pair for your Mac. One plays left, the other plays right.">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" type="image/png" href="favicon.png">
 <style>
@@ -35,10 +35,10 @@ main{flex:1; display:flex; flex-direction:column; justify-content:center; paddin
 }
 @media (min-width:52rem){.body{grid-template-columns:minmax(0,3fr) minmax(0,2fr); align-items:end}}
 .claim{
-  margin:0; max-width:30ch; font-size:clamp(1.5rem,1rem + 2.2vw,2.75rem);
+  margin:0; max-width:20ch; font-size:clamp(1.5rem,1rem + 2.2vw,2.75rem);
   line-height:1.15; letter-spacing:-.022em; font-weight:600; text-wrap:balance;
 }
-.actions{display:flex; flex-direction:column; align-items:flex-start; gap:1.25rem}
+.actions{display:flex; flex-direction:column; align-items:flex-start; gap:.75rem}
 .btn{
   display:inline-block; padding:.8em 1.35em; border-radius:.55rem;
   background:var(--btn); color:var(--btn-ink); font-weight:600; font-size:1.0625rem;
@@ -52,7 +52,9 @@ main{flex:1; display:flex; flex-direction:column; justify-content:center; paddin
 .links a:hover{text-decoration:underline; text-underline-offset:.25em}
 .links a:hover span{transform:translateX(3px)}
 a:focus-visible{outline:3px solid var(--focus); outline-offset:3px; border-radius:.35rem}
-footer{padding:1.5rem 0 2rem; color:var(--muted); font-size:.9rem}
+.sub{margin:1rem 0 0; max-width:38ch; color:var(--muted)}
+.dl{display:flex; flex-wrap:wrap; align-items:center; gap:.5rem 1rem}
+.note{margin:0; color:var(--muted); font-size:.9rem}
 .sr{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -66,9 +68,15 @@ footer{padding:1.5rem 0 2rem; color:var(--muted); font-size:.9rem}
       <img src="header-light.svg" width="840" height="200" alt="Domine, with the left channel in off-white and the right channel in red">
     </picture>
     <div class="body">
-      <p class="claim">Plays your Mac's left channel on one Bluetooth speaker and the right on another.</p>
+      <div class="pitch">
+        <p class="claim">Two Bluetooth speakers, one stereo pair.</p>
+        <p class="sub">One speaker plays your Mac's left channel and the other plays the right. They stay in sync, and your volume keys control both.</p>
+      </div>
       <div class="actions">
-        <a class="btn" href="https://github.com/Ethan-Ka/Domine/releases/latest">Download for macOS</a>
+        <div class="dl">
+          <a class="btn" href="https://github.com/Ethan-Ka/Domine/releases/latest">Download for macOS</a>
+          <p class="note">macOS 14.4 or later</p>
+        </div>
         <nav class="links" aria-label="Links">
           <a href="https://github.com/Ethan-Ka/Domine">GitHub <span aria-hidden="true">&rarr;</span></a>
           <a href="https://ethankawley.com/">Ethan Kawley <span aria-hidden="true">&rarr;</span></a>
@@ -77,6 +85,5 @@ footer{padding:1.5rem 0 2rem; color:var(--muted); font-size:.9rem}
     </div>
   </div>
 </main>
-<footer><div class="wrap">macOS 14.4 or later</div></footer>
 </body>
 </html>
