@@ -245,6 +245,7 @@ final class AppModel {
         store.lastRearRightUID = right
         reloadQuadSettings()
         if routingMode == .quad, !isQuadAvailable { setRoutingMode(.stereo) }
+        syncVolumeLink()
         if wasQuadActive { Task { await startRouting() } }
     }
 
@@ -263,6 +264,7 @@ final class AppModel {
         if wasActive { stopRouting() }
         routingMode = mode
         store.routingMode = mode
+        syncVolumeLink()
         if wasActive { Task { await startRouting() } }
     }
 
@@ -404,7 +406,9 @@ final class AppModel {
     /// Selected speakers that are present, with their current device IDs.
     private var presentSpeakers: [(uid: String, id: AudioObjectID)] {
         var seen = Set<String>()
-        return [leftUID, rightUID].compactMap { uid in
+        let uids = routingMode == .quad && isQuadAvailable
+            ? [leftUID, rightUID, rearLeftUID, rearRightUID] : [leftUID, rightUID]
+        return uids.compactMap { uid in
             guard let uid, seen.insert(uid).inserted, let device = catalog.device(uid: uid) else { return nil }
             return (uid, device.id)
         }
@@ -462,7 +466,7 @@ final class AppModel {
         engine.quadGains = [
             pairSettings.leftGain * kernelVolume(for: leftUID),
             pairSettings.rightGain * kernelVolume(for: rightUID),
-            master, master,
+            master * kernelVolume(for: rearLeftUID), master * kernelVolume(for: rearRightUID),
         ]
         let delay = pairSettings.delayMs
         engine.quadDelaysMs = [max(-delay, 0), max(delay, 0), 0, 0]

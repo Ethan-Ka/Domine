@@ -186,6 +186,49 @@ final class HardwareVolumeTests {
         #expect(hal.volumes(uid: Self.gripA.uid) == [1: 0.1, 2: 0.1])
     }
 
+    // MARK: Quad
+
+    static let gripC = FakeHAL.Device(uid: "60-FD-A6-19-AA-01:output", name: "JBL Grip", sampleRate: 44_100)
+    static let gripD = FakeHAL.Device(uid: "60-FD-A6-19-AA-02:output", name: "JBL Grip", sampleRate: 44_100)
+
+    private func startQuad(_ volumes: [Float]) -> [FakeHAL.Device] {
+        let devices = zip([Self.gripA, Self.gripB, Self.gripC, Self.gripD], volumes).map { Self.grip($0, volume: $1) }
+        devices.forEach { hal.add($0) }
+        model.start()
+        for (device, position) in zip(devices, SpeakerPosition.allCases) {
+            model.assign(device.uid, to: position)
+        }
+        model.setRoutingMode(.quad)
+        return devices
+    }
+
+    @Test func quadLinksAllFourToTheLowest() {
+        let devices = startQuad([0.6, 0.4, 0.9, 0.7])
+        #expect(model.routingMode == .quad)
+        for device in devices { #expect(hal.volumes(uid: device.uid) == [1: 0.4, 2: 0.4]) }
+        #expect(model.pairSettings.masterVolume == 0.4)
+    }
+
+    @Test func quadMasterMovesAllFour() {
+        let devices = startQuad([0.5, 0.5, 0.5, 0.5])
+        model.volumeLink.set(0.7)
+        for device in devices { #expect(hal.volumes(uid: device.uid) == [1: 0.7, 2: 0.7]) }
+    }
+
+    @Test func quadPressOnOneMirrorsToTheOthers() {
+        let devices = startQuad([0.5, 0.5, 0.5, 0.5])
+        hal.clearVolumeWrites()
+        hal.pressVolume(uid: devices[3].uid, to: 0.3)
+        for device in devices { #expect(hal.volumes(uid: device.uid) == [1: 0.3, 2: 0.3]) }
+        #expect(model.pairSettings.masterVolume == 0.3)
+    }
+
+    @Test func leavingQuadLinksOnlyTheFront() {
+        let devices = startQuad([0.5, 0.5, 0.5, 0.5])
+        model.setRoutingMode(.stereo)
+        #expect(Set(model.volumeLink.attachedDevices.keys) == [devices[0].uid, devices[1].uid])
+    }
+
     // MARK: Volume keys
 
     @Test func volumeKeysStepTheHardwareVolume() async {
