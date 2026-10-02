@@ -25,5 +25,11 @@ struct MainToolbarControls: View {
             .toggleStyle(.switch)
             .labelsHidden()
             .help(state.isOn ? "Turn Domine off" : "Turn Domine on")
+
+        SettingsLink {
+            Image(systemName: "gearshape")
+        }
+        .help("Settings")
+        .accessibilityLabel("Settings")
     }
 }
