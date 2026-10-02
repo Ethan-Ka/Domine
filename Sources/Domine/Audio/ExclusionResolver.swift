@@ -17,14 +17,11 @@ final class ExclusionResolver {
     private var inputTokens: [HALListenerToken] = []
     private var pending: Task<Void, Never>?
     private var started = false
-    private var loggedVirtualDefault = false
 
     /// The set last reported, sorted.
     private(set) var effective: [AudioObjectID] = []
     /// Called with the new effective set when it changes.
     var onChange: (@MainActor ([AudioObjectID]) async -> Void)?
-    /// True while the default output is the Domine virtual device.
-    var defaultOutputIsVirtual: @MainActor () -> Bool = { false }
 
     init(hal: any AudioHAL, debounce: Duration = .milliseconds(500),
          sleep: @escaping @MainActor (Duration) async -> Void = { try? await Task.sleep(for: $0) }) {
@@ -111,10 +108,6 @@ final class ExclusionResolver {
         let new = resolve()
         guard new != effective else { return }
         effective = new
-        if !new.isEmpty, !loggedVirtualDefault, defaultOutputIsVirtual() {
-            loggedVirtualDefault = true
-            Self.log.warning("Exclusions are active while the default output is the Domine virtual device; excluded apps are silent (SPEC 3b open issue)")
-        }
         await onChange?(new)
     }
 

@@ -25,6 +25,7 @@ final class OutputRestorer {
     private var guardListener: HALListenerToken?
     private var guardedPair: Set<String> = []
     private var playThroughUID: String?
+    private var exclusionsActive = false
 
     /// `outputs` returns the present output devices (the catalog's list).
     init(hal: any AudioHAL, store: SettingsStore, outputs: @escaping @MainActor () -> [OutputDevice]) {
@@ -38,12 +39,15 @@ final class OutputRestorer {
     /// Call before creating the tap. Saves the default output as the previous
     /// output and moves the default off the pair if needed. Throws
     /// `.noOtherOutput` without changing anything when no other output exists.
-    func prepareForRouting(pair: Set<String>, playThroughUID: String?) throws(Failure) {
+    func prepareForRouting(pair: Set<String>, playThroughUID: String?,
+                           exclusionsActive: Bool = false) throws(Failure) {
+        self.exclusionsActive = exclusionsActive
         let current = try currentDefaultUID()
         if let current, !Self.isDomine(current) {
             store.previousOutputUID = current
         }
-        if let current, pair.contains(current) || Self.isDomine(current) {
+        if let current, pair.contains(current) || Self.isDomine(current)
+            || (exclusionsActive && current == Self.virtualOutputUID) {
             guard let target = target(pair: pair, playThroughUID: playThroughUID) else {
                 Self.log.error("Default output \(current, privacy: .public) is a routed speaker and no other output exists")
                 throw .noOtherOutput
@@ -54,6 +58,22 @@ final class OutputRestorer {
             store.outputNeedsRestore = true
         }
         startGuarding(pair: pair, playThroughUID: playThroughUID)
+    }
+
+    /// SPEC 3b: while an exclusion is active the default output is a real
+    /// device so excluded apps are heard; otherwise the virtual output is
+    /// preferred. Moves the default when routing, and is remembered for the
+    /// guard listener. Does nothing to the default output when not routing.
+    func setExclusionsActive(_ active: Bool) {
+        exclusionsActive = active
+        guard !guardedPair.isEmpty,
+              let target = target(pair: guardedPair, playThroughUID: playThroughUID),
+              let current = try? currentDefaultUID(), current != target else { return }
+        do {
+            try setDefault(target, reason: active ? "an exclusion became active" : "no exclusion is active")
+        } catch {
+            Self.log.error("Could not switch the default output: \(String(describing: error), privacy: .public)")
+        }
     }
 
     /// Restores the previous output when routing stops, if `enabled` and the
@@ -130,6 +150,7 @@ final class OutputRestorer {
         guard !guardedPair.isEmpty,
               let current = try? currentDefaultUID(),
               guardedPair.contains(current) || Self.isDomine(current)
+                || (exclusionsActive && current == Self.virtualOutputUID)
         else { return }
         guard let target = target(pair: guardedPair, playThroughUID: playThroughUID) else {
             Self.log.error("Default output moved to routed speaker \(current, privacy: .public) and no other output exists")
@@ -151,9 +172,9 @@ final class OutputRestorer {
         }
     }
 
-    /// The virtual output when present, else `fallbackOutput`.
+    /// The virtual output when present and no exclusion is active, else `fallbackOutput`.
     private func target(pair: Set<String>, playThroughUID: String?) -> String? {
-        if isPresent(Self.virtualOutputUID) { return Self.virtualOutputUID }
+        if !exclusionsActive, isPresent(Self.virtualOutputUID) { return Self.virtualOutputUID }
         return Self.fallbackOutput(
             pair: pair, playThroughUID: playThroughUID,
             previousUID: store.previousOutputUID, outputs: outputs())?.uid
