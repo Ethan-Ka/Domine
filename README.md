@@ -1,4 +1,14 @@
-# Domine
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/header-dark.svg">
+    <img src="docs/assets/header-light.svg" width="840" alt="Domine. System audio, left channel on one speaker, right on the other.">
+  </picture>
+</h1>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/macOS-14.4%2B-3B3835" alt="macOS 14.4 or later">
+  <img src="https://img.shields.io/badge/Swift-6-B12F22" alt="Swift 6">
+</p>
 
 A macOS app that plays the left channel of system audio on one Bluetooth speaker and the right channel on another. It was built for two JBL Grip speakers but works with any two outputs.
 
