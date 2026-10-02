@@ -4,12 +4,12 @@ These are HTML mockups from the design canvas. They will not render on their own
 
 | File | Screen | Notes |
 |---|---|---|
-| Main.dc.html | Main window, playing | ~640 x 480. Toolbar: title + status line, Stereo/Quad segmented control (Quad disabled in v1), swap button, on/off switch. Stage: Mac icon centered, "FRONT" label at top, Front Left / Front Right cards at the top corners, Rear Left / Rear Right as dashed placeholders at the bottom corners, lines from Mac to each card. Bottom bar: master volume slider with %, Test L / Test R, "Sync & Balance..." button. Clicking a card opens Assign. |
+| Main.dc.html | Main window, playing | ~640 x 480. Toolbar: title + status line, Stereo/Quad segmented control (Quad enabled once four speakers are assigned), swap button, on/off switch. Stage: Mac icon centered, "FRONT" label at top, Front Left / Front Right cards at the top corners, in Stereo mode the two front cards sit level with the Mac, vertically centered, and the rear positions are not drawn at all (no placeholders, no lines); Rear Left / Rear Right cards appear at the bottom corners only when the control is set to Quad (see Quad.dc.html); lines from Mac to each card. Bottom bar: master volume slider with %, Test L / Test R, "Sync & Balance..." button. Clicking a card opens Assign. |
 | Assign.dc.html | Choose speaker sheet | Sheet over main window. Radio list of outputs with name, UID suffix, status line, and a Play tone button per row. Cancel / Use This Speaker. |
 | Tuning.dc.html | Sync & Balance sheet | Delay offset slider (-50..+50 ms, readout like "Right +4 ms"), Extended range checkbox, Play Click Test, reported latencies line, Balance slider. Reset / Done. |
 | Welcome.dc.html | First-run setup | Three-step checklist with per-step action buttons, Continue. |
 | Disconnected.dc.html | Mono fallback | Front Right card in error state, Front Left tagged "L+R" with "Mono fallback", banner "Front Right disconnected. Front Left plays both sides until it reconnects." Toolbar status "Mono fallback". |
-| Quad.dc.html | Quad mode (v2 only) | All four positions active. Do not build in v1; keep the layout able to support it. |
+| Quad.dc.html | Quad mode | All four positions active. Shown only when Quad is selected; Quad is enabled once four distinct outputs are assigned. |
 | SettingsGeneral.dc.html | Settings > General | Standard Settings scene, form with right-aligned labels. |
 | SettingsExclusions.dc.html | Settings > Exclusions | App list with +/- buttons, per-app mode, "Excluded apps play through" popup. |
 | MenuBar.dc.html | Background mode | MenuBarExtra content shown only when the window is closed and audio keeps playing. |

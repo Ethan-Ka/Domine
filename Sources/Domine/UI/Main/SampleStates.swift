@@ -11,7 +11,23 @@ enum SampleStates {
     static let playing = MainWindowState(
         statusLine: "Playing in sync",
         isOn: true,
-        speakers: [frontLeft, frontRight, .placeholder(.rearLeft), .placeholder(.rearRight)],
+        speakers: [frontLeft, frontRight],
+        masterVolume: 0.62)
+
+    static let quad = MainWindowState(
+        statusLine: "Playing",
+        isOn: true,
+        mode: .quad,
+        isQuadAvailable: true,
+        speakers: [
+            frontLeft, frontRight,
+            SpeakerCardState(
+                position: .rearLeft, sideTag: "RL", deviceName: "JBL Grip", uidSuffix: "22B7",
+                statusText: "Connected", connection: .connected, level: 0.4),
+            SpeakerCardState(
+                position: .rearRight, sideTag: "RR", deviceName: "JBL Grip", uidSuffix: "E03D",
+                statusText: "Connected", connection: .connected, level: 0.38),
+        ],
         masterVolume: 0.62)
 
     static let monoFallback = MainWindowState(
@@ -24,8 +40,6 @@ enum SampleStates {
             SpeakerCardState(
                 position: .frontRight, sideTag: "R", deviceName: "JBL Grip", uidSuffix: "9C11",
                 statusText: "Not connected", connection: .disconnected),
-            .placeholder(.rearLeft),
-            .placeholder(.rearRight),
         ],
         masterVolume: 0.62,
         bannerMessage: "Front Right disconnected. Front Left plays both sides until it reconnects.")
@@ -40,8 +54,6 @@ enum SampleStates {
             SpeakerCardState(
                 position: .frontRight, sideTag: "R", deviceName: "JBL Grip", uidSuffix: "9C11",
                 statusText: "Not connected", connection: .disconnected),
-            .placeholder(.rearLeft),
-            .placeholder(.rearRight),
         ],
         masterVolume: 0.62)
 

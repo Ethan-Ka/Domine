@@ -9,9 +9,52 @@ struct AggregateLayout: Equatable, Sendable {
     /// Number of input buffers that belong to the tap.
     let tapBuffers: Int
     /// nil when the aggregate has no Device A (mono fallback).
-    let outAChannelOffset: Int?
+    var outAChannelOffset: Int? { outOffsets[0] }
     /// nil when the aggregate has no Device B (mono fallback).
-    let outBChannelOffset: Int?
+    var outBChannelOffset: Int? { outOffsets.count > 1 ? outOffsets[1] : nil }
+    /// One flat channel offset per position (A, B, then rear left and right
+    /// in quad mode). nil when that position is absent.
+    let outOffsets: [Int?]
+
+    init(inFirstBuffer: Int, tapBuffers: Int, outAChannelOffset: Int?, outBChannelOffset: Int?) {
+        self.init(inFirstBuffer: inFirstBuffer, tapBuffers: tapBuffers,
+                  outOffsets: [outAChannelOffset, outBChannelOffset])
+    }
+
+    init(inFirstBuffer: Int, tapBuffers: Int, outOffsets: [Int?]) {
+        self.inFirstBuffer = inFirstBuffer
+        self.tapBuffers = tapBuffers
+        self.outOffsets = outOffsets
+    }
+
+    /// Layout for N output sub-devices in position order. A nil entry is an
+    /// absent position; at least one must be present. Present sub-devices
+    /// appear in the aggregate in position order.
+    static func compute(
+        outputs: [[Int]?],
+        subDeviceInputBuffers: Int,
+        aggregateOutput: [Int],
+        aggregateInput: [Int]
+    ) throws(EngineError) -> AggregateLayout {
+        let present = outputs.compactMap { $0 }
+        let expected = present.map { $0.reduce(0, +) }
+        guard !present.isEmpty, expected.allSatisfy({ $0 >= 1 }),
+              aggregateOutput.reduce(0, +) == expected.reduce(0, +) else {
+            throw .layoutMismatch("output channels: sub-devices \(outputs), aggregate \(aggregateOutput)")
+        }
+        let tapBuffers = aggregateInput.count - subDeviceInputBuffers
+        guard tapBuffers >= 1 else {
+            throw .layoutMismatch(
+                "input buffers: \(subDeviceInputBuffers) from sub-devices, aggregate \(aggregateInput), no tap stream")
+        }
+        var next = 0
+        let offsets: [Int?] = outputs.map { streams in
+            guard let streams else { return nil }
+            defer { next += streams.reduce(0, +) }
+            return next
+        }
+        return AggregateLayout(inFirstBuffer: subDeviceInputBuffers, tapBuffers: tapBuffers, outOffsets: offsets)
+    }
 
     /// Computes the layout from the sub-devices' stream configurations and
     /// checks it against what the aggregate reports. A nil device is absent;

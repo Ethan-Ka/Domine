@@ -4,6 +4,8 @@ import CoreGraphics
 /// design size) and stretched to the real size.
 struct StageLayout: Equatable, Sendable {
     let size: CGSize
+    /// Stereo draws two front cards in the middle row; quad adds the rear row.
+    var mode: RoutingMode = .stereo
 
     static let designSize = CGSize(width: 616, height: 320)
     static let cardInset = CGSize(width: 20, height: 16)
@@ -13,7 +15,9 @@ struct StageLayout: Equatable, Sendable {
 
     /// Center of the Mac symbol; the mockup puts it slightly above middle.
     var macCenter: CGPoint {
-        CGPoint(x: size.width / 2, y: size.height * 150 / Self.designSize.height)
+        CGPoint(
+            x: size.width / 2,
+            y: mode == .quad ? size.height * 150 / Self.designSize.height : size.height / 2)
     }
 
     var guideRadius: CGFloat {
@@ -26,9 +30,11 @@ struct StageLayout: Equatable, Sendable {
         let x = position.isLeft
             ? Self.cardInset.width + halfW
             : size.width - Self.cardInset.width - halfW
-        let y = position.isFront
-            ? Self.cardInset.height + halfH
-            : size.height - Self.cardInset.height - halfH
+        let y = mode == .stereo
+            ? size.height / 2
+            : position.isFront
+                ? Self.cardInset.height + halfH
+                : size.height - Self.cardInset.height - halfH
         return CGPoint(x: x, y: y)
     }
 
@@ -52,7 +58,9 @@ struct StageLayout: Equatable, Sendable {
     /// The banner sits between the two rear cards, bottom-aligned with
     /// them, so it never covers their text.
     var bannerWidth: CGFloat {
-        let between = size.width - 2 * (Self.cardInset.width + cardSize.width + Self.bannerGap)
+        let between = mode == .stereo
+            ? size.width - 2 * Self.cardInset.width
+            : size.width - 2 * (Self.cardInset.width + cardSize.width + Self.bannerGap)
         return max(0, min(Self.bannerMaxWidth, between))
     }
 

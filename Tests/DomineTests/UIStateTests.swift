@@ -55,7 +55,7 @@ struct UIStateTests {
     }
 
     @Test func stageConnectorsMeetInnerCardEdges() {
-        let layout = StageLayout(size: StageLayout.designSize)
+        let layout = StageLayout(size: StageLayout.designSize, mode: .quad)
         #expect(layout.macCenter == CGPoint(x: 308, y: 150))
         #expect(layout.connectorEnd(.frontLeft) == CGPoint(x: 196, y: 66))
         #expect(layout.connectorEnd(.frontRight) == CGPoint(x: 420, y: 66))
@@ -66,7 +66,7 @@ struct UIStateTests {
     /// The banner stays between the rear cards so their text is not covered.
     @Test(arguments: [StageLayout.designSize, CGSize(width: 900, height: 640), CGSize(width: 1400, height: 700)])
     func bannerClearsTheRearCards(size: CGSize) {
-        let layout = StageLayout(size: size)
+        let layout = StageLayout(size: size, mode: .quad)
         let bannerMinX = (size.width - layout.bannerWidth) / 2
         let bannerMaxX = bannerMinX + layout.bannerWidth
         let rearLeftMaxX = layout.cardCenter(.rearLeft).x + StageLayout.cardSize.width / 2
@@ -78,8 +78,22 @@ struct UIStateTests {
     }
 
     @Test func bannerIsLevelWithTheRearCards() {
-        let layout = StageLayout(size: StageLayout.designSize)
+        let layout = StageLayout(size: StageLayout.designSize, mode: .quad)
         let rearBottom = layout.cardCenter(.rearLeft).y + StageLayout.cardSize.height / 2
         #expect(layout.size.height - layout.bannerBottomInset == rearBottom)
+    }
+
+    @Test func stereoStageHasOnlyFrontCards() {
+        #expect(SpeakerPosition.positions(in: .stereo) == [.frontLeft, .frontRight])
+        #expect(SpeakerPosition.positions(in: .quad).count == 4)
+    }
+
+    @Test func stereoStageCentersTheFrontCards() {
+        let layout = StageLayout(size: StageLayout.designSize)
+        #expect(layout.macCenter == CGPoint(x: 308, y: 160))
+        #expect(layout.cardCenter(.frontLeft).y == 160)
+        #expect(layout.cardCenter(.frontRight).y == 160)
+        #expect(layout.connectorEnd(.frontLeft) == CGPoint(x: 196, y: 160))
+        #expect(layout.connectorEnd(.frontRight) == CGPoint(x: 420, y: 160))
     }
 }

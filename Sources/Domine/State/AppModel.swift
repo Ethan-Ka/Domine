@@ -35,6 +35,15 @@ final class AppModel {
     /// always kernel position A. Change them with `setSpeakers(left:right:)`.
     private(set) var leftUID: String?
     private(set) var rightUID: String?
+    /// Rear speakers, for quad mode (SPEC 11). Change with `setRear(left:right:)`.
+    private(set) var rearLeftUID: String?
+    private(set) var rearRightUID: String?
+    /// The Stereo / Quad control. Quad only routes once the engine supports it.
+    private(set) var routingMode: RoutingMode = .stereo
+    /// Tuning for the current set of four speakers.
+    private(set) var quadSettings = QuadSettings()
+    /// Flips to true in phase 2, when the engine and kernel can play four speakers.
+    nonisolated static let engineSupportsQuad = false
     /// Tuning for the selected pair, seen with `leftUID` as Front Left.
     private(set) var pairSettings = PairSettings()
 
@@ -140,6 +149,9 @@ final class AppModel {
         loginItemNeedsApproval = services.launchAtLoginRequiresApproval()
         leftUID = store.lastLeftUID
         rightUID = store.lastRightUID
+        rearLeftUID = store.lastRearLeftUID
+        rearRightUID = store.lastRearRightUID
+        routingMode = store.routingMode
         pairSettings = Self.loadPairSettings(store: store, left: leftUID, right: rightUID)
         applyPairSettingsToEngine()
         volumeLink.onExternalChange = { [weak self] volume in self?.adoptHardwareVolume(volume) }
@@ -206,6 +218,8 @@ final class AppModel {
         pairSettings = Self.loadPairSettings(store: store, left: left, right: right)
         // A new pair is not a speaker connecting, so it never auto-starts.
         bothSpeakersWerePresent = bothSelectedSpeakersPresent
+        reloadQuadSettings()
+        if routingMode == .quad, !isQuadAvailable { setRoutingMode(.stereo) }
         syncVolumeLink()
         applyPairSettingsToEngine()
         if wasActive {
@@ -213,11 +227,48 @@ final class AppModel {
         }
     }
 
+    func setRear(left: String?, right: String?) {
+        guard left != rearLeftUID || right != rearRightUID else { return }
+        rearLeftUID = left
+        rearRightUID = right
+        store.lastRearLeftUID = left
+        store.lastRearRightUID = right
+        reloadQuadSettings()
+        if routingMode == .quad, !isQuadAvailable { setRoutingMode(.stereo) }
+    }
+
+    /// Four distinct outputs are assigned (the Quad segment's enable rule).
+    var isQuadAvailable: Bool {
+        let uids = [leftUID, rightUID, rearLeftUID, rearRightUID].compactMap { $0 }
+        return uids.count == 4 && Set(uids).count == 4
+    }
+
+    /// Quad needs four assigned speakers. Until the engine supports it the
+    /// mode is shown but routing stays stereo.
+    func setRoutingMode(_ mode: RoutingMode) {
+        guard mode == .stereo || isQuadAvailable else { return }
+        routingMode = mode
+        store.routingMode = mode
+    }
+
+    func setRearTrim(_ trim: Float) {
+        quadSettings.rearTrim = min(max(trim.isFinite ? trim : 1, 0), 1)
+        guard isQuadAvailable else { return }
+        store.setQuadSettings(quadSettings, uids: [leftUID, rightUID, rearLeftUID, rearRightUID].compactMap { $0 })
+    }
+
+    private func reloadQuadSettings() {
+        quadSettings = isQuadAvailable
+            ? store.quadSettings(uids: [leftUID, rightUID, rearLeftUID, rearRightUID].compactMap { $0 })
+            : QuadSettings()
+    }
+
     func uid(at position: SpeakerPosition) -> String? {
         switch position {
         case .frontLeft: leftUID
         case .frontRight: rightUID
-        case .rearLeft, .rearRight: nil
+        case .rearLeft: rearLeftUID
+        case .rearRight: rearRightUID
         }
     }
 
