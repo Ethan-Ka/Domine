@@ -1,4 +1,5 @@
 module DomineDSP {
+    header "include/DomineBass.h"
     header "include/DomineChime.h"
     header "include/DomineCompressor.h"
     header "include/DomineDSP.h"
