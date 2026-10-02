@@ -24,6 +24,22 @@ enum AggregateBuilder {
         clock: AggregateClock = clock,
         instance: UUID = UUID()
     ) -> [String: Any] {
+        description(
+            outputUIDs: [uidA] + (uidB.map { [$0] } ?? []),
+            tapUID: tapUID, clock: clock, instance: instance)
+    }
+
+    /// N output sub-devices in position order (SPEC 11.1). The first is the
+    /// main sub-device. With `.leftSpeaker` it is also the clock; the rest,
+    /// and the tap, are drift compensated. No sample rate is ever set.
+    static func description(
+        outputUIDs: [String],
+        tapUID: String,
+        clock: AggregateClock = clock,
+        instance: UUID = UUID()
+    ) -> [String: Any] {
+        precondition(!outputUIDs.isEmpty, "aggregate needs at least one output")
+        let uidA = outputUIDs[0]
         let clockUID: String = switch clock {
         case .leftSpeaker: uidA
         case .device(let uid): uid
@@ -34,8 +50,7 @@ enum AggregateBuilder {
                 : [kAudioSubDeviceUIDKey: uid, kAudioSubDeviceDriftCompensationKey: 1,
                    kAudioSubDeviceDriftCompensationQualityKey: driftQuality]
         }
-        var subDevices = [subDevice(uidA)]
-        if let uidB { subDevices.append(subDevice(uidB)) }
+        let subDevices = outputUIDs.map(subDevice)
         return [
             kAudioAggregateDeviceNameKey: name,
             kAudioAggregateDeviceUIDKey: uid(instance: instance),

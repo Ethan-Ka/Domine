@@ -113,6 +113,41 @@ struct AggregateBuilderTests {
     }
 }
 
+struct QuadAggregateTests {
+    @Test func fourSubDevicesInOrder() throws {
+        let uids = ["FL", "FR", "RL", "RR"]
+        let d = AggregateBuilder.description(outputUIDs: uids, tapUID: "TAP", instance: UUID())
+        let subs = try #require(d[kAudioAggregateDeviceSubDeviceListKey] as? [[String: Any]])
+        #expect(subs.compactMap { $0[kAudioSubDeviceUIDKey] as? String } == uids)
+        #expect(subs.map { $0[kAudioSubDeviceDriftCompensationKey] as? Int } == [0, 1, 1, 1])
+        #expect(d[kAudioAggregateDeviceMainSubDeviceKey] as? String == "FL")
+        #expect(d[kAudioAggregateDeviceClockDeviceKey] as? String == "FL")
+        #expect(d[kAudioAggregateDeviceIsPrivateKey] as? Int == 1)
+    }
+
+    @Test func quadOffsets() throws {
+        let layout = try AggregateLayout.compute(
+            outputs: [[2], [1, 1], [2], [2]], subDeviceInputBuffers: 0,
+            aggregateOutput: [2, 1, 1, 2, 2], aggregateInput: [2])
+        #expect(layout.outOffsets == [0, 2, 4, 6])
+    }
+
+    @Test func missingRearKeepsOtherOffsets() throws {
+        let layout = try AggregateLayout.compute(
+            outputs: [[2], [2], nil, [2]], subDeviceInputBuffers: 0,
+            aggregateOutput: [2, 2, 2], aggregateInput: [2])
+        #expect(layout.outOffsets == [0, 2, nil, 4])
+    }
+
+    @Test func quadMismatchThrows() {
+        #expect(throws: EngineError.self) {
+            try AggregateLayout.compute(
+                outputs: [[2], [2], [2], [2]], subDeviceInputBuffers: 0,
+                aggregateOutput: [2, 2, 2], aggregateInput: [2])
+        }
+    }
+}
+
 struct AggregateLayoutTests {
     @Test func stereoSubDevices() throws {
         let layout = try AggregateLayout.compute(
