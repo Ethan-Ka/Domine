@@ -81,6 +81,11 @@ typedef struct {
     double bassPhase, subPhase, orbitPhase, lfoPhase;
     float lp1, lp2;
     float bassAz;
+    // Added for demo.c.
+    uint32_t rollCallHits;
+    float kickGain[2];
+    float kickLen[2];
+    int lastKick;
 } DomineDemo;
 
 /// Resets to 0 s for the given speakers (azimuths in degrees, count clamped

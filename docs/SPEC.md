@@ -21,9 +21,14 @@ Domine is a small macOS windowed app that splits system stereo audio across two 
 - Keep playing in the background with a menu bar item when the window is closed (section 6a).
 - App exclusions: chosen apps skip the speaker pair and play through another output (section 3b).
 
+### Goals (v2)
+- Surround mode: 3 to 16 speakers placed anywhere around the listener, positions dragged on a top-down stage, sound panned between them like a surround system (section 13). Stereo mode stays as it is.
+- A built-in showcase demo, "Play Demo", that moves bass and kicks around the room so the user hears and feels each speaker, the left/right split, and a full orbit (section 14).
+- A Linux port on PipeWire with the same routing idea, the same render kernel, and the same stage (section 15).
+
 ### Non-goals (v1)
 - Per-app routing (only system-wide audio).
-- More than two outputs. Four-speaker quad mode is planned for v2 (section 11); the v1 UI already shows the rear positions as placeholders.
+- More than two outputs in v1. Surround mode (section 13) adds 3 to 16 speakers in v2 and replaces the earlier four-speaker quad plan (section 11).
 - Automatic latency calibration with the Mac microphone (planned for v2, see section 10).
 - Mac App Store distribution (see section 8).
 
@@ -260,7 +265,7 @@ Domine/
     Domine/                 app target
       DomineApp.swift       Window scene entry point
       UI/
-        MainView.swift      toolbar (Stereo/Quad, swap, on/off), stage, master volume, test tones
+        MainView.swift      toolbar (Stereo/Surround, swap, on/off), stage, master volume, test tones
         StageView.swift     Mac in the center, one SpeakerCard per position, connector lines
         SpeakerCard.swift   role, device name + UID suffix, volume, status, level meter
         AssignSheet.swift   choose the device for a position, with Play tone per row
@@ -353,6 +358,7 @@ States: `idle`, `starting`, `running`, `degraded(reason)`, `stopping`, `error(me
 - **Grip stereo pairing left on.** If the Grips are still stereo-paired in the JBL app, only one appears as a Mac output. Detect "only one device named JBL Grip is present" and show a hint to unpair them in the JBL Portable app.
 - **Multipoint steal.** A phone connected to one Grip can interrupt it. The Mac sees this as the device going silent or dropping; show the side that stopped.
 - **Inactivity power-off.** A Grip that powers down mid-session disappears from Core Audio. Handled by the rebuild logic; the menu shows "Left speaker off" rather than a generic error.
+- **More than two Bluetooth links.** Surround mode can hold up to 16 outputs, but every extra A2DP link shares the same radio. Past four Bluetooth speakers dropouts are likely on most Macs; the UI warns (section 13.6) but does not block. Wired, USB and HDMI outputs do not count toward this.
 - **Tap edge cases.** Some apps with exclusive or hog-mode output may bypass the tap. Log and document rather than work around.
 
 ## 10. Milestones
@@ -364,9 +370,16 @@ States: `idle`, `starting`, `running`, `degraded(reason)`, `stopping`, `error(me
 - **M4, resilience:** state machine, disconnect/reconnect, sleep/wake, stale aggregate cleanup.
 - **M4b, background features:** mono fallback, restore previous output, background mode with menu bar item, volume keys, app exclusions.
 - **M5, polish:** per-pair settings, debug panel, launch at login, permission flow, signing and notarization script.
+- **M6, Surround kernel:** `surround.c` behind `DomineSurround.h`: VBAP with the gap and coincident rules, virtual sources, headroom normalisation, width, surround level, rotation, orbit, distance compensation helper, per-speaker effects, gain, delay, mute. Unit tests from section 13.8. The quad kernel stays until M7 is done.
+- **M7, Surround engine and UI:** N-speaker aggregate, fallback, settings and migration from quad, Stereo / Surround control, the stage with draggable cards, presets, Add Speaker, controls, the Bluetooth warning. Engine tests against the fake HAL. Ends with the listening test in 13.8.
+- **M8, Showcase demo:** `demo.c` behind `DomineDemo.h`, the kernel hook, Play Demo in both modes (Stereo via the temporary surround rebuild), stage dot and status line. Ends with the listening test in 14.7.
+- **M9, Linux port:** `linux/` engine on PipeWire behind `linux/src/engine.h`, GTK4 UI with the stage and demo, `make check` self-test (section 15).
 - **v2 ideas:** mic-based auto-calibration of the latency offset (play a click on each side, cross-correlate), per-app routing using per-process taps, a true stereo mode where each speaker gets full stereo with a crossfeed amount.
 
-## 11. Quad mode (v2 plan)
+## 11. Quad mode (v2 plan, superseded by section 13)
+
+Superseded by Surround mode (section 13). Kept for history; where the two disagree, section 13 wins.
+
 
 Quad mode adds rear left and rear right speakers. Positions are indexed 0 FL, 1 FR, 2 RL, 3 RR. Phase 1 (done) is the aggregate, layout, model and UI. Phase 2 is kernel and engine.
 
@@ -422,4 +435,4 @@ Requested by the owner; replaces hand-tuning the delay slider as the normal path
 - The Mac's position matters: it measures arrival time at the Mac, not at the listener. The Tuning sheet says to put the Mac where the listener sits.
 - The "Play Click Test" button in the Tuning sheet mockup is the entry point. Add an "Auto-calibrate" button next to it.
 - Kernel support needed: a one-shot click/chirp generator per side with a sample-accurate start time reported back through an atomic, so the recording can be aligned to the emission.
-- Milestone: after M5, before quad mode. Quad mode reuses it to measure all four positions.
+- Milestone: after M5, before quad mode. Quad mode reuses it to measure all four positions. With Surround mode (section 13) it measures every speaker in the set, one click per speaker, and writes the per-speaker calibration offsets of section 13.4.
