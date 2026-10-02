@@ -335,10 +335,11 @@ States: `idle`, `starting`, `running`, `degraded(reason)`, `stopping`, `error(me
 - `scripts/uninstall.sh` removes the app and the driver, forgets the `com.ethankawley.Domine.*` receipts, and restarts coreaudiod. It needs sudo and takes `--dry-run`.
 ### 8c. Updates
 
-- Sparkle 2 (Swift package) with its standard update UI. `Updater` wraps `SPUStandardUpdaterController`; the app menu has "Check for Updates…" after About, and Settings > General has "Check for updates automatically".
-- Info.plist: `SUFeedURL` from the `SPARKLE_FEED_URL` build setting (`https://ethan-ka.github.io/Domine/appcast.xml`), `SUPublicEDKey` from `SPARKLE_PUBLIC_ED_KEY`, and `SUEnableInstallerLauncherService` so an update can be a .pkg that also installs the driver.
-- The updater never starts in the unit test host or while the public key is the placeholder. Then the menu item is disabled and the checkbox hidden, so dev builds never prompt.
-- Updates are EdDSA signed with a private key kept in the release machine's login keychain. `scripts/appcast.sh` builds the appcast from the notarized release output; the appcast is served from GitHub Pages and the files from GitHub Releases.
+- Releases are published as a notarized .pkg on GitHub Releases, tagged `vX.Y.Z`. Updating means downloading and running the installer, which replaces the app and the driver. There is no in-app installer.
+- `UpdateChecker` GETs `https://api.github.com/repos/Ethan-Ka/Domine/releases/latest` (no auth, User-Agent "Domine"), compares the tag to `CFBundleShortVersionString` as a semantic version, and takes the first asset ending in .pkg.
+- It checks at launch (at most once per 24 hours, timestamp persisted) and from "Check for Updates…" in the app menu, after About. Settings > General has "Check for updates automatically" for the launch check.
+- When newer, an alert "Domine X.Y.Z is available." offers "Download Installer" (the .pkg URL, or the release page if there is no .pkg) and "Later". A manual check with nothing newer says "Domine is up to date." Network errors are silent for the automatic check and show a short alert for the manual one.
+- It never runs in the unit test host. The network fetch is injected for tests.
 
 ## 9. Known risks
 

@@ -10,7 +10,7 @@ struct DomineApp: App {
 
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = AppModel()
-    @State private var updater = Updater.live()
+    @State private var updater = UpdateChecker.live()
 
     var body: some Scene {
         Window("Domine", id: "main") {
@@ -26,7 +26,7 @@ struct DomineApp: App {
             .frame(minWidth: 560, idealWidth: 640, minHeight: 420, idealHeight: 480)
         }
         .windowResizability(.contentSize)
-        .commands { UpdateCommands(updater: updater) }
+        .commands { UpdateCommands(checker: updater) }
 
         Window("Debug", id: "debug") {
             DebugView()
