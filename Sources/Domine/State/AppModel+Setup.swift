@@ -5,11 +5,18 @@ extension AppModel {
         catalog.outputs.filter { $0.name == DeviceCatalog.gripName }.count
     }
 
+    /// Reads Accessibility trust fresh on every render. When it disagrees
+    /// with the cached value, the rest of the UI catches up on the next turn.
     var setupState: SetupState {
-        SetupState(
+        let trusted = services.isAccessibilityTrusted()
+        if trusted != generalSettings.accessibilityGranted {
+            Task { [weak self] in self?.refreshSystemStatus() }
+        }
+        return SetupState(
             captureStatus: captureAccess.status,
             isCheckingCapture: captureAccess.isProbing,
-            accessibilityGranted: generalSettings.accessibilityGranted,
+            accessibilityGranted: trusted,
+            accessibilityLikelyStale: accessibilityLikelyStale && !trusted,
             connectedGrips: connectedGripCount,
             loginItemNeedsApproval: loginItemNeedsApproval)
     }
@@ -27,7 +34,8 @@ extension AppModel {
                 Task { await self.requestCaptureAccess() }
             },
             openPrivacySettings: { [weak self] in self?.openPrivacySettings() },
-            grantAccessibility: { [weak self] in self?.services.requestAccessibility() },
+            grantAccessibility: { [weak self] in self?.grantAccessibility() },
+            revealApp: { [weak self] in self?.revealAppInFinder() },
             openBluetoothSettings: { [weak self] in self?.services.openURL(SystemServices.bluetoothSettingsURL) },
             openLoginItems: { [weak self] in self?.services.openLoginItemsSettings() })
     }
@@ -47,11 +55,12 @@ extension AppModel {
         services.openURL(SystemServices.audioCaptureSettingsURL)
     }
 
-    /// The meter reader. Program audio reaching the kernel proves capture
-    /// works; a test tone does not, since the kernel makes it.
+    /// The meter reader, polled whenever the engine runs, window or not.
+    /// Program audio reaching the kernel proves capture works; a test tone
+    /// or click test does not, since the kernel makes those.
     func readMeterPeaks() -> (Float, Float) {
         let peaks = engine.peaks()
-        if engine.testTone == .off, peaks.0 > 0 || peaks.1 > 0 {
+        if engine.testTone == .off, !engine.clickTest, peaks.0 > 0 || peaks.1 > 0 {
             captureAccess.markWorking()
         }
         return peaks

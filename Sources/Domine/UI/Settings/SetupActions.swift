@@ -6,6 +6,8 @@ struct SetupActions {
     var requestCapture: @MainActor () -> Void = {}
     var openPrivacySettings: @MainActor () -> Void = {}
     var grantAccessibility: @MainActor () -> Void = {}
+    /// Show the running Domine.app in Finder, to drag into the list.
+    var revealApp: @MainActor () -> Void = {}
     var openBluetoothSettings: @MainActor () -> Void = {}
     var openLoginItems: @MainActor () -> Void = {}
 }

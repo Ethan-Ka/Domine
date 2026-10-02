@@ -251,6 +251,7 @@ States: `idle`, `starting`, `running`, `degraded(reason)`, `stopping`, `error(me
 - `Info.plist`: `NSAudioCaptureUsageDescription` (required for process taps; without it the tap silently returns no audio).
 - Hardened runtime on. No sandbox for v1: aggregate device and tap behavior under the App Sandbox has not been verified, and the app is distributed outside the App Store anyway.
 - A tap without capture permission returns silence, and there is no reliable API to detect a denial. Detect it best-effort (all-zero tap input for several seconds while another app is known to be playing) and then show a message with a button that opens the Privacy & Security pane.
+- TCC ties both grants (audio capture, Accessibility) to the app's designated requirement. An ad-hoc build gets a new requirement on every build; a certificate-signed build keeps it. The saved "capture works" flag is stored with that requirement and reset when it changes. Accessibility is read fresh (`AXIsProcessTrusted`) whenever it is shown. System Settings lists every copy under the name "Domine", so a switched-on entry can belong to another build: when trust is still missing after the user returns from System Settings, Setup offers to reveal the running app in Finder so it can be dragged into the list.
 
 ## 9. Known risks
 

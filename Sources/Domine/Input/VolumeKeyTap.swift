@@ -43,16 +43,16 @@ final class VolumeKeyTap {
     static let accessibilitySettingsURL = URL(
         string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
 
-    /// Adds Domine to the Accessibility list with the system prompt, then
-    /// opens that list. The prompt does not appear when an entry already
-    /// exists, including a stale one from an earlier build, so the list is
-    /// opened either way.
-    static func requestAccess() {
+    /// Asks for Accessibility with the system prompt, which adds this exact
+    /// binary to the list. The prompt does not appear when an entry already
+    /// exists, including a stale one from another build, so callers also
+    /// open the list (`accessibilitySettingsURL`).
+    static func promptForAccess() {
         // Literal value of kAXTrustedCheckOptionPrompt; the imported global is
         // a mutable var, which Swift 6 rejects as not concurrency safe.
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
-        _ = AXIsProcessTrustedWithOptions(options)
-        NSWorkspace.shared.open(accessibilitySettingsURL)
+        let trusted = AXIsProcessTrustedWithOptions(options)
+        log.info("Accessibility prompt requested; trusted \(trusted)")
     }
 
     // MARK: Lifecycle

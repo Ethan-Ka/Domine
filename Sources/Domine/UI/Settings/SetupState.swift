@@ -3,6 +3,9 @@ struct SetupState: Equatable, Sendable {
     var captureStatus: AudioCaptureStatus = .unknown
     var isCheckingCapture = false
     var accessibilityGranted = false
+    /// Still not granted after a trip to System Settings: the entry there is
+    /// likely for another build of Domine.
+    var accessibilityLikelyStale = false
     /// Output devices named "JBL Grip" that Core Audio lists now.
     var connectedGrips = 0
     /// The login item waits for approval in System Settings.
@@ -15,6 +18,14 @@ struct SetupState: Equatable, Sendable {
 
     var accessibilityText: String {
         accessibilityGranted ? "Granted" : "Not granted"
+    }
+
+    /// One line under the Accessibility status while it is missing.
+    var accessibilityNote: String? {
+        if accessibilityGranted { return nil }
+        return accessibilityLikelyStale
+            ? "Remove Domine from the list, then drag this copy in."
+            : "Switch on Domine in the list."
     }
 
     var speakersText: String {

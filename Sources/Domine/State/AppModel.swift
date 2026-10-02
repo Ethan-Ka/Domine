@@ -103,6 +103,16 @@ final class AppModel {
     @ObservationIgnored var trustPollTask: Task<Void, Never>?
     /// Last reason the volume key tap was not running, so it is logged once.
     @ObservationIgnored var lastVolumeKeyTapBlock: String?
+    /// Still not trusted after the user went to System Settings from Grant
+    /// Access and came back: the switched-on entry is likely for another
+    /// build of Domine (AppModel+Accessibility).
+    var accessibilityLikelyStale = false
+    /// Grant Access opened System Settings and trust has not arrived yet.
+    @ObservationIgnored var awaitingAccessibilityGrant = false
+    /// The Settings window is open, so its Accessibility row is on screen.
+    @ObservationIgnored var isSettingsVisible = false
+    /// How often trust is re-read while a "not granted" note shows.
+    @ObservationIgnored var trustPollInterval: Duration = .seconds(2)
 
     init(hal: any AudioHAL = CoreAudioHAL(), defaults: UserDefaults = .standard,
          services: SystemServices = .live) {
@@ -112,7 +122,7 @@ final class AppModel {
         volumeLink = SpeakerVolumeLink(hal: hal)
         outputRestorer = OutputRestorer(hal: hal, store: store, outputs: { catalog.outputs })
         engine = Engine(hal: hal)
-        captureAccess = AudioCapturePermission(hal: hal, store: store)
+        captureAccess = AudioCapturePermission(hal: hal, store: store, signature: services.codeSignature())
         tones = DeviceTonePlayer(hal: hal)
         self.store = store
         self.services = services
@@ -135,6 +145,7 @@ final class AppModel {
         syncWithCatalog()
         syncWithEngine()
         guard terminationObserver == nil else { return }
+        logPermissionsAtLaunch()
         observeCatalog()
         observeEngine()
         observeActivationForVolumeKeys()

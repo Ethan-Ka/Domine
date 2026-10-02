@@ -16,7 +16,8 @@ struct AppSettingsView: View {
             setup: model.setupState,
             setupActions: model.setupActions(showMainWindow: showMainWindow),
             exclusionsActions: ExclusionsActions(chooseApp: chooseApp))
-            .onAppear { model.refreshSystemStatus() }
+            .onAppear { model.settingsDidAppear() }
+            .onDisappear { model.settingsDidDisappear() }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                 model.refreshSystemStatus()
             }
