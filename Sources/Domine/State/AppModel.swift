@@ -82,6 +82,7 @@ final class AppModel {
     /// Last known name per UID, so a disconnected card still shows its name.
     @ObservationIgnored private(set) var knownNames: [String: String] = [:]
     @ObservationIgnored var toneTask: Task<Void, Never>?
+    @ObservationIgnored let sleepState = SleepState()
     @ObservationIgnored private var terminationObserver: (any NSObjectProtocol)?
 
     /// The main window is closed and routing goes on, with a menu bar item
@@ -149,6 +150,7 @@ final class AppModel {
         observeCatalog()
         observeEngine()
         observeActivationForVolumeKeys()
+        observeSleepAndWake()
         // Never leave a muting tap behind on quit. AppKit posts this on the
         // main thread; a nil queue runs the block before termination continues.
         terminationObserver = NotificationCenter.default.addObserver(

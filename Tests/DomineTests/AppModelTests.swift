@@ -507,6 +507,7 @@ final class FakeSystem {
     var activationPolicies: [NSApplication.ActivationPolicy] = []
     var activations = 0
     var terminations = 0
+    let sleepWakeCenter = NotificationCenter()
 
     struct Failure: Error {}
 
@@ -532,6 +533,7 @@ final class FakeSystem {
             activateApp: { [weak self] in self?.activations += 1 },
             terminateApp: { [weak self] in self?.terminations += 1 },
             revealInFinder: { [weak self] in self?.revealedURLs.append($0) },
-            codeSignature: { [weak self] in self?.signature })
+            codeSignature: { [weak self] in self?.signature },
+            sleepWakeCenter: sleepWakeCenter)
     }
 }
