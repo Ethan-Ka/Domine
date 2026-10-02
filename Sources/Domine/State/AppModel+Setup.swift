@@ -4,7 +4,9 @@ import CoreAudio
 extension AppModel {
     /// Output devices named "JBL Grip" in the catalog right now.
     var connectedGripCount: Int {
-        catalog.outputs.filter { $0.name == DeviceCatalog.gripName }.count
+        var count = 0
+        for device in catalog.outputs where device.name == DeviceCatalog.gripName { count += 1 }
+        return count
     }
 
     /// Reading `catalog.outputs` ties this to device list changes.

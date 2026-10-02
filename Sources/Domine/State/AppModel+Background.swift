@@ -68,14 +68,19 @@ extension AppModel {
     // MARK: - Menu content
 
     var statusMenuState: StatusMenuState {
-        StatusMenuState(
+        var matched: PairSettings.Preset?
+        for candidate in PairSettings.Preset.allCases where candidate.settings == pairSettings.effects {
+            matched = candidate
+            break
+        }
+        return StatusMenuState(
             statusText: statusLine,
             isOn: engine.state.isActive,
             left: statusMenuSpeaker(.frontLeft),
             right: statusMenuSpeaker(.frontRight),
             masterVolume: Double(pairSettings.masterVolume),
             isMuted: isMuted,
-            preset: PairSettings.Preset.allCases.first { $0.settings == pairSettings.effects },
+            preset: matched,
             isRouting: engine.state.isRouting)
     }
 

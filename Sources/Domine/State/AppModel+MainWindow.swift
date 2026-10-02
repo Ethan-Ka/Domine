@@ -10,18 +10,24 @@ extension AppModel {
     }
 
     var mainWindowState: MainWindowState {
-        MainWindowState(
+        var cards: [SpeakerCardState] = []
+        for position in SpeakerPosition.positions(in: routingMode) { cards.append(card(for: position)) }
+        var anyAssigned = false
+        for uid in [leftUID, rightUID] {
+            if let uid, catalog.device(uid: uid) != nil { anyAssigned = true }
+        }
+        return MainWindowState(
             statusLine: statusLine,
             isOn: engine.state.isActive,
             mode: routingMode,
             isQuadAvailable: true,
             canSwap: true,
-            speakers: SpeakerPosition.positions(in: routingMode).map { card(for: $0) },
+            speakers: cards,
             masterVolume: Double(pairSettings.masterVolume),
             isMuted: isMuted,
             testToneSide: testToneSide,
             canPlayTestTones: engine.state.isRouting
-                || [leftUID, rightUID].contains { $0.flatMap(catalog.device(uid:)) != nil },
+                || anyAssigned,
             bannerMessage: monoFallbackBanner ?? (showsGripPairingHint ? Self.gripPairingHint : nil),
             rearMode: RearMode(rawValue: quadSettings.rearMode) ?? .mirror,
             rearLevel: Double(quadSettings.rearTrim))
@@ -47,7 +53,11 @@ extension AppModel {
 
     /// The missing speaker's position while the engine is in mono fallback.
     var monoFallbackMissingPosition: SpeakerPosition? {
-        engine.state.missingSpeaker.map { $0 == .left ? .frontLeft : .frontRight }
+        switch engine.state.missingSpeaker {
+        case .none: return nil
+        case .some(.left): return .frontLeft
+        case .some: return .frontRight
+        }
     }
 
     /// Stage banner during mono fallback (docs/mockups/Disconnected.dc.html).

@@ -3,9 +3,8 @@ extension AppModel {
     var welcomeState: WelcomeState {
         var state = WelcomeState()
         state.setDone(.unpairJBL, markedJBLUnpaired || connectedGripCount >= 2)
-        let bothPresent = [leftUID, rightUID].allSatisfy { uid in
-            uid.map { catalog.device(uid: $0) != nil } ?? false
-        }
+        let bothPresent = leftUID.map { catalog.device(uid: $0) != nil } == true
+            && rightUID.map { catalog.device(uid: $0) != nil } == true
         state.setDone(.connectSpeakers, bothPresent)
         // There is no API to read the capture permission; tap audio is the only proof.
         state.setDone(.allowCapture, captureAccess.status == .working)
