@@ -22,10 +22,11 @@ struct DomineSpatial {
 
     // Render thread state.
     uint32_t seenSeq;
-    float amountTarget, roomTarget, lpCoef;
-    float amount, roomMs;
+    double amountTarget, roomTarget;
+    float lpCoef;
+    double amount, roomMs; // double so smoothing reaches the target exactly
     float lpL, lpR;
-    float smoothCoef;
+    double smoothCoef;
     float *ring;
     uint32_t ringMask, ringPos;
     Allpass ap[2][NSTAGES];
@@ -57,7 +58,7 @@ DomineSpatial *domine_spatial_create(double sampleRate) {
     DomineSpatial *s = calloc(1, sizeof *s);
     if (s == NULL) return NULL;
     s->sampleRate = sampleRate;
-    s->smoothCoef = (float)(1.0 - exp(-1.0 / (SMOOTH_S * sampleRate)));
+    s->smoothCoef = 1.0 - exp(-1.0 / (SMOOTH_S * sampleRate));
     // Longest read: 30 ms times 1.13, plus interpolation margin.
     uint32_t ringLen = next_pow2((uint32_t)ceil(sampleRate * MAX_ROOM_MS * RIGHT_DELAY_RATIO / 1000.0) + 4);
     s->ring = calloc(ringLen, sizeof(float));
@@ -142,18 +143,19 @@ static inline float read_delay(const DomineSpatial *s, float delay) {
 }
 
 static inline void frame(DomineSpatial *s, float l, float r, float *rl, float *rr) {
-    const float c = s->smoothCoef;
+    const double c = s->smoothCoef;
     s->amount += c * (s->amountTarget - s->amount);
-    if (fabsf(s->amountTarget - s->amount) < 1e-6f) s->amount = s->amountTarget;
+    if (fabs(s->amountTarget - s->amount) < 1e-9) s->amount = s->amountTarget;
     s->roomMs += c * (s->roomTarget - s->roomMs);
+    if (fabs(s->roomTarget - s->roomMs) < 1e-6) s->roomMs = s->roomTarget;
 
     // Ambience path always runs so its state is warm when amount rises.
     const float side = 0.5f * (l - r);
     s->ringPos++;
     s->ring[s->ringPos & s->ringMask] = side;
     const float samplesPerMs = (float)(s->sampleRate / 1000.0);
-    float a = read_delay(s, s->roomMs * samplesPerMs);
-    float b = read_delay(s, s->roomMs * RIGHT_DELAY_RATIO * samplesPerMs);
+    float a = read_delay(s, (float)s->roomMs * samplesPerMs);
+    float b = read_delay(s, (float)s->roomMs * RIGHT_DELAY_RATIO * samplesPerMs);
     for (int i = 0; i < NSTAGES; i++) { a = allpass(&s->ap[0][i], a); b = allpass(&s->ap[1][i], b); }
     b = -b;
     s->lpL += s->lpCoef * (a - s->lpL);
@@ -162,7 +164,7 @@ static inline void frame(DomineSpatial *s, float l, float r, float *rl, float *r
     const float ambR = clamp1(AMB_GAIN * (s->lpR + SHELF_K * (b - s->lpR)));
 
     if (s->amount == 0.0f) { *rl = l; *rr = r; return; }
-    const float w = s->amount, m = 1.0f - w;
+    const float w = (float)s->amount, m = 1.0f - w;
     *rl = m * l + w * ambL;
     *rr = m * r + w * ambR;
 }

@@ -23,7 +23,7 @@ struct SpatialTests {
     static func settle(_ sp: OpaquePointer, amount: Float, room: Float = 15) {
         var p = DomineSpatialParams(amount: amount, roomMs: room, highCutHz: 5000)
         domine_spatial_set_params(sp, &p)
-        _ = render(sp, [Float](repeating: 0, count: 4800), [Float](repeating: 0, count: 4800))
+        _ = render(sp, [Float](repeating: 0, count: 24000), [Float](repeating: 0, count: 24000))
     }
 
     @Test func amountZeroIsBitExactMirror() {
@@ -99,7 +99,8 @@ struct SpatialTests {
         let sp = domine_spatial_create(Self.rate)!
         defer { domine_spatial_destroy(sp) }
         let l = [Float](repeating: 0.5, count: 4800), r = [Float](repeating: -0.5, count: 4800)
-        Self.settle(sp, amount: 0)
+        _ = Self.render(sp, l, r)
+        _ = Self.render(sp, l, r)
         var p = DomineSpatialParams(amount: 1, roomMs: 15, highCutHz: 5000)
         domine_spatial_set_params(sp, &p)
         let (rl, _) = Self.render(sp, l, r)
