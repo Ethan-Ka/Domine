@@ -76,7 +76,17 @@ final class Engine {
     /// (SPEC 3b). Empty until excluded apps are resolved to processes.
     var excludedProcesses: [AudioObjectID] = []
 
-    var isKernelAllocated: Bool { resources.kernel != nil }
+    // Quad controls (SPEC 11). Positions: 0 FL, 1 FR, 2 RL, 3 RR.
+    var quadGains: [Float] = [1, 1, 1, 1] { didSet { applyControls() } }
+    /// Per-position delay in ms, never negative.
+    var quadDelaysMs: [Float] = [0, 0, 0, 0] { didSet { applyControls() } }
+    /// DOMINE_REAR_MIRROR, DOMINE_REAR_MATRIX or DOMINE_REAR_DIRECT.
+    var rearMode: Int32 = Int32(DOMINE_REAR_MIRROR) { didSet { applyControls() } }
+    var rearTrim: Float = 1 { didSet { applyControls() } }
+    /// The four UIDs of a quad routing in position order; nil in stereo.
+    @ObservationIgnored fileprivate(set) var quadUIDs: [String]?
+
+    var isKernelAllocated: Bool { resources.kernel != nil || resources.quad != nil }
 
     /// The rate the kernel was created with (the aggregate's nominal rate).
     var kernelSampleRate: Double? {
@@ -90,6 +100,9 @@ final class Engine {
         var tap: ProcessTap?
         var aggregate: AudioObjectID?
         var kernel: OpaquePointer?
+        var quad: OpaquePointer?
+        /// Quad: the device ID per position; nil for one left out.
+        var quadIDs: [AudioObjectID?] = []
         var ioProc: IOProcHandle?
         var deviceStarted = false
         /// The default output's rate before Domine matched it (restored on stop).
@@ -278,6 +291,7 @@ final class Engine {
         formatCheck = nil
         formatRebuilds = 0
         speakers = nil
+        quadUIDs = nil
         halt()
     }
 
@@ -291,7 +305,7 @@ final class Engine {
         state = .idle
     }
 
-    private func refuse(_ reason: IdleReason) {
+    fileprivate func refuse(_ reason: IdleReason) {
         idleReason = reason
         state = .idle
     }
@@ -369,7 +383,7 @@ final class Engine {
         var clock = AggregateBuilder.clock
         if case .device(let uid) = clock, !present.contains(where: { $0.uid == uid }) { clock = .leftSpeaker }
         let description = AggregateBuilder.description(
-            uidA: main.uid, uidB: present.dropFirst().first?.uid, tapUID: tap.uid, clock: clock)
+            outputUIDs: present.map(\.uid), tapUID: tap.uid, clock: clock)
         EngineDiagnostics.logAggregateDescription(description)
         resources.aggregate = try EngineError.hal { () throws(HALError) in
             try hal.createAggregateDevice(description)
@@ -600,7 +614,7 @@ final class Engine {
     /// start. Returns whether it rebuilt.
     @discardableResult
     func checkFormat() async -> Bool {
-        guard state.isRouting, let tap = resources.tap, let speakers else { return false }
+        guard state.isRouting, let tap = resources.tap, speakers != nil || quadUIDs != nil else { return false }
         let defaultUID = currentDefaultOutputUID()
         let format: AudioStreamBasicDescription
         do {
@@ -621,6 +635,11 @@ final class Engine {
         }
         formatRebuilds += 1
         Self.log.info("Rebuilding: default output \(defaultUID ?? "none", privacy: .public), tap \(EngineDiagnostics.describe(format), privacy: .public)")
+        if let quad = quadUIDs {
+            await rebuildQuad(uids: quad, ids: resources.quadIDs)
+            return true
+        }
+        guard let speakers else { return false }
         if state != .running {
             // Mono fallback cannot go through start, which needs both speakers.
             await rebuild(uidA: speakers.left, uidB: speakers.right, ids: resources.speakerIDs)
@@ -660,12 +679,16 @@ final class Engine {
     func setExcludedProcesses(_ processes: [AudioObjectID]) async {
         guard processes != excludedProcesses else { return }
         excludedProcesses = processes
+        if state.isRouting, let quad = quadUIDs {
+            await rebuildQuad(uids: quad, ids: resources.quadIDs)
+            return
+        }
         guard state.isRouting, let speakers else { return }
         Self.log.info("Excluded processes changed to \(processes.count, privacy: .public); rebuilding the tap")
         await rebuild(uidA: speakers.left, uidB: speakers.right, ids: resources.speakerIDs)
     }
 
-    private func scheduleSpeakerCheck() {
+    fileprivate func scheduleSpeakerCheck() {
         speakerCheckPending = true
         guard speakerCheck == nil else { return }
         speakerCheck = Task { [weak self] in await self?.runSpeakerChecks() }
@@ -685,7 +708,7 @@ final class Engine {
 
     /// The speaker's current device ID if it is in the device list and
     /// alive, else nil. Matched by UID, since IDs change on reconnect.
-    private func presentID(_ uid: String) -> AudioObjectID? {
+    fileprivate func presentID(_ uid: String) -> AudioObjectID? {
         guard let id = try? hal.deviceID(forUID: uid), id != kAudioObjectUnknown,
               (try? hal.isAlive(id)) == true else { return nil }
         return id
@@ -697,6 +720,7 @@ final class Engine {
     /// rebuilt or stopped.
     @discardableResult
     func checkSpeakers() async -> Bool {
+        if let quad = quadUIDs { return await checkQuadSpeakers(quad) }
         guard state.isRouting, let speakers else { return false }
         let ids = SpeakerIDs(a: presentID(speakers.left), b: presentID(speakers.right))
         // A pair that just failed to build is not retried until something changes.
@@ -784,6 +808,13 @@ final class Engine {
                 Self.log.fault("IOProc and aggregate survived teardown; leaking the kernel")
             }
         }
+        if let quad = resources.quad {
+            if ioProcGone || aggregateGone {
+                domine_quad_destroy(quad)
+            } else {
+                Self.log.fault("IOProc and aggregate survived teardown; leaking the quad kernel")
+            }
+        }
         restoreDefaultOutputRate()
         resources = Resources()
     }
@@ -800,7 +831,7 @@ final class Engine {
     }
 
     private func isEmpty(_ r: Resources) -> Bool {
-        r.tap == nil && r.aggregate == nil && r.kernel == nil && r.ioProc == nil
+        r.tap == nil && r.aggregate == nil && r.kernel == nil && r.quad == nil && r.ioProc == nil
     }
 
     // MARK: - Meters and diagnostics
@@ -808,6 +839,7 @@ final class Engine {
     /// Linear peaks the kernel last wrote to position A (Front Left device)
     /// and position B (Front Right device). Both 0 when not running.
     func peaks() -> (Float, Float) {
+        if state.isRouting, let quad = resources.quad { return (domine_quad_peak(quad, 0), domine_quad_peak(quad, 1)) }
         guard state.isRouting, let kernel = resources.kernel else { return (0, 0) }
         return (domine_kernel_peak(kernel, 0), domine_kernel_peak(kernel, 1))
     }
@@ -829,6 +861,7 @@ final class Engine {
     // MARK: - Controls
 
     private func applyControls() {
+        if let quad = resources.quad { return applyQuadControls(quad) }
         guard let kernel = resources.kernel else { return }
         domine_kernel_set_mode(kernel, monoPerSpeaker ? 1 : 0, swapSides ? 1 : 0, kernelMonoFallback ? 1 : 0)
         domine_kernel_set_test_tone(kernel, testTone.rawValue)
@@ -846,5 +879,187 @@ final class Engine {
             domine_kernel_set_compressor(kernel, position, &comp)
             pushedEQ.append(eq)
         }
+    }
+}
+
+// MARK: - Quad routing (SPEC 11)
+
+extension Engine {
+    static let quadLabels = ["FL", "FR", "RL", "RR"]
+
+    /// Routes four distinct, present outputs in position order FL, FR, RL, RR.
+    /// Stereo routing is `start(left:right:)`; this is a separate path.
+    func start(quad uids: [String?]) async {
+        switch state {
+        case .idle, .error: break
+        case .starting, .running, .degraded, .stopping: return
+        }
+        idleReason = nil
+        let all = uids.compactMap { $0 }
+        guard uids.count == 4, all.count == 4 else {
+            return refuse(uids.first.flatMap { $0 } == nil ? .noLeftSpeaker : .noRightSpeaker)
+        }
+        guard Set(all).count == 4 else { return refuse(.sameSpeaker) }
+        var ids: [AudioObjectID?] = []
+        for (index, uid) in all.enumerated() {
+            do {
+                let id = try hal.deviceID(forUID: uid)
+                guard id != kAudioObjectUnknown else {
+                    return refuse(index % 2 == 0 ? .leftMissing : .rightMissing)
+                }
+                ids.append(id)
+            } catch {
+                state = .error(EngineError.hal(error).description)
+                return
+            }
+        }
+        state = .starting
+        generation &+= 1
+        quadUIDs = all
+        if let error = await buildQuad(uids: all, ids: ids, fadeIn: false) {
+            quadUIDs = nil
+            state = .error(error.description)
+        }
+    }
+
+    /// Builds the tap, a four sub-device aggregate (missing positions left
+    /// out), the quad kernel and its IOProc. At least one position must be
+    /// present. Returns the error, or nil on success or a quiet cancel.
+    private func buildQuad(uids: [String], ids: [AudioObjectID?], fadeIn: Bool) async -> EngineError? {
+        let current = generation
+        do throws(EngineError) {
+            var devices: [SubDevice?] = []
+            for index in 0..<4 {
+                if let id = ids[index] {
+                    devices.append(try inspect(uid: uids[index], id: id, label: Self.quadLabels[index]))
+                } else {
+                    devices.append(nil)
+                }
+            }
+            let present = devices.compactMap { $0 }
+            guard let main = present.first else { throw .kernelUnavailable }
+            let targetRate = try? hal.nominalSampleRate(of: main.id)
+            if let targetRate, matchDefaultOutputRate(speakers: present, target: targetRate) {
+                if !(await waitForDefaultOutputRate(targetRate)) {
+                    Self.log.warning("Default output did not report \(targetRate, privacy: .public) Hz within the wait; creating the tap anyway")
+                }
+                guard current == generation else { return nil }
+            }
+            guard try await createTap(expectedRate: targetRate, generation: current) else { return nil }
+            try createAggregate(present)
+            guard let layout = try await readQuadLayout(devices, generation: current), current == generation else { return nil }
+            try startQuadIO(layout: layout)
+            self.layout = layout
+            resources.quadIDs = ids
+            let missing = (0..<4).filter { ids[$0] == nil }
+            state = missing.isEmpty ? .running : .degraded(.quadFallback(missing: missing))
+            Self.log.info("Quad: \(present.map { "\($0.label) \($0.uid)" }.joined(separator: ", "), privacy: .public), layout \(String(describing: layout), privacy: .public)")
+            watchFormat()
+            watchQuadSpeakers(uids)
+            return nil
+        } catch {
+            guard current == generation else { return nil }
+            teardown()
+            layout = nil
+            Self.log.error("Quad start failed: \(error.description, privacy: .public)")
+            return error
+        }
+    }
+
+    private func readQuadLayout(_ devices: [SubDevice?], generation current: Int) async throws(EngineError) -> AggregateLayout? {
+        guard let aggregate = resources.aggregate else { return nil }
+        var attempt = 1
+        while true {
+            let (output, input) = try EngineError.hal { () throws(HALError) in
+                (try hal.streamChannels(of: aggregate, scope: .output),
+                 try hal.streamChannels(of: aggregate, scope: .input))
+            }
+            do {
+                return try AggregateLayout.compute(
+                    outputs: devices.map { $0?.output },
+                    subDeviceInputBuffers: devices.reduce(0) { $0 + ($1?.inputBuffers ?? 0) },
+                    aggregateOutput: output, aggregateInput: input)
+            } catch {
+                if attempt >= layoutAttempts { throw error }
+            }
+            attempt += 1
+            try? await Task.sleep(for: layoutRetryDelay)
+            if generation != current { return nil }
+        }
+    }
+
+    private func startQuadIO(layout: AggregateLayout) throws(EngineError) {
+        guard let aggregate = resources.aggregate else { throw .kernelUnavailable }
+        let rate = try EngineError.hal { () throws(HALError) in try hal.nominalSampleRate(of: aggregate) }
+        guard rate.isFinite, rate > 0 else { throw .invalidSampleRate(rate) }
+        guard let quad = domine_quad_create(rate, Self.kernelMaxFrames) else { throw .kernelUnavailable }
+        resources.quad = quad
+        var offsets = layout.outOffsets.map { $0.map { UInt32($0) } ?? DOMINE_NO_DEVICE }
+        while offsets.count < 4 { offsets.append(DOMINE_NO_DEVICE) }
+        offsets.withUnsafeBufferPointer { domine_quad_set_layout(quad, UInt32(layout.inFirstBuffer), $0.baseAddress!) }
+        let format = tapStreamFormat(aggregate: aggregate, layout: layout)
+        domine_quad_set_input_format(quad, format.channels, format.nonInterleaved ? 1 : 0)
+        inputFormat = format
+        applyQuadControls(quad)
+
+        let proc = try EngineError.hal { () throws(HALError) in
+            try hal.createIOProc(on: aggregate, proc: domine_quad_ioproc, clientData: UnsafeMutableRawPointer(quad))
+        }
+        resources.ioProc = proc
+        if layout.inFirstBuffer > 0 {
+            let usage = Array(repeating: false, count: layout.inFirstBuffer)
+                + Array(repeating: true, count: layout.tapBuffers)
+            try EngineError.hal { () throws(HALError) in try hal.setInputStreamUsage(usage, for: proc) }
+        }
+        try EngineError.hal { () throws(HALError) in try hal.startDevice(proc) }
+        resources.deviceStarted = true
+    }
+
+    fileprivate func applyQuadControls(_ quad: OpaquePointer) {
+        for position in 0..<4 {
+            domine_quad_set_gain(quad, Int32(position), quadGains[position])
+            domine_quad_set_delay_ms(quad, Int32(position), quadDelaysMs[position])
+        }
+        domine_quad_set_rear_mode(quad, rearMode)
+        domine_quad_set_rear_trim(quad, rearTrim)
+    }
+
+    private func watchQuadSpeakers(_ uids: [String]) {
+        var properties: [HALProperty] = [.devices]
+        for uid in uids {
+            if let id = try? hal.deviceID(forUID: uid), id != kAudioObjectUnknown { properties.append(.isAlive(id)) }
+        }
+        watch(properties) { [weak self] in self?.scheduleSpeakerCheck() }
+    }
+
+    /// Rebuilds with the present positions when the set or an ID changed
+    /// (a missing position folds in the kernel); all gone stops the engine.
+    fileprivate func checkQuadSpeakers(_ uids: [String]) async -> Bool {
+        guard state.isRouting else { return false }
+        let ids = uids.map { presentID($0) }
+        guard ids != resources.quadIDs else { return false }
+        if ids.allSatisfy({ $0 == nil }) {
+            Self.log.warning("All quad speakers disconnected; stopping")
+            stop()
+            idleReason = .speakersDisconnected
+            onRoutingEnded?()
+            return true
+        }
+        await rebuildQuad(uids: uids, ids: ids)
+        return true
+    }
+
+    fileprivate func rebuildQuad(uids: [String], ids: [AudioObjectID?]) async {
+        let previous = resources.quadIDs
+        await fadeOut()
+        guard state.isRouting, resources.quadIDs == previous else { return }
+        Self.log.info("Rebuilding quad for \(ids.map { $0.map { "\($0)" } ?? "missing" }.joined(separator: ", "), privacy: .public)")
+        generation &+= 1
+        teardown()
+        layout = nil
+        guard let error = await buildQuad(uids: uids, ids: ids, fadeIn: true) else { return }
+        stop()
+        state = .error(error.description)
+        onRoutingEnded?()
     }
 }
