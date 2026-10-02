@@ -298,6 +298,13 @@ States: `idle`, `starting`, `running`, `degraded(reason)`, `stopping`, `error(me
 - Release: `scripts/release.sh` builds the driver with Developer ID and the hardened runtime and includes it in the notarized zip next to the app. The app does not install the driver itself in v1; the user runs the install script, or a later installer package does it.
 - The driver has no entitlements and no network or file access beyond the host's storage callbacks.
 
+### 8c. Updates
+
+- Sparkle 2 (Swift package) with its standard update UI. `Updater` wraps `SPUStandardUpdaterController`; the app menu has "Check for Updates…" after About, and Settings > General has "Check for updates automatically".
+- Info.plist: `SUFeedURL` from the `SPARKLE_FEED_URL` build setting (`https://ethan-ka.github.io/Domine/appcast.xml`), `SUPublicEDKey` from `SPARKLE_PUBLIC_ED_KEY`, and `SUEnableInstallerLauncherService` so an update can be a .pkg that also installs the driver.
+- The updater never starts in the unit test host or while the public key is the placeholder. Then the menu item is disabled and the checkbox hidden, so dev builds never prompt.
+- Updates are EdDSA signed with a private key kept in the release machine's login keychain. `scripts/appcast.sh` builds the appcast from the notarized release output; the appcast is served from GitHub Pages and the files from GitHub Releases.
+
 ## 9. Known risks
 
 - **Two Bluetooth audio links at once.** macOS can hold several A2DP connections, but bandwidth is shared with Wi-Fi on 2.4 GHz and with other Bluetooth devices. Expect occasional dropouts on some Macs. Document this; do not try to fix it in software.

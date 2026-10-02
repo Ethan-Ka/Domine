@@ -31,6 +31,7 @@ Status: in development. Progress is tracked in [the milestones](docs/SPEC.md#10-
 | `./scripts/install-driver.sh` | Build and install the virtual output driver, then restart coreaudiod (needs sudo) |
 | `./scripts/uninstall-driver.sh` | Remove the virtual output driver and restart coreaudiod (needs sudo) |
 | `./scripts/release.sh` | Archive, Developer ID sign the app and driver, notarize, and staple into `build/release/` (see [Releasing](#releasing)) |
+| `./scripts/appcast.sh` | Build the Sparkle appcast and versioned update files into `build/release/appcast/` (see [Updates](#updates)) |
 
 A typical loop: edit, `./scripts/test.sh`, then `./scripts/run.sh --logs` to try it.
 
@@ -79,6 +80,36 @@ DEVELOPMENT_TEAM=TEAMID NOTARY_PROFILE=NAME ./scripts/release.sh
 ```
 
 The stapled app and the signed driver are in `build/release/dist/`, and the zip to distribute (both together) is `build/release/Domine.zip`. Add `--dry-run` to print the commands without running them.
+
+### Updates
+
+Domine checks for updates with [Sparkle](https://sparkle-project.org). The feed URL is `SPARKLE_FEED_URL` in `project.yml` (now `https://ethan-ka.github.io/Domine/appcast.xml`); change it there if the appcast moves. Until `SPARKLE_PUBLIC_ED_KEY` holds a real key, the updater stays off: "Check for Updates…" is disabled, Settings hides the checkbox, and nothing is checked.
+
+One-time setup:
+
+1. Build once so Xcode downloads the Sparkle package (`./scripts/build.sh`).
+2. Create the signing key. `generate_keys` stores the private key in the login keychain and prints the public key:
+
+   ```sh
+   build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys
+   ```
+
+   Back up the private key (`generate_keys -x private-key-file`) somewhere safe. Losing it means installed copies can no longer verify updates.
+3. Put the printed public key into `SPARKLE_PUBLIC_ED_KEY` in `project.yml` and commit it.
+4. Turn on GitHub Pages for the repo (Settings > Pages), serving either the `docs/` folder on `main` or a `gh-pages` branch. The appcast must end up at the feed URL.
+
+Each release, after `release.sh`:
+
+```sh
+./scripts/appcast.sh          # add --dry-run to print the commands
+```
+
+It starts from the published appcast (so older entries stay), copies the zip to `build/release/appcast/Domine-VERSION.zip`, and runs Sparkle's `generate_appcast`, which signs the update with the key in the keychain and writes `appcast.xml`. Then:
+
+1. Create a GitHub release tagged `vVERSION` and attach `Domine-VERSION.zip` (and the `.pkg`, if there is one). The appcast points at `https://github.com/Ethan-Ka/Domine/releases/download/vVERSION/`; set `DOWNLOAD_URL_PREFIX` to use another location.
+2. Copy `build/release/appcast/appcast.xml` to the Pages source (`docs/appcast.xml` on `main`, or `appcast.xml` on `gh-pages`) and push.
+
+Bump `CFBundleVersion` in `project.yml` for every release: Sparkle compares build numbers. A zip update replaces only the app. `generate_appcast` does not read `.pkg` files, so for a package that also installs the driver, the script prints a signed enclosure to put in the appcast by hand.
 
 ## Using two JBL Grips
 
