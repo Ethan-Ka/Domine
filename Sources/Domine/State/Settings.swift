@@ -9,7 +9,7 @@ final class SettingsStore {
     nonisolated static let keyPrefix = "Domine."
 
     private enum Key: String {
-        case lastLeftUID, lastRightUID, lastRearLeftUID, lastRearRightUID, routingMode
+        case lastLeftUID, lastRightUID, lastRearLeftUID, lastRearRightUID, routingMode, lastSurroundUIDs
         case volumeKeysEnabled, restorePreviousOutput, closeBehavior, startWhenBothConnect
         case previousOutputUID, outputNeedsRestore, excludedAppsPlayThroughUID, exclusions, appVolumes
         case hasCompletedWelcome, audioCaptureWorking, audioCaptureSignature
@@ -78,13 +78,83 @@ final class SettingsStore {
         set { set(newValue, .lastRearRightUID) }
     }
 
-    /// "stereo" or "quad". Stereo by default.
+    /// "stereo" or "surround". Stereo by default. The old "quad" reads as
+    /// surround (SPEC 13.7).
     var routingMode: RoutingMode {
-        get { string(.routingMode).flatMap(RoutingMode.init(rawValue:)) ?? .stereo }
+        get { string(.routingMode).flatMap(Self.routingMode(stored:)) ?? .stereo }
         set { set(newValue.rawValue, .routingMode) }
     }
 
+    /// A stored routing mode, with quad mapped to surround.
+    nonisolated static func routingMode(stored raw: String) -> RoutingMode? {
+        raw == "quad" ? .surround : RoutingMode(rawValue: raw)
+    }
+
+    // MARK: Surround (SPEC 13.1)
+
+    /// The speakers of the last surround set, in list order
+    /// ("Domine.lastSurroundUIDs"). nil when never set.
+    var lastSurroundUIDs: [String]? {
+        get { defaults.object(forKey: Key.lastSurroundUIDs.name) as? [String] }
+        set {
+            if let newValue {
+                defaults.set(newValue, forKey: Key.lastSurroundUIDs.name)
+            } else {
+                defaults.removeObject(forKey: Key.lastSurroundUIDs.name)
+            }
+        }
+    }
+
+    /// The record for a set of speakers in any order; nil when none is saved
+    /// or it is corrupt.
+    func surroundSettings(uids: [String]) -> SurroundSettings? {
+        defaults.data(forKey: SurroundSettings.storageKey(uids: uids))
+            .flatMap { try? JSONDecoder().decode(SurroundSettings.self, from: $0) }
+    }
+
+    func hasSurroundSettings(uids: [String]) -> Bool {
+        defaults.data(forKey: SurroundSettings.storageKey(uids: uids)) != nil
+    }
+
+    /// Saved under the key of its own speakers. An empty set is not saved.
+    func setSurroundSettings(_ settings: SurroundSettings) {
+        guard !settings.speakers.isEmpty, let data = try? JSONEncoder().encode(settings) else { return }
+        defaults.set(data, forKey: SurroundSettings.storageKey(uids: settings.uids))
+    }
+
+    /// SPEC 13.7: every saved quad set (the last one and each room's) gets a
+    /// surround record unless one exists for those four UIDs. The last quad
+    /// set also becomes the last surround set when there is none. Quad keys
+    /// stay in place. Idempotent.
+    func migrateQuadSets(rooms: [Room]) {
+        let last = [lastLeftUID, lastRightUID, lastRearLeftUID, lastRearRightUID]
+        if let set = Self.quadSet(last) {
+            migrateQuadSet(set)
+            if lastSurroundUIDs == nil { lastSurroundUIDs = set }
+        }
+        for room in rooms {
+            if let set = Self.quadSet([room.leftUID, room.rightUID, room.rearLeftUID, room.rearRightUID]) {
+                migrateQuadSet(set)
+            }
+        }
+    }
+
+    private func migrateQuadSet(_ uids: [String]) {
+        guard !hasSurroundSettings(uids: uids) else { return }
+        let settings = SurroundSettings.migrated(
+            frontLeft: uids[0], frontRight: uids[1], rearLeft: uids[2], rearRight: uids[3],
+            pair: pairSettings(leftUID: uids[0], rightUID: uids[1]), quad: quadSettings(uids: uids))
+        setSurroundSettings(settings)
+    }
+
+    /// Four distinct UIDs in position order, or nil.
+    nonisolated static func quadSet(_ uids: [String?]) -> [String]? {
+        let all = uids.compactMap { $0 }
+        return all.count == 4 && Set(all).count == 4 ? all : nil
+    }
+
     /// Quad tuning for a set of four speakers; defaults when unknown or corrupt.
+    /// Read only for the migration to surround (SPEC 13.7).
     func quadSettings(uids: [String]) -> QuadSettings {
         defaults.data(forKey: QuadSettings.storageKey(uids: uids))
             .flatMap { try? JSONDecoder().decode(QuadSettings.self, from: $0) } ?? QuadSettings()

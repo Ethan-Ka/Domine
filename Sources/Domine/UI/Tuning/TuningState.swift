@@ -16,6 +16,18 @@ struct TuningState: Equatable, Sendable {
     var clickTestMessage: String?
     /// Auto-calibrate progress or result; nil before a run.
     var calibrationStatus: CalibrationStatus?
+    /// The showcase demo is playing; the button reads Stop Demo.
+    var isDemoPlaying = false
+    /// The demo's current part, e.g. "Orbit", shown under the button.
+    var demoSectionTitle: String?
+
+    var demoButtonTitle: String { isDemoPlaying ? "Stop Demo" : "Play Demo" }
+
+    /// One line under the demo button while it plays.
+    var demoCaption: String? {
+        guard isDemoPlaying else { return nil }
+        return "Now playing: \(demoSectionTitle ?? "Demo")"
+    }
 
     static let normalRange = -50...50
     static let extendedRange = -300...300

@@ -122,4 +122,11 @@ enum SampleStates {
         isExtendedRange: false,
         balance: 0,
         reportedLatencies: "Reported latency: left 182 ms, right 178 ms")
+
+    static let tuningDemo: TuningState = {
+        var state = SampleStates.tuning
+        state.isDemoPlaying = true
+        state.demoSectionTitle = "Ping-pong"
+        return state
+    }()
 }

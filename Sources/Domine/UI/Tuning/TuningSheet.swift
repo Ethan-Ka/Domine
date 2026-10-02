@@ -15,6 +15,7 @@ struct TuningSheet: View {
                 .font(.headline)
             GroupBox { timing.padding(2) }
             GroupBox { level.padding(2) }
+            demo
             HStack {
                 Button("Reset", action: actions.reset)
                 Spacer()
@@ -129,6 +130,25 @@ struct TuningSheet: View {
         }
     }
 
+    /// Plays the showcase demo so the result can be heard straight away.
+    private var demo: some View {
+        HStack(spacing: 8) {
+            Button(state.demoButtonTitle, action: actions.toggleDemo)
+            if let caption = state.demoCaption {
+                Text(caption)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            } else {
+                Text("Bass hits and a growl that move around the speakers.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
     private func sectionTitle(_ title: String) -> some View {
         Text(title)
             .font(.subheadline.weight(.semibold))
@@ -162,6 +182,10 @@ struct TuningSheet: View {
 
 #Preview("Right +4 ms") {
     TuningSheet(state: SampleStates.tuning)
+}
+
+#Preview("Demo playing") {
+    TuningSheet(state: SampleStates.tuningDemo)
 }
 
 #Preview("Extended, left") {

@@ -10,6 +10,8 @@ struct TuningActions: Sendable {
     var openMicrophoneSettings: @MainActor @Sendable () -> Void = {}
     var reset: @MainActor @Sendable () -> Void = {}
     var done: @MainActor @Sendable () -> Void = {}
+    /// "Play Demo" / "Stop Demo".
+    var toggleDemo: @MainActor @Sendable () -> Void = {}
 
     static let none = TuningActions()
 }

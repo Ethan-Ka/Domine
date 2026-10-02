@@ -30,3 +30,17 @@ struct SurroundSpeaker: Codable, Equatable, Hashable, Identifiable, Sendable {
         return d
     }
 }
+
+extension SurroundSpeaker {
+    private enum CodingKeys: String, CodingKey { case uid, azimuth, distance }
+
+    /// A missing or mistyped azimuth or distance falls back to 0 and 2 m;
+    /// values are wrapped and clamped. Only a missing UID fails.
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        uid = try c.decode(String.self, forKey: .uid)
+        azimuth = Self.wrap((try? c.decodeIfPresent(Float.self, forKey: .azimuth)) ?? 0)
+        let d = (try? c.decodeIfPresent(Float.self, forKey: .distance)) ?? 2
+        distance = d.isFinite ? min(max(d, Self.distanceRange.lowerBound), Self.distanceRange.upperBound) : 2
+    }
+}
