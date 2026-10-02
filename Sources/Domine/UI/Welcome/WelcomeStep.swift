@@ -16,9 +16,9 @@ struct WelcomeStep: Identifiable, Equatable, Sendable {
         var detail: String {
             switch self {
             case .unpairJBL:
-                "In the JBL Portable app, ungroup the two Grips so the Mac can see each one."
+                "Ungroup the two Grips in the JBL Portable app."
             case .connectSpeakers:
-                "Pair each Grip in System Settings › Bluetooth. Disconnect them from your phone."
+                "Disconnect them from your phone first."
             case .allowCapture:
                 "Without it, both speakers stay silent."
             }

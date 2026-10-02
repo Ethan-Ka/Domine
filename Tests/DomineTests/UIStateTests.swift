@@ -44,10 +44,9 @@ struct UIStateTests {
         #expect(card.statusText == "Planned for quad mode")
     }
 
-    @Test func secondaryStatusPrefersDetailOverVolume() {
-        #expect(SampleStates.frontLeft.secondaryStatus == "Volume 62%")
-        #expect(SampleStates.monoFallback.speaker(at: .frontLeft).secondaryStatus == "Full mix")
-        #expect(SampleStates.monoFallback.speaker(at: .frontRight).secondaryStatus == nil)
+    @Test func cardsHaveNoSecondLineByDefault() {
+        #expect(SampleStates.frontLeft.statusDetail == nil)
+        #expect(SampleStates.monoFallback.speaker(at: .frontRight).statusDetail == nil)
     }
 
     @Test func assignSelection() {

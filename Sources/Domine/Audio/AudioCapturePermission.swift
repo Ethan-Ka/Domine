@@ -41,9 +41,17 @@ final class AudioCapturePermission {
         var started = false
     }
 
-    init(hal: any AudioHAL, store: SettingsStore) {
+    /// `signature` is the running app's code signature (`CodeSignature`).
+    /// A saved "working" from a different signature is dropped, since the
+    /// grant it proved belongs to that other binary.
+    init(hal: any AudioHAL, store: SettingsStore, signature: String? = nil) {
         self.hal = hal
         self.store = store
+        if store.audioCaptureWorking, store.audioCaptureSignature != signature {
+            Self.log.notice("Code signature changed; audio capture status reset to unknown")
+            store.audioCaptureWorking = false
+        }
+        store.audioCaptureSignature = signature
         status = store.audioCaptureWorking ? .working : .unknown
     }
 

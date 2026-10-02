@@ -84,6 +84,13 @@ final class AppModel {
     @ObservationIgnored var toneTask: Task<Void, Never>?
     @ObservationIgnored private var terminationObserver: (any NSObjectProtocol)?
 
+    /// The main window is closed and routing goes on, with a menu bar item
+    /// and no Dock icon (SPEC 6a). Change it only through `enterBackground()`
+    /// and `leaveBackground()` in AppModel+Background, which set the policy.
+    var isInBackground = false
+    /// Opens the main window scene. Set by the views, which hold `openWindow`.
+    @ObservationIgnored var presentMainWindow: @MainActor () -> Void = {}
+
     /// Set by the mute key (AppModel+VolumeKeys). Not saved.
     var isMuted = false
     /// The volume key tap and its HUD. Tests replace both.
@@ -96,6 +103,16 @@ final class AppModel {
     @ObservationIgnored var trustPollTask: Task<Void, Never>?
     /// Last reason the volume key tap was not running, so it is logged once.
     @ObservationIgnored var lastVolumeKeyTapBlock: String?
+    /// Still not trusted after the user went to System Settings from Grant
+    /// Access and came back: the switched-on entry is likely for another
+    /// build of Domine (AppModel+Accessibility).
+    var accessibilityLikelyStale = false
+    /// Grant Access opened System Settings and trust has not arrived yet.
+    @ObservationIgnored var awaitingAccessibilityGrant = false
+    /// The Settings window is open, so its Accessibility row is on screen.
+    @ObservationIgnored var isSettingsVisible = false
+    /// How often trust is re-read while a "not granted" note shows.
+    @ObservationIgnored var trustPollInterval: Duration = .seconds(2)
 
     init(hal: any AudioHAL = CoreAudioHAL(), defaults: UserDefaults = .standard,
          services: SystemServices = .live) {
@@ -105,7 +122,7 @@ final class AppModel {
         volumeLink = SpeakerVolumeLink(hal: hal)
         outputRestorer = OutputRestorer(hal: hal, store: store, outputs: { catalog.outputs })
         engine = Engine(hal: hal)
-        captureAccess = AudioCapturePermission(hal: hal, store: store)
+        captureAccess = AudioCapturePermission(hal: hal, store: store, signature: services.codeSignature())
         tones = DeviceTonePlayer(hal: hal)
         self.store = store
         self.services = services
@@ -128,6 +145,7 @@ final class AppModel {
         syncWithCatalog()
         syncWithEngine()
         guard terminationObserver == nil else { return }
+        logPermissionsAtLaunch()
         observeCatalog()
         observeEngine()
         observeActivationForVolumeKeys()
@@ -136,7 +154,7 @@ final class AppModel {
         terminationObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification, object: nil, queue: nil
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.stopRouting() }
+            MainActor.assumeIsolated { self?.appWillTerminate() }
         }
     }
 
@@ -222,7 +240,7 @@ final class AppModel {
         syncWithEngine()
     }
 
-    static let noOtherOutputMessage = "No other output for the Mac's own sound; connect one"
+    static let noOtherOutputMessage = "Connect another output to start"
 
     /// The only refusal is `noOtherOutputMessage`; it goes away as soon as
     /// an output outside the pair appears.
@@ -382,14 +400,6 @@ final class AppModel {
         guard connected, store.startWhenBothConnect, !userTurnedRoutingOff, !engine.state.isActive else { return }
         Self.log.info("Both speakers connected; starting routing")
         autoStartTask = Task { [weak self] in await self?.startRouting() }
-    }
-
-    /// The main window closed. With "Stop playing" routing stops; with "Keep
-    /// playing" it continues and the Dock icon brings the window back.
-    func mainWindowDidClose() {
-        guard store.closeBehavior == .stopPlaying, engine.state.isActive else { return }
-        userTurnedRoutingOff = true
-        stopRouting()
     }
 
     /// Called whenever the engine state changes: meters poll only while running.

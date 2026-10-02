@@ -5,7 +5,9 @@ import AppKit
 struct SystemServices: Sendable {
     var openURL: @MainActor @Sendable (URL) -> Void
     var isAccessibilityTrusted: @MainActor @Sendable () -> Bool
-    var requestAccessibility: @MainActor @Sendable () -> Void
+    /// AXIsProcessTrustedWithOptions with the prompt: adds this binary to
+    /// the Accessibility list. Does not open System Settings.
+    var promptForAccessibility: @MainActor @Sendable () -> Void
     var isLaunchAtLoginEnabled: @MainActor @Sendable () -> Bool
     var setLaunchAtLogin: @MainActor @Sendable (Bool) throws -> Void
     /// Display name of an installed app, or nil if it is not installed.
@@ -13,6 +15,15 @@ struct SystemServices: Sendable {
     /// The login item is registered but waits for approval in System Settings.
     var launchAtLoginRequiresApproval: @MainActor @Sendable () -> Bool = { false }
     var openLoginItemsSettings: @MainActor @Sendable () -> Void = {}
+    /// Dock icon on (`.regular`) or off (`.accessory`) for background mode (SPEC 6a).
+    var setActivationPolicy: @MainActor @Sendable (NSApplication.ActivationPolicy) -> Void = { _ in }
+    /// Brings Domine's windows to the front.
+    var activateApp: @MainActor @Sendable () -> Void = {}
+    var terminateApp: @MainActor @Sendable () -> Void = {}
+    /// Selects a file in a Finder window.
+    var revealInFinder: @MainActor @Sendable (URL) -> Void = { _ in }
+    /// The running app's designated requirement (`CodeSignature`).
+    var codeSignature: @MainActor @Sendable () -> String? = { nil }
 
     static let bluetoothSettingsURL = URL(string: "x-apple.systempreferences:com.apple.Bluetooth")!
     /// Privacy & Security > Screen & System Audio Recording. On macOS 15 and
@@ -24,7 +35,7 @@ struct SystemServices: Sendable {
     static let live = SystemServices(
         openURL: { NSWorkspace.shared.open($0) },
         isAccessibilityTrusted: { VolumeKeyTap.isTrusted },
-        requestAccessibility: { VolumeKeyTap.requestAccess() },
+        promptForAccessibility: { VolumeKeyTap.promptForAccess() },
         isLaunchAtLoginEnabled: { LaunchAtLogin.isEnabled },
         setLaunchAtLogin: { try LaunchAtLogin.setEnabled($0) },
         appName: { bundleID in
@@ -33,5 +44,10 @@ struct SystemServices: Sendable {
             return name.hasSuffix(".app") ? String(name.dropLast(4)) : name
         },
         launchAtLoginRequiresApproval: { LaunchAtLogin.requiresApproval },
-        openLoginItemsSettings: { LaunchAtLogin.openLoginItemsSettings() })
+        openLoginItemsSettings: { LaunchAtLogin.openLoginItemsSettings() },
+        setActivationPolicy: { _ = NSApp.setActivationPolicy($0) },
+        activateApp: { NSApp.activate() },
+        terminateApp: { NSApp.terminate(nil) },
+        revealInFinder: { NSWorkspace.shared.activateFileViewerSelecting([$0]) },
+        codeSignature: { CodeSignature.designatedRequirement })
 }

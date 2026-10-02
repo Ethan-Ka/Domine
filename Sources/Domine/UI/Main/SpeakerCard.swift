@@ -45,7 +45,7 @@ struct SpeakerCard: View {
                     Text(state.statusText)
                         .font(.subheadline)
                         .foregroundStyle(isError ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondary))
-                    if let secondary = state.secondaryStatus {
+                    if let secondary = state.statusDetail {
                         Text(secondary)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -100,7 +100,7 @@ struct SpeakerCard: View {
             parts.append([name, state.uidSuffix].compactMap { $0 }.joined(separator: " "))
         }
         parts.append(state.statusText)
-        if let secondary = state.secondaryStatus {
+        if let secondary = state.statusDetail {
             parts.append(secondary)
         }
         if state.isMonoFallback {

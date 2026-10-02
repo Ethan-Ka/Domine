@@ -27,7 +27,7 @@ Status: in development. Progress is tracked in [the milestones](docs/SPEC.md#10-
 | `./scripts/logs.sh` | Stream log messages from the `com.ethankawley.Domine` subsystem |
 | `./scripts/xcode.sh` | Open the project in Xcode for breakpoints |
 | `./scripts/reset-permissions.sh` | Forget the audio capture and microphone grants so macOS asks again |
-| `./scripts/clean.sh` | Delete `build/` and the generated project |
+| `./scripts/clean.sh` | Delete `build/` and the generated project (`--xcode` also deletes old copies in Xcode's DerivedData) |
 | `./scripts/release.sh` | Archive, Developer ID sign, notarize, and staple into `build/release/` (see [Releasing](#releasing)) |
 
 A typical loop: edit, `./scripts/test.sh`, then `./scripts/run.sh --logs` to try it.

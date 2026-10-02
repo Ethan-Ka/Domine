@@ -63,8 +63,10 @@ struct SecondaryUIRenderTests {
         let rep = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
         host.cacheDisplay(in: host.bounds, to: rep)
         let data = try #require(rep.representation(using: .png, properties: [:]))
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("Domine-\(name).png")
+        let dir = ProcessInfo.processInfo.environment["DOMINE_RENDER_DIR"]
+            .map { URL(fileURLWithPath: $0) } ?? FileManager.default.temporaryDirectory
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("Domine-\(name).png")
         try data.write(to: url)
         print("Rendered \(name): \(url.path)")
         #expect(size.width > 0 && size.height > 0)

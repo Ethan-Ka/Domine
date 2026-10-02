@@ -144,18 +144,6 @@ final class RoutingSettingsTests {
         #expect(model.engine.state == .running)
     }
 
-    @Test func appKeepsRunningWithoutWindowsAndReopensFromTheDock() {
-        var opened = 0
-        AppDelegate.openMainWindow = { opened += 1 }
-        defer { AppDelegate.openMainWindow = nil }
-        let delegate = AppDelegate()
-        #expect(!delegate.applicationShouldTerminateAfterLastWindowClosed(NSApplication.shared))
-        _ = delegate.applicationShouldHandleReopen(NSApplication.shared, hasVisibleWindows: false)
-        #expect(opened == 1)
-        _ = delegate.applicationShouldHandleReopen(NSApplication.shared, hasVisibleWindows: true)
-        #expect(opened == 1)
-    }
-
     // MARK: Exclusions
 
     @Test func exclusionEditsSurviveRelaunch() {
@@ -197,7 +185,7 @@ final class RoutingSettingsTests {
         model.start()
         model.generalSettings.volumeKeysEnabled = true
         await model.startRouting()
-        #expect(model.mainWindowState.statusLine == "Playing, volume keys need Accessibility access")
+        #expect(model.mainWindowState.statusLine == "Playing, volume keys need Accessibility")
         system.trusted = true
         model.refreshSystemStatus()
         #expect(model.mainWindowState.statusLine == "Playing")

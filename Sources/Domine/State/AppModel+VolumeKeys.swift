@@ -4,7 +4,6 @@ import os
 /// Hardware volume keys drive Domine's master volume (SPEC section 4b).
 extension AppModel {
     static let volumeKeysLog = Logger(subsystem: "com.ethankawley.Domine", category: "VolumeKeys")
-    static let trustPollInterval: Duration = .seconds(2)
 
     /// Why the tap should not run right now, or nil when it should. The tap
     /// runs only while the user enabled volume keys, Domine has Accessibility
@@ -28,7 +27,7 @@ extension AppModel {
 
     /// Starts or stops the tap to match `wantsVolumeKeyTap`. Called when the
     /// setting changes, when the engine state changes, when Domine becomes
-    /// active, and every few seconds while only Accessibility is missing.
+    /// active, and every few seconds while Accessibility is missing.
     func updateVolumeKeyTap() {
         let block = volumeKeyTapBlock
         if let block {
@@ -75,35 +74,8 @@ extension AppModel {
             forName: NSApplication.didBecomeActiveNotification, object: nil, queue: nil
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.refreshSystemStatus()
-                self?.updateVolumeKeyTap()
+                self?.didBecomeActive()
             }
-        }
-    }
-
-    /// While the keys are turned on and Accessibility is missing, checks
-    /// trust every few seconds, so a grant made in System Settings takes
-    /// effect, and the "needs Accessibility" notes go away, without
-    /// switching back to Domine.
-    private func updateTrustPolling() {
-        let waiting = store.volumeKeysEnabled && !services.isAccessibilityTrusted()
-        if waiting {
-            guard trustPollTask == nil else { return }
-            trustPollTask = Task { [weak self] in
-                while !Task.isCancelled {
-                    try? await Task.sleep(for: Self.trustPollInterval)
-                    guard !Task.isCancelled, let self else { return }
-                    if self.services.isAccessibilityTrusted() {
-                        self.trustPollTask = nil
-                        self.refreshSystemStatus()
-                        self.updateVolumeKeyTap()
-                        return
-                    }
-                }
-            }
-        } else {
-            trustPollTask?.cancel()
-            trustPollTask = nil
         }
     }
 }

@@ -12,7 +12,7 @@ final class SettingsStore {
         case lastLeftUID, lastRightUID
         case volumeKeysEnabled, restorePreviousOutput, closeBehavior, startWhenBothConnect
         case previousOutputUID, outputNeedsRestore, excludedAppsPlayThroughUID, exclusions
-        case hasCompletedWelcome, audioCaptureWorking
+        case hasCompletedWelcome, audioCaptureWorking, audioCaptureSignature
 
         var name: String { SettingsStore.keyPrefix + rawValue }
     }
@@ -116,6 +116,13 @@ final class SettingsStore {
     var audioCaptureWorking: Bool {
         get { bool(.audioCaptureWorking, default: false) }
         set { defaults.set(newValue, forKey: Key.audioCaptureWorking.name) }
+    }
+
+    /// The code signature `audioCaptureWorking` was recorded under. A grant
+    /// belongs to one signature, so a different one makes the flag stale.
+    var audioCaptureSignature: String? {
+        get { string(.audioCaptureSignature) }
+        set { set(newValue, .audioCaptureSignature) }
     }
 
     /// Entries that fail to decode are dropped; the rest are kept.

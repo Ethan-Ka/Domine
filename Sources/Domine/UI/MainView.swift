@@ -21,7 +21,9 @@ struct MainView: View {
                     .interactiveDismissDisabled()
             }
             .onAppear {
-                AppDelegate.openMainWindow = { [openWindow] in openWindow(id: "main") }
+                AppDelegate.model = model
+                model.presentMainWindow = { [openWindow] in openWindow(id: "main") }
+                model.leaveBackground()
             }
             .onDisappear { model.mainWindowDidClose() }
     }

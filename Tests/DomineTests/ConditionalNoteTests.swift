@@ -57,7 +57,7 @@ final class ConditionalNoteTests {
         model.start()
         model.generalSettings.volumeKeysEnabled = true
         await model.startRouting()
-        #expect(model.mainWindowState.statusLine == "Playing, volume keys need Accessibility access")
+        #expect(model.mainWindowState.statusLine == "Playing, volume keys need Accessibility")
         system.trusted = true
         NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: nil)
         #expect(!model.generalSettings.showsAccessibilityPrompt)
@@ -145,8 +145,10 @@ final class ConditionalNoteTests {
 
     // MARK: Captions
 
-    @Test func closeCaptionOnlyWhereTheTitleLeavesSomethingOut() {
-        #expect(GeneralSettingsState.CloseBehavior.keepPlaying.caption != nil)
-        #expect(GeneralSettingsState.CloseBehavior.stopPlaying.caption == nil)
+    @Test func restoreCaptionOnlyWithAKnownPreviousOutput() {
+        var state = GeneralSettingsState()
+        #expect(state.restoreCaption == nil)
+        state.previousOutputName = "MacBook Pro Speakers"
+        #expect(state.restoreCaption == "Previous output: MacBook Pro Speakers")
     }
 }

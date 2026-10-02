@@ -22,14 +22,17 @@ extension AppModel {
     }
 
     var generalSettingsActions: GeneralSettingsActions {
-        GeneralSettingsActions(grantAccessibility: { [weak self] in self?.services.requestAccessibility() })
+        GeneralSettingsActions(grantAccessibility: { [weak self] in self?.grantAccessibility() })
     }
 
     /// Writes whatever changed in Settings > General to the store.
     func generalSettingsDidChange(from old: GeneralSettingsState) {
         guard !isRefreshingSystemStatus else { return }
         let new = generalSettings
-        if new.volumeKeysEnabled != old.volumeKeysEnabled { store.volumeKeysEnabled = new.volumeKeysEnabled }
+        if new.volumeKeysEnabled != old.volumeKeysEnabled {
+            store.volumeKeysEnabled = new.volumeKeysEnabled
+            refreshAccessibilityTrust()
+        }
         if new.restorePreviousOutput != old.restorePreviousOutput { store.restorePreviousOutput = new.restorePreviousOutput }
         if new.closeBehavior != old.closeBehavior { store.closeBehavior = Self.closeBehavior(new.closeBehavior) }
         if new.startWhenBothConnect != old.startWhenBothConnect { store.startWhenBothConnect = new.startWhenBothConnect }
@@ -61,14 +64,13 @@ extension AppModel {
     }
 
     /// Re-reads state the user can change outside Domine: Accessibility
-    /// trust and the login item. Does not write anything back. Runs when the
-    /// Settings window opens, when Domine becomes active, and from the trust
-    /// poll in AppModel+VolumeKeys.
+    /// trust and the login item (SMAppService status). Does not write
+    /// anything back. Runs when the Settings window opens, when Domine
+    /// becomes active, and from the trust poll in AppModel+Accessibility.
     func refreshSystemStatus() {
         isRefreshingSystemStatus = true
         defer { isRefreshingSystemStatus = false }
-        let trusted = services.isAccessibilityTrusted()
-        if generalSettings.accessibilityGranted != trusted { generalSettings.accessibilityGranted = trusted }
+        refreshAccessibilityTrust()
         let launch = services.isLaunchAtLoginEnabled()
         if generalSettings.launchAtLogin != launch { generalSettings.launchAtLogin = launch }
         let approval = services.launchAtLoginRequiresApproval()
