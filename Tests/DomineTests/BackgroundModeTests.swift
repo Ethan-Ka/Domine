@@ -230,3 +230,57 @@ final class BackgroundModeTests {
         #expect(model.userTurnedRoutingOff)
     }
 }
+
+/// Reopening from the menu bar is ordered and reuses the one main window.
+@MainActor
+final class ReopenOrderTests {
+    final class Recorder {
+        var log: [String] = []
+        var pending: [@MainActor @Sendable () -> Void] = []
+        var hasWindow = false
+    }
+
+    let rec = Recorder()
+    let model: AppModel
+    let defaults: UserDefaults
+    let suiteName = UUID().uuidString
+
+    init() {
+        defaults = UserDefaults(suiteName: suiteName)!
+        let rec = rec
+        var services = FakeSystem().services
+        services.setActivationPolicy = { rec.log.append("policy \($0 == .regular ? "regular" : "other")") }
+        services.activateApp = { rec.log.append("activate") }
+        services.closeMenuPanel = { rec.log.append("closeMenu") }
+        services.focusMainWindow = { rec.log.append("focus"); return rec.hasWindow }
+        services.deferToNextTurn = { rec.pending.append($0) }
+        model = AppModel(hal: FakeHAL(), defaults: defaults, services: services)
+        model.presentMainWindow = { rec.log.append("open") }
+    }
+
+    deinit { UserDefaults().removePersistentDomain(forName: suiteName) }
+
+    private func runPending() {
+        let work = rec.pending
+        rec.pending = []
+        for item in work { item() }
+    }
+
+    @Test func policySwitchesBeforeTheWindowWork() {
+        model.enterBackground()
+        rec.log = []
+        model.showMainWindow()
+        #expect(rec.log == ["closeMenu", "policy regular"])
+        runPending()
+        #expect(rec.log == ["closeMenu", "policy regular", "focus", "open", "activate"])
+    }
+
+    @Test func existingWindowIsReusedNotReopened() {
+        model.enterBackground()
+        rec.hasWindow = true
+        rec.log = []
+        model.showMainWindow()
+        runPending()
+        #expect(rec.log == ["closeMenu", "policy regular", "focus", "activate"])
+    }
+}

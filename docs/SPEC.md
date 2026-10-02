@@ -292,13 +292,13 @@ Domine/
 
 ## 6a. Window and background behavior
 
-- Closing the window does not stop audio by default. Domine switches its activation policy to `.accessory` (no Dock icon) and shows a `MenuBarExtra` with status, per-speaker connection dots, master volume, Open Domine, Settings, and Quit.
-- Reopening the window (from the menu bar item or by launching the app again) switches back to `.regular`.
+- Closing the window does not stop audio by default. Domine switches its activation policy to `.accessory` (no Dock icon). The `MenuBarExtra` is always present, in the foreground too (except in the test host), with status, per-speaker connection dots, master volume, Open Domine, Settings, and Quit.
+- Reopening the window (from the menu bar item or by launching the app again) is ordered: close the menu panel, switch to `.regular`, then on the next runloop turn bring the existing main window forward (open it only if none exists, never a second), then activate the app.
 - Setting in General: "Keep playing in the background" or "Stop playing" when the window closes.
 - "Start routing when both speakers connect" works in background mode, so with launch at login on, Domine starts on its own when the Grips power up.
-- The menu bar item exists only while running in the background; when the window is open, there is no menu bar item.
-- Background mode starts only if routing is on when the window closes. With routing off there is nothing to keep playing, so Domine stays a normal Dock app with no menu bar item, and the Dock icon reopens the window. Once in the background, Domine stays there until the window opens again, even if routing stops (a speaker powers off, or the menu switch turns it off), so auto-start can resume with no window.
-- Removing the menu bar item (Command-drag out of the menu bar) reopens the window, so Domine is never left running with no way to reach it.
+- The menu bar item is always shown, whether the window is open or not, so status, volume, and Open Domine are reachable at any time.
+- Background mode starts only if routing is on when the window closes. With routing off there is nothing to keep playing, so Domine stays a normal Dock app (the menu bar item remains), and the Dock icon reopens the window. Once in the background, Domine stays there until the window opens again, even if routing stops (a speaker powers off, or the menu switch turns it off), so auto-start can resume with no window.
+- Removing the menu bar item (Command-drag out of the menu bar) while in the background reopens the window, so Domine is never left running with no way to reach it.
 
 ## 7. Engine state machine
 

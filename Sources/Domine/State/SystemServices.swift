@@ -19,6 +19,13 @@ struct SystemServices: Sendable {
     var setActivationPolicy: @MainActor @Sendable (NSApplication.ActivationPolicy) -> Void = { _ in }
     /// Brings Domine's windows to the front.
     var activateApp: @MainActor @Sendable () -> Void = {}
+    /// Runs work on the next runloop turn, after a policy switch has settled.
+    /// Runs it at once by default so tests stay synchronous.
+    var deferToNextTurn: @MainActor @Sendable (@escaping @MainActor @Sendable () -> Void) -> Void = { $0() }
+    /// Orders the existing main window to the front. False if there is none.
+    var focusMainWindow: @MainActor @Sendable () -> Bool = { false }
+    /// Dismisses the menu bar panel.
+    var closeMenuPanel: @MainActor @Sendable () -> Void = {}
     var terminateApp: @MainActor @Sendable () -> Void = {}
     /// Selects a file in a Finder window.
     var revealInFinder: @MainActor @Sendable (URL) -> Void = { _ in }
@@ -51,6 +58,17 @@ struct SystemServices: Sendable {
         openLoginItemsSettings: { LaunchAtLogin.openLoginItemsSettings() },
         setActivationPolicy: { _ = NSApp.setActivationPolicy($0) },
         activateApp: { NSApp.activate() },
+        deferToNextTurn: { work in DispatchQueue.main.async { MainActor.assumeIsolated { work() } } },
+        focusMainWindow: {
+            guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue.contains("main") == true })
+            else { return false }
+            if window.isMiniaturized { window.deminiaturize(nil) }
+            window.makeKeyAndOrderFront(nil)
+            return true
+        },
+        closeMenuPanel: {
+            for window in NSApp.windows where window.className.contains("MenuBarExtra") { window.orderOut(nil) }
+        },
         terminateApp: { NSApp.terminate(nil) },
         revealInFinder: { NSWorkspace.shared.activateFileViewerSelecting([$0]) },
         codeSignature: { CodeSignature.designatedRequirement })

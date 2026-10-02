@@ -2,7 +2,7 @@ import AppKit
 
 /// Background mode (SPEC 6a, docs/mockups/MenuBar.dc.html): with the main
 /// window closed and routing on, Domine drops its Dock icon and shows a menu
-/// bar item instead. The item exists only in background mode.
+/// bar item instead. The item is always present.
 extension AppModel {
     /// The main window closed. "Stop playing" stops routing. "Keep playing"
     /// goes to the background, but only while routing: with routing off there
@@ -37,10 +37,18 @@ extension AppModel {
     }
 
     /// Open Domine in the menu, a Dock click, or launching the app again.
+    /// Order matters: the Dock policy switches first, and the window work waits
+    /// a runloop turn. Opening a window in the same turn as the switch made it
+    /// appear behind other apps or flicker while the menu panel was still up.
+    /// An existing window is reused, so there is never a second one.
     func showMainWindow() {
+        services.closeMenuPanel()
         leaveBackground()
-        presentMainWindow()
-        services.activateApp()
+        services.deferToNextTurn { [weak self] in
+            guard let self else { return }
+            if !self.services.focusMainWindow() { self.presentMainWindow() }
+            self.services.activateApp()
+        }
     }
 
     /// Quit Domine in the menu. Routing stops in `appWillTerminate`.

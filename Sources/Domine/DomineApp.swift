@@ -41,7 +41,7 @@ struct DomineApp: App {
                 .environment(updater)
         }
 
-        // Only in background mode, and never in the test host (SPEC 6a).
+        // Always present, except in the test host (SPEC 6a).
         MenuBarExtra("Domine", image: "MenuBarIcon", isInserted: menuBarItemInserted) {
             BackgroundMenu()
                 .environment(model)
@@ -49,11 +49,11 @@ struct DomineApp: App {
         .menuBarExtraStyle(.window)
     }
 
-    /// If the user removes the item from the menu bar, the window comes back,
-    /// so Domine is never left running with no way to reach it.
+    /// If the user removes the item from the menu bar while in the background,
+    /// the window comes back, so Domine is never left running with no way to reach it.
     private var menuBarItemInserted: Binding<Bool> {
         Binding(
-            get: { !Self.isTestHost && model.isInBackground },
+            get: { !Self.isTestHost },
             set: { [model] inserted in
                 if !inserted && model.isInBackground { model.showMainWindow() }
             })
