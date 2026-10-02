@@ -42,6 +42,7 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
     enum Op: Equatable {
         case setSampleRate(uid: String)
         case createTap(excluding: [AudioObjectID])
+        case createAppTap(processes: [AudioObjectID])
         case destroyTap
         case createAggregate
         case destroyAggregate
@@ -588,6 +589,19 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
                 staleTaps -= 1
                 staleTapRates[id] = previousRates[defaultOutput] ?? tapRate(id)
             }
+            return ProcessTap(id: id, uid: uid)
+        }
+    }
+
+    func createProcessTap(including processes: [AudioObjectID]) throws(HALError) -> ProcessTap {
+        try locked { () throws(HALError) -> ProcessTap in
+            try fail(.createTap, "AudioHardwareCreateProcessTap")
+            _ops.append(.createAppTap(processes: processes))
+            _tapMuteFlags.append(true)
+            let id = nextID
+            nextID += 1
+            let uid = "tap-\(id)"
+            taps[id] = uid
             return ProcessTap(id: id, uid: uid)
         }
     }

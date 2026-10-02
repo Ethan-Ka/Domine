@@ -86,6 +86,13 @@ final class Engine {
     /// Process objects the next tap leaves out besides Domine itself
     /// (SPEC 3b). Empty until excluded apps are resolved to processes.
     var excludedProcesses: [AudioObjectID] = []
+    /// Apps with a reduced volume, each on its own muting tap (per-app volume).
+    /// Sorted by key, capped at `maxAppTaps`.
+    private(set) var appTapRequests: [AppTapRequest] = []
+    /// Wait before a changed app set rebuilds, so a burst causes one rebuild.
+    @ObservationIgnored var appTapDebounce: Duration = .milliseconds(500)
+    @ObservationIgnored private(set) var appTapRebuild: Task<Void, Never>?
+    static let maxAppTaps = 7
 
     // Quad controls (SPEC 11). Positions: 0 FL, 1 FR, 2 RL, 3 RR.
     var quadGains: [Float] = [1, 1, 1, 1] { didSet { applyControls() } }
@@ -112,6 +119,8 @@ final class Engine {
 
     private struct Resources {
         var tap: ProcessTap?
+        /// Per-app taps in aggregate order, by app key.
+        var appTaps: [(key: String, tap: ProcessTap)] = []
         var aggregate: AudioObjectID?
         var kernel: OpaquePointer?
         var quad: OpaquePointer?
@@ -366,7 +375,7 @@ final class Engine {
     /// aggregate does not have to convert it. Returns false if a stop
     /// arrived while waiting.
     private func createTap(expectedRate: Double?, generation current: Int) async throws(EngineError) -> Bool {
-        var tap = try taps.create(alsoExcluding: excludedProcesses)
+        var tap = try taps.create(alsoExcluding: globalExclusions)
         resources.tap = tap
         var format = try EngineError.hal { () throws(HALError) in try hal.tapFormat(of: tap.id) }
         Self.log.info("Tap \(tap.uid, privacy: .public): \(format.mChannelsPerFrame) ch at \(format.mSampleRate) Hz")
@@ -380,14 +389,29 @@ final class Engine {
                 let old = tap
                 resources.tap = nil
                 try EngineError.hal { () throws(HALError) in try taps.destroy(old) }
-                tap = try taps.create(alsoExcluding: excludedProcesses)
+                tap = try taps.create(alsoExcluding: globalExclusions)
                 resources.tap = tap
                 format = try EngineError.hal { () throws(HALError) in try hal.tapFormat(of: tap.id) }
                 Self.log.info("Rebuilt tap \(tap.uid, privacy: .public): \(format.mChannelsPerFrame) ch at \(format.mSampleRate) Hz")
             }
         }
         resources.tapFormat = format
+        try createAppTaps()
         return true
+    }
+
+    /// Excluded apps plus every app that has its own tap.
+    private var globalExclusions: [AudioObjectID] {
+        var all = excludedProcesses
+        for request in appTapRequests { for p in request.processes where !all.contains(p) { all.append(p) } }
+        return all
+    }
+
+    private func createAppTaps() throws(EngineError) {
+        for request in appTapRequests {
+            let tap = try taps.createApp(processes: request.processes)
+            resources.appTaps.append((request.key, tap))
+        }
     }
 
     /// The first present speaker is the main sub-device. A clock device
@@ -397,7 +421,8 @@ final class Engine {
         var clock = AggregateBuilder.clock
         if case .device(let uid) = clock, !present.contains(where: { $0.uid == uid }) { clock = .leftSpeaker }
         let description = AggregateBuilder.description(
-            outputUIDs: present.map(\.uid), tapUID: tap.uid, clock: clock)
+            outputUIDs: present.map(\.uid), tapUID: tap.uid,
+            appTapUIDs: resources.appTaps.map(\.tap.uid), clock: clock)
         EngineDiagnostics.logAggregateDescription(description)
         resources.aggregate = try EngineError.hal { () throws(HALError) in
             try hal.createAggregateDevice(description)
@@ -442,6 +467,8 @@ final class Engine {
         let format = tapStreamFormat(aggregate: aggregate, layout: layout)
         domine_kernel_set_input_format(kernel, format.channels, format.nonInterleaved ? 1 : 0)
         inputFormat = format
+        pushTapLayout(layout) { domine_kernel_set_tap_layout(kernel, $0, $1, $2, $3) }
+        applyTapGains()
         applyControls()
         if fadeIn { domine_kernel_start_faded_out(kernel) }
 
@@ -702,6 +729,71 @@ final class Engine {
         await rebuild(uidA: speakers.left, uidB: speakers.right, ids: resources.speakerIDs)
     }
 
+    /// Sets the apps that get their own tap. Gains apply at once without a
+    /// rebuild; a changed set of apps or processes rebuilds after `appTapDebounce`.
+    func setAppTaps(_ requests: [AppTapRequest]) {
+        let new = Array(requests.sorted { $0.key < $1.key }.prefix(Self.maxAppTaps))
+        let changed = new.map { [$0.key] + $0.processes.map(String.init) }
+            != appTapRequests.map { [$0.key] + $0.processes.map(String.init) }
+        appTapRequests = new
+        applyTapGains()
+        guard changed, state.isRouting else { return }
+        appTapRebuild?.cancel()
+        let delay = appTapDebounce
+        appTapRebuild = Task { [weak self] in
+            if delay > .zero { try? await Task.sleep(for: delay) }
+            guard !Task.isCancelled, let self else { return }
+            await self.rebuildForTapChange()
+        }
+    }
+
+    private func rebuildForTapChange() async {
+        guard state.isRouting else { return }
+        Self.log.info("App taps changed to \(self.appTapRequests.count, privacy: .public); rebuilding")
+        if let quad = quadUIDs {
+            await rebuildQuad(uids: quad, ids: resources.quadIDs)
+        } else if let speakers {
+            await rebuild(uidA: speakers.left, uidB: speakers.right, ids: resources.speakerIDs)
+        }
+    }
+
+    /// Tells the kernel where each tap's buffers sit in the aggregate input.
+    /// Only used when per-app taps exist; one tap keeps the kernel's own path.
+    private func pushTapLayout(_ layout: AggregateLayout,
+                               _ set: (UInt32, UnsafePointer<UInt32>, UnsafePointer<UInt32>, UnsafePointer<UInt32>) -> Void) {
+        guard let aggregate = resources.aggregate, let main = resources.tap else { return }
+        let all = [main] + resources.appTaps.map(\.tap)
+        guard all.count > 1 else { return }
+        var first: [UInt32] = [], channels: [UInt32] = [], interleaved: [UInt32] = []
+        var next = layout.inFirstBuffer
+        let streams = (try? hal.streamFormats(of: aggregate, scope: .input)) ?? []
+        for tap in all {
+            guard next < streams.count, let format = try? hal.tapFormat(of: tap.id) else { break }
+            let stream = streams[next]
+            let split = stream.mFormatFlags & kAudioFormatFlagIsNonInterleaved != 0 && stream.mChannelsPerFrame == 1
+            let buffers = split ? max(Int(format.mChannelsPerFrame), 1) : 1
+            first.append(UInt32(next))
+            channels.append(split ? UInt32(buffers) : stream.mChannelsPerFrame)
+            interleaved.append(split ? 0 : 1)
+            next += buffers
+        }
+        guard first.count == all.count, next == layout.inFirstBuffer + layout.tapBuffers else {
+            Self.log.error("Per-app tap buffers do not match the aggregate input; per-app volume is off")
+            return
+        }
+        set(UInt32(all.count), first, channels, interleaved)
+    }
+
+    /// Pushes each built per-app tap's gain. Tap 0 is the global tap (gain 1).
+    private func applyTapGains() {
+        let built = resources.appTaps.map(\.key)
+        for (index, key) in built.enumerated() {
+            let gain = Float(appTapRequests.first { $0.key == key }?.gain ?? 1)
+            if let kernel = resources.kernel { domine_kernel_set_tap_gain(kernel, UInt32(index + 1), gain) }
+            if let quad = resources.quad { domine_quad_set_tap_gain(quad, UInt32(index + 1), gain) }
+        }
+    }
+
     fileprivate func scheduleSpeakerCheck() {
         speakerCheckPending = true
         guard speakerCheck == nil else { return }
@@ -810,6 +902,9 @@ final class Engine {
             aggregateGone = release("destroy aggregate") { () throws(HALError) in
                 try hal.destroyAggregateDevice(aggregate)
             }
+        }
+        for (_, tap) in resources.appTaps {
+            release("destroy app tap") { () throws(HALError) in try taps.destroy(tap) }
         }
         if let tap = resources.tap {
             release("destroy tap") { () throws(HALError) in try taps.destroy(tap) }
@@ -1014,6 +1109,8 @@ extension Engine {
         let format = tapStreamFormat(aggregate: aggregate, layout: layout)
         domine_quad_set_input_format(quad, format.channels, format.nonInterleaved ? 1 : 0)
         inputFormat = format
+        pushTapLayout(layout) { domine_quad_set_tap_layout(quad, $0, $1, $2, $3) }
+        applyTapGains()
         if fadeIn { domine_quad_start_faded_out(quad) }
         applyQuadControls(quad)
 

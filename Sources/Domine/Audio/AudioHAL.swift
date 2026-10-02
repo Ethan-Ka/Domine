@@ -76,6 +76,8 @@ protocol AudioHAL: AnyObject, Sendable {
     /// A muting tap silences the tapped audio on its normal output; the
     /// engine's tap mutes, the capture permission probe's does not.
     func createProcessTap(excluding processes: [AudioObjectID], muted: Bool) throws(HALError) -> ProcessTap
+    /// A private stereo muting tap of just `processes` (per-app volume).
+    func createProcessTap(including processes: [AudioObjectID]) throws(HALError) -> ProcessTap
     func destroyProcessTap(_ tap: AudioObjectID) throws(HALError)
     func tapFormat(of tap: AudioObjectID) throws(HALError) -> AudioStreamBasicDescription
 

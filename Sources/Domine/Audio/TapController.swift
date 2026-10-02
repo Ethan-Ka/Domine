@@ -15,6 +15,11 @@ struct TapController: Sendable {
         }
     }
 
+    /// A muting tap of one app's processes, mixed into the aggregate beside the global tap.
+    func createApp(processes: [AudioObjectID]) throws(EngineError) -> ProcessTap {
+        try EngineError.hal { () throws(HALError) in try hal.createProcessTap(including: processes) }
+    }
+
     func destroy(_ tap: ProcessTap) throws(HALError) {
         try hal.destroyProcessTap(tap.id)
     }

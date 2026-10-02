@@ -21,6 +21,8 @@ final class AppAudioList {
     typealias Identify = @MainActor (_ bundleID: String) -> (bundleID: String, name: String)?
 
     private(set) var apps: [PlayingApp] = []
+    /// Called after every refresh, whether or not the list changed.
+    @ObservationIgnored var onRefresh: (@MainActor () -> Void)?
 
     @ObservationIgnored private let hal: any AudioHAL
     @ObservationIgnored private let identify: Identify
@@ -79,6 +81,7 @@ final class AppAudioList {
             return order == .orderedSame ? $0.bundleID < $1.bundleID : order == .orderedAscending
         }
         if sorted != apps { apps = sorted }
+        onRefresh?()
     }
 
     /// Strips trailing components (`com.x.App.helper.Renderer` to `com.x.App`)

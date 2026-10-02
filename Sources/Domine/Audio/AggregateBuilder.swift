@@ -35,6 +35,7 @@ enum AggregateBuilder {
     static func description(
         outputUIDs: [String],
         tapUID: String,
+        appTapUIDs: [String] = [],
         clock: AggregateClock = clock,
         instance: UUID = UUID()
     ) -> [String: Any] {
@@ -59,10 +60,10 @@ enum AggregateBuilder {
             kAudioAggregateDeviceMainSubDeviceKey: uidA,
             kAudioAggregateDeviceClockDeviceKey: clockUID,
             kAudioAggregateDeviceSubDeviceListKey: subDevices,
-            kAudioAggregateDeviceTapListKey: [
-                [kAudioSubTapUIDKey: tapUID, kAudioSubTapDriftCompensationKey: 1,
-                 kAudioSubTapDriftCompensationQualityKey: driftQuality],
-            ],
+            kAudioAggregateDeviceTapListKey: ([tapUID] + appTapUIDs).map { uid in
+                [kAudioSubTapUIDKey: uid, kAudioSubTapDriftCompensationKey: 1,
+                 kAudioSubTapDriftCompensationQualityKey: driftQuality] as [String: Any]
+            },
             kAudioAggregateDeviceTapAutoStartKey: 1,
         ]
     }
