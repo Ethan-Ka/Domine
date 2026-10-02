@@ -1,0 +1,5 @@
+#!/bin/bash
+# Runs as root after the driver package is installed. Core Audio only loads
+# new HAL plug-ins when coreaudiod starts, so restart it.
+launchctl kickstart -k system/com.apple.audio.coreaudiod || killall coreaudiod || true
+exit 0

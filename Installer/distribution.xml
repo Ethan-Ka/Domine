@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+    <title>Domine</title>
+    <options customize="never" require-scripts="false" hostArchitectures="arm64,x86_64"/>
+    <allowed-os-versions>
+        <os-version min="14.4"/>
+    </allowed-os-versions>
+    <choices-outline>
+        <line choice="app"/>
+        <line choice="driver"/>
+    </choices-outline>
+    <choice id="app" title="Domine" description="The Domine app, installed in Applications." enabled="false" selected="true">
+        <pkg-ref id="com.ethankawley.Domine.app"/>
+    </choice>
+    <choice id="driver" title="Domine virtual output" description="The Domine audio device that lets the volume keys control both speakers. Restarts Core Audio, so sound stops for a few seconds." enabled="false" selected="true">
+        <pkg-ref id="com.ethankawley.Domine.driver"/>
+    </choice>
+    <pkg-ref id="com.ethankawley.Domine.app" onConclusion="none">Domine-app.pkg</pkg-ref>
+    <pkg-ref id="com.ethankawley.Domine.driver" onConclusion="none">Domine-driver.pkg</pkg-ref>
+</installer-gui-script>

@@ -298,6 +298,13 @@ States: `idle`, `starting`, `running`, `degraded(reason)`, `stopping`, `error(me
 - Release: `scripts/release.sh` builds the driver with Developer ID and the hardened runtime and includes it in the notarized zip next to the app. The app does not install the driver itself in v1; the user runs the install script, or a later installer package does it.
 - The driver has no entitlements and no network or file access beyond the host's storage callbacks.
 
+### 8b. Installer
+
+- `scripts/package.sh` turns the output of `release.sh` into `build/release/Domine-<version>.pkg`: one component package puts `Domine.app` in `/Applications`, another puts `Domine.driver` in `/Library/Audio/Plug-Ins/HAL`, both owned by `root:wheel`. `productbuild` combines them with `Installer/distribution.xml` (title Domine, macOS 14.4 minimum, both choices required and not customizable).
+- The driver package runs `Installer/scripts/postinstall`, which restarts coreaudiod (`launchctl kickstart -k`, with `killall coreaudiod` as fallback) so the device appears without a reboot. Audio stops for a few seconds.
+- The pkg is signed with `productsign` using the Developer ID Installer certificate named in `INSTALLER_IDENTITY`, notarized with the same status check as `release.sh`, stapled, and checked with `pkgutil --check-signature` and `spctl -a -t install`. `release.sh --pkg` runs it as a final step.
+- `scripts/uninstall.sh` removes the app and the driver, forgets the `com.ethankawley.Domine.*` receipts, and restarts coreaudiod. It needs sudo and takes `--dry-run`.
+
 ## 9. Known risks
 
 - **Two Bluetooth audio links at once.** macOS can hold several A2DP connections, but bandwidth is shared with Wi-Fi on 2.4 GHz and with other Bluetooth devices. Expect occasional dropouts on some Macs. Document this; do not try to fix it in software.

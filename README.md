@@ -31,6 +31,8 @@ Status: in development. Progress is tracked in [the milestones](docs/SPEC.md#10-
 | `./scripts/install-driver.sh` | Build and install the virtual output driver, then restart coreaudiod (needs sudo) |
 | `./scripts/uninstall-driver.sh` | Remove the virtual output driver and restart coreaudiod (needs sudo) |
 | `./scripts/release.sh` | Archive, Developer ID sign the app and driver, notarize, and staple into `build/release/` (see [Releasing](#releasing)) |
+| `./scripts/package.sh` | Installer: build, sign, notarize, and staple `build/release/Domine-<version>.pkg` from the release output (needs `INSTALLER_IDENTITY`) |
+| `./scripts/uninstall.sh` | Installer: remove the app and driver, forget the pkg receipts, and restart coreaudiod (needs sudo) |
 
 A typical loop: edit, `./scripts/test.sh`, then `./scripts/run.sh --logs` to try it.
 
@@ -79,6 +81,14 @@ DEVELOPMENT_TEAM=TEAMID NOTARY_PROFILE=NAME ./scripts/release.sh
 ```
 
 The stapled app and the signed driver are in `build/release/dist/`, and the zip to distribute (both together) is `build/release/Domine.zip`. Add `--dry-run` to print the commands without running them.
+
+To also build the installer package, install a Developer ID Installer certificate and add `--pkg`, or run `package.sh` after `release.sh`:
+
+```sh
+INSTALLER_IDENTITY="Developer ID Installer: Your Name (TEAMID)" DEVELOPMENT_TEAM=TEAMID NOTARY_PROFILE=NAME ./scripts/release.sh --pkg
+```
+
+`build/release/Domine-<version>.pkg` installs the app and the driver and restarts coreaudiod. End users remove everything with `./scripts/uninstall.sh`.
 
 ## Using two JBL Grips
 

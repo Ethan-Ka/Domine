@@ -1,16 +1,20 @@
 #!/bin/bash
 # Archive a Release build, sign it and the virtual output driver with Developer ID,
 # notarize both, staple the app, and verify.
-# DEVELOPMENT_TEAM=ABCDE12345 NOTARY_PROFILE=domine ./scripts/release.sh [--dry-run]
+# DEVELOPMENT_TEAM=ABCDE12345 NOTARY_PROFILE=domine ./scripts/release.sh [--dry-run] [--pkg]
 # --dry-run prints the commands without running them. Output goes to build/release/.
+# --pkg also builds the installer package at the end (needs INSTALLER_IDENTITY, see package.sh).
 source "$(dirname "$0")/_common.sh"
 
 DRY_RUN=0
-case "${1:-}" in
-    --dry-run) DRY_RUN=1 ;;
-    "") ;;
-    *) echo "Usage: $0 [--dry-run]" >&2; exit 2 ;;
-esac
+PKG=0
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run) DRY_RUN=1 ;;
+        --pkg) PKG=1 ;;
+        *) echo "Usage: $0 [--dry-run] [--pkg]" >&2; exit 2 ;;
+    esac
+done
 
 if [ -z "${DEVELOPMENT_TEAM:-}" ]; then
     echo "DEVELOPMENT_TEAM is not set. Set it to your 10-character Apple team ID." >&2
@@ -132,3 +136,11 @@ run codesign --verify --strict --verbose=2 "$DRIVER_DIST"
 run spctl -a -vvv -t install "$APP_DIST"
 
 [ "$DRY_RUN" -eq 1 ] || echo "Released $ZIP"
+
+if [ "$PKG" -eq 1 ]; then
+    if [ "$DRY_RUN" -eq 1 ]; then
+        "$ROOT/scripts/package.sh" --dry-run
+    else
+        "$ROOT/scripts/package.sh"
+    fi
+fi
