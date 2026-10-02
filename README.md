@@ -14,7 +14,7 @@ A macOS app that plays the left channel of system audio on one Bluetooth speaker
 
 macOS can combine devices into a Multi-Output Device, but then every speaker plays both channels. Domine captures system audio with a Core Audio process tap, sends it to a private aggregate device, and writes left to one speaker and right to the other. The aggregate corrects clock drift between the two speakers, and a delay slider (1 ms steps) lines up their Bluetooth latency.
 
-## See it in action
+
 
 | Menu bar panel | Main window |
 |---|---|
