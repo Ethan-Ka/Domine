@@ -28,6 +28,9 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
         /// Grip: no main element, channels 1 and 2 only. Empty means the
         /// device has no settable volume.
         var volumes: [AudioObjectPropertyElement: Float] = [1: 0.5, 2: 0.5]
+        /// When set, a written volume snaps to the nearest multiple of this
+        /// step, like a Bluetooth speaker's AVRCP volume.
+        var volumeStep: Float? = nil
         /// Output mute state; nil means the device has no mute control.
         var mute: Bool? = nil
         /// `kAudioDevicePropertyDeviceIsAlive`. Change it with `setAlive`.
@@ -448,7 +451,9 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
             guard let d = devices[device], d.volumes[element] != nil else {
                 throw HALError(kAudioHardwareUnknownPropertyError, "AudioObjectSetPropertyData", selector: kAudioDevicePropertyVolumeScalar)
             }
-            devices[device]?.volumes[element] = volume
+            var stored = volume
+            if let step = d.volumeStep { stored = min(1, (volume / step).rounded() * step) }
+            devices[device]?.volumes[element] = stored
             _volumeWrites.append(VolumeWrite(uid: d.uid, element: element, volume: volume))
         }
         MainActor.assumeIsolated { fire(.volume(device, element: element)) }

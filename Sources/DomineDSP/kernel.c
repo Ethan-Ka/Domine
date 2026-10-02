@@ -63,6 +63,13 @@ struct DomineKernel {
     int32_t maxDelaySamples;
     uint32_t fadeLength;   // samples in a full fade
     uint32_t fadePosition; // 0 = silent, fadeLength = full gain
+    // Trim gain smoothing: the applied gain ramps linearly to each new target.
+    uint32_t gainRampLength; // samples in a gain ramp (30 ms)
+    int gainPrimed;          // 0 until the first process call, which snaps
+    float gainCurA, gainCurB;
+    float gainTargetA, gainTargetB;
+    float gainStepA, gainStepB;
+    uint32_t gainLeftA, gainLeftB; // ramp samples remaining
     int playingToneSide;   // side the tone envelope belongs to, 0 = none
     uint32_t toneFadeLength;
     uint32_t toneLevel;    // 0 = program only, toneFadeLength = tone only
@@ -239,6 +246,11 @@ DomineKernel *domine_kernel_create(double sampleRate, uint32_t maxFrames) {
     uint32_t fade = (uint32_t)lround(sampleRate * DOMINE_FADE_MS / 1000.0);
     k->fadeLength = fade > 0 ? fade : 1;
     k->fadePosition = k->fadeLength;
+    {
+        const uint32_t ramp = (uint32_t)llround(0.03 * sampleRate);
+        k->gainRampLength = ramp > 0 ? ramp : 1;
+        k->gainCurA = k->gainCurB = k->gainTargetA = k->gainTargetB = 1.0f;
+    }
     k->tonePhaseStep = 1.0 / sampleRate;
     uint32_t toneFade = (uint32_t)lround(sampleRate * DOMINE_TONE_FADE_MS / 1000.0);
     k->toneFadeLength = toneFade > 0 ? toneFade : 1;
@@ -473,6 +485,22 @@ static RenderResult render(DomineKernel *k,
     // Snapshot parameters once per cycle.
     const float gainA = bits_float(atomic_load_explicit(&k->gainABits, memory_order_relaxed));
     const float gainB = bits_float(atomic_load_explicit(&k->gainBBits, memory_order_relaxed));
+    // The first call snaps to the target; later changes ramp over 30 ms.
+    if (!k->gainPrimed) {
+        k->gainPrimed = 1;
+        k->gainCurA = k->gainTargetA = gainA;
+        k->gainCurB = k->gainTargetB = gainB;
+    }
+    if (gainA != k->gainTargetA) {
+        k->gainTargetA = gainA;
+        k->gainLeftA = k->gainRampLength;
+        k->gainStepA = (gainA - k->gainCurA) / (float)k->gainRampLength;
+    }
+    if (gainB != k->gainTargetB) {
+        k->gainTargetB = gainB;
+        k->gainLeftB = k->gainRampLength;
+        k->gainStepB = (gainB - k->gainCurB) / (float)k->gainRampLength;
+    }
     const int32_t delay = atomic_load_explicit(&k->delaySamples, memory_order_relaxed);
     const int monoPerSpeaker = atomic_load_explicit(&k->monoPerSpeaker, memory_order_relaxed);
     const int swap = atomic_load_explicit(&k->swapSides, memory_order_relaxed);
@@ -548,8 +576,15 @@ static RenderResult render(DomineKernel *k,
         // even where the CPU flushes subnormals to zero.
         float outA = k->ringA[(w - delayA) & mask];
         float outB = k->ringB[(w - delayB) & mask];
-        if (gainA != 1.0f) outA *= gainA;
-        if (gainB != 1.0f) outB *= gainB;
+        if (k->gainLeftA) {
+            k->gainCurA = --k->gainLeftA ? k->gainCurA + k->gainStepA : k->gainTargetA;
+        }
+        if (k->gainLeftB) {
+            k->gainCurB = --k->gainLeftB ? k->gainCurB + k->gainStepB : k->gainTargetB;
+        }
+        const float gainNowA = k->gainCurA, gainNowB = k->gainCurB;
+        if (gainNowA != 1.0f) outA *= gainNowA;
+        if (gainNowB != 1.0f) outB *= gainNowB;
 
         // Calibration chirps (click test mode 2): replace both positions after
         // the gains, bypassing the delay line. Rising on A, falling on B, both
@@ -565,8 +600,8 @@ static RenderResult render(DomineKernel *k,
             } else {
                 k->chirpCounter = 0;
             }
-            if (gainA != 1.0f) chirpA *= gainA;
-            if (gainB != 1.0f) chirpB *= gainB;
+            if (gainNowA != 1.0f) chirpA *= gainNowA;
+            if (gainNowB != 1.0f) chirpB *= gainNowB;
             if (k->chirpLevel == full) {
                 outA = chirpA;
                 outB = chirpB;

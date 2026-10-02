@@ -82,6 +82,11 @@ void domine_kernel_destroy(DomineKernel *_Nullable k);
 /// negative values are stored as 0, and values above 1.0 as 1.0: the kernel
 /// never adds gain. At exactly 1.0 the sample is copied, not multiplied, so
 /// program audio passes bit for bit (see domine_kernel_process).
+/// After the first process call, a changed gain ramps linearly from the
+/// applied value to the new one over 30 ms of samples (round(0.03 *
+/// sampleRate)): sample i of the ramp (1-based) is start + (target - start)
+/// * i / L, and the last sample is exactly the target. Unchanged gains do
+/// not ramp. The first process call applies the gains at once.
 void domine_kernel_set_gains(DomineKernel *k, float leftGain, float rightGain);
 
 /// Signed delay offset in milliseconds, clamped to +-300 ms.

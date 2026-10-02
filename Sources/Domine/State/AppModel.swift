@@ -297,11 +297,12 @@ final class AppModel {
 
     // MARK: - Tuning and volume
 
-    /// Master volume, 0...1: the hardware volume of both speakers (SPEC 4a).
-    /// A speaker without a settable volume gets it as a kernel gain instead.
+    /// Master volume, 0...1 (SPEC 4a): hardware volume at the step at or above
+    /// it, times a kernel gain for the remainder, so coarse Bluetooth steps
+    /// still move smoothly. A speaker without a settable volume gets it as a kernel gain instead.
     func setMasterVolume(_ volume: Double) {
         let value = min(max(Float(volume), 0), 1)
-        if volumeLink.volume != nil { volumeLink.set(value) }
+        if volumeLink.volume != nil { volumeLink.setAtOrAbove(value) }
         updatePairSettings { $0.masterVolume = value }
     }
 
@@ -364,8 +365,14 @@ final class AppModel {
     }
 
     private func kernelVolume(for uid: String?) -> Float {
-        if let uid, volumeLink.hasHardwareVolume(uid: uid) { return 1 }
-        return pairSettings.masterVolume
+        let master = pairSettings.masterVolume
+        if let uid, volumeLink.hasHardwareVolume(uid: uid) {
+            // Hardware sits at or above the master; kernel gain makes up the rest.
+            guard let hardware = volumeLink.volume, hardware > 0,
+                  hardware - master > SpeakerVolumeLink.exactTolerance else { return 1 }
+            return min(1, master / hardware)
+        }
+        return master
     }
 
     private static func loadPairSettings(store: SettingsStore, left: String?, right: String?) -> PairSettings {

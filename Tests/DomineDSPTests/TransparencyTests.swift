@@ -184,6 +184,7 @@ struct TransparencyTests {
         domine_kernel_set_gains(kernel.raw, 0.5, 0.3)
         Self.settle(kernel)
         domine_kernel_set_gains(kernel.raw, 1, 1)
+        Self.settle(kernel) // the 30 ms gain ramp lands exactly on 1
         Self.expectTransparent(kernel, seed: 12)
     }
 

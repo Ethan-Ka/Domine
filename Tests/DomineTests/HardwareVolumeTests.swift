@@ -104,6 +104,43 @@ final class HardwareVolumeTests {
         #expect(hal.volumes(uid: Self.gripB.uid) == [1: 0.6, 2: 0.6])
     }
 
+    // MARK: Stepped hardware volume
+
+    @Test func betweenStepsUsesStepAboveAndKernelGainForTheRest() {
+        var a = Self.grip(Self.gripA, volume: 0.5)
+        var b = Self.grip(Self.gripB, volume: 0.5)
+        a.volumeStep = 1.0 / 16
+        b.volumeStep = 1.0 / 16
+        start(a, b)
+        model.setMasterVolume(0.7)
+        #expect(hal.volumes(uid: a.uid) == [1: 0.75, 2: 0.75])
+        #expect(hal.volumes(uid: b.uid) == [1: 0.75, 2: 0.75])
+        #expect(model.pairSettings.masterVolume == 0.7)
+        #expect(abs(model.engine.leftGain - 0.7 / 0.75) < 1e-6)
+        #expect(abs(model.engine.rightGain - 0.7 / 0.75) < 1e-6)
+        // Another value in the same step needs no hardware write.
+        hal.clearVolumeWrites()
+        model.setMasterVolume(0.72)
+        #expect(hal.volumeWrites.isEmpty)
+        #expect(abs(model.engine.leftGain - 0.72 / 0.75) < 1e-6)
+        // On a step, gain is exactly unity.
+        model.setMasterVolume(0.5)
+        #expect(hal.volumes(uid: a.uid) == [1: 0.5, 2: 0.5])
+        #expect(model.engine.leftGain == 1)
+    }
+
+    @Test func gripButtonBecomesTheMasterWithUnityKernelGain() {
+        var a = Self.grip(Self.gripA, volume: 0.5)
+        var b = Self.grip(Self.gripB, volume: 0.5)
+        a.volumeStep = 1.0 / 16
+        b.volumeStep = 1.0 / 16
+        start(a, b)
+        hal.pressVolume(uid: a.uid, to: 0.8125)
+        #expect(model.pairSettings.masterVolume == 0.8125)
+        #expect(model.engine.leftGain == 1)
+        #expect(model.engine.rightGain == 1)
+    }
+
     // MARK: External changes
 
     @Test func changeOnOneSpeakerIsCopiedToTheOther() {
