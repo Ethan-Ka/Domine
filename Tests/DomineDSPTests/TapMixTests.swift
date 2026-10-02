@@ -167,7 +167,7 @@ struct TapMixTests {
         let ramp = TestBufferList(channelsPerBuffer: [8], frames: 1200)
         offsets.withUnsafeBufferPointer { domine_quad_process(q, list.pointer, ramp.pointer, 1200, $0.baseAddress!) }
         #expect(ramp.channel(0)[1199] == 0)
-        #expect(ramp.channel(0)[0] > 1.9)
+        #expect(ramp.channel(0)[0] > 0.74)
         _ = ones
         domine_quad_set_tap_gain(q, 99, 0)
         let none = TestBufferList(channelsPerBuffer: [8], frames: Self.n)

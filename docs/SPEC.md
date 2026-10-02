@@ -245,6 +245,10 @@ Parameters cross threads through a seqlock over atomic words (or an atomically s
 
 EQ details: RBJ cookbook biquads, double precision state, float input and output. A band at exactly 0 dB has identity coefficients and is skipped once settled. Parameter changes slide the coefficients linearly over 10 ms.
 
+### Per-app volume
+
+The aggregate may hold several process taps: one global tap that excludes the apps with their own volume, plus one tap per such app. Both kernels sum up to 8 taps ahead of the existing chain. `domine_kernel_set_tap_layout(k, tapCount, firstBuffer[], channels[], interleaved[])` (and `domine_quad_set_tap_layout`) gives each tap's first buffer index in the aggregate input list, its channel count, and whether it is one interleaved buffer or one buffer per channel. Each tap becomes stereo the same way a single tap does, is multiplied by its gain, and the results are added. `domine_kernel_set_tap_gain(k, tap, gain)` (and `domine_quad_set_tap_gain`) sets a gain from 0 to 1 that ramps linearly over 20 ms. With a tap count of 0 (the default) the kernel reads the single tap as before; with one tap at gain 1 the output is bit-identical to that. Missing or short tap buffers read as silence. The layout crosses threads through a seqlock; gains through atomics.
+
 ## 6. App structure (Swift)
 
 ```
