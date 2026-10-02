@@ -405,7 +405,7 @@ final class AppModel {
         var s = pairSettings
         change(&s)
         s = PairSettings(delayMs: s.delayMs, extendedRange: s.extendedRange,
-                         balance: s.balance, masterVolume: s.masterVolume)
+                         balance: s.balance, masterVolume: s.masterVolume, effects: s.effects)
         guard s != pairSettings else { return }
         pairSettings = s
         mirrorMasterToVirtualOutput()
@@ -421,6 +421,15 @@ final class AppModel {
         engine.leftGain = pairSettings.leftGain * kernelVolume(for: leftUID)
         engine.rightGain = pairSettings.rightGain * kernelVolume(for: rightUID)
         engine.delayMs = pairSettings.delayMs
+        engine.setEffects(left: pairSettings.effects.left, right: pairSettings.effects.effectiveRight)
+    }
+
+    func setEffects(_ effects: PairSettings.EffectsSettings) {
+        updatePairSettings { $0.effects = effects }
+    }
+
+    func applyPreset(_ preset: PairSettings.Preset) {
+        setEffects(preset.settings)
     }
 
     private func kernelVolume(for uid: String?) -> Float {

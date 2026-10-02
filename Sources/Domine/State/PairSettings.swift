@@ -13,8 +13,12 @@ struct PairSettings: Codable, Equatable, Sendable {
     var balance: Float = 0
     /// Hardware volume applied to both speakers (SPEC section 4a), 0...1.
     var masterVolume: Float = 0.5
+    /// EQ, bass, and compressor, per speaker or linked.
+    var effects = EffectsSettings()
 
-    init(delayMs: Float = 0, extendedRange: Bool = false, balance: Float = 0, masterVolume: Float = 0.5) {
+    init(delayMs: Float = 0, extendedRange: Bool = false, balance: Float = 0, masterVolume: Float = 0.5,
+         effects: EffectsSettings = EffectsSettings()) {
+        self.effects = effects
         self.delayMs = delayMs
         self.extendedRange = extendedRange
         self.balance = balance
@@ -36,6 +40,7 @@ struct PairSettings: Codable, Equatable, Sendable {
         var copy = self
         copy.delayMs = delayMs == 0 ? 0 : -delayMs
         copy.balance = balance == 0 ? 0 : -balance
+        copy.effects = effects.swapped
         return copy
     }
 
@@ -50,7 +55,7 @@ struct PairSettings: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case delayMs, extendedRange, balance, masterVolume
+        case delayMs, extendedRange, balance, masterVolume, effects
     }
 
     /// Missing or mistyped fields fall back to their defaults one by one,
@@ -62,6 +67,7 @@ struct PairSettings: Codable, Equatable, Sendable {
             delayMs: (try? c.decodeIfPresent(Float.self, forKey: .delayMs)) ?? defaults.delayMs,
             extendedRange: (try? c.decodeIfPresent(Bool.self, forKey: .extendedRange)) ?? defaults.extendedRange,
             balance: (try? c.decodeIfPresent(Float.self, forKey: .balance)) ?? defaults.balance,
-            masterVolume: (try? c.decodeIfPresent(Float.self, forKey: .masterVolume)) ?? defaults.masterVolume)
+            masterVolume: (try? c.decodeIfPresent(Float.self, forKey: .masterVolume)) ?? defaults.masterVolume,
+            effects: (try? c.decodeIfPresent(EffectsSettings.self, forKey: .effects)) ?? defaults.effects)
     }
 }
