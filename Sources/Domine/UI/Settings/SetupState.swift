@@ -10,6 +10,10 @@ struct SetupState: Equatable, Sendable {
     var connectedGrips = 0
     /// The login item waits for approval in System Settings.
     var loginItemNeedsApproval = false
+    /// The Domine virtual output driver is installed.
+    var virtualOutputInstalled = false
+
+    var virtualOutputText: String { virtualOutputInstalled ? "Installed" : "Not installed" }
 
     var captureText: String {
         if isCheckingCapture { return "Checking…" }

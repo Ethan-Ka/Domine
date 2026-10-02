@@ -50,6 +50,21 @@ final class SetupTests {
         #expect(model.setupState.speakersText == "2 JBL Grips connected")
     }
 
+    @Test func domineOutputRowNotInstalled() {
+        model.start()
+        #expect(!model.setupState.virtualOutputInstalled)
+        #expect(model.setupState.virtualOutputText == "Not installed")
+        model.setupActions().showInstallSteps()
+        #expect(system.openedURLs.map(\.absoluteString) == ["https://github.com/Ethan-Ka/Domine#virtual-output"])
+    }
+
+    @Test func domineOutputRowInstalled() {
+        model.start()
+        hal.add(FakeHAL.Device(uid: OutputRestorer.virtualOutputUID, name: "Domine"))
+        #expect(model.setupState.virtualOutputInstalled)
+        #expect(model.setupState.virtualOutputText == "Installed")
+    }
+
     @Test func accessibilityRowFollowsTrust() {
         #expect(model.setupState.accessibilityText == "Not granted")
         system.trusted = true

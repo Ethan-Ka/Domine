@@ -42,6 +42,14 @@ struct SetupSection: View {
                 }
             }
 
+            LabeledContent("Domine output:") {
+                row(state.virtualOutputText, ok: state.virtualOutputInstalled) {
+                    if !state.virtualOutputInstalled {
+                        Button("Show Install Steps") { actions.showInstallSteps() }
+                    }
+                }
+            }
+
             if state.loginItemNeedsApproval {
                 LabeledContent("Login item:") {
                     row("Needs approval", ok: false) {
