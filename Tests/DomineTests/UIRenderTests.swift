@@ -55,6 +55,10 @@ struct UIRenderTests {
         try renderView(VolumeHUD(volume: 0.62).padding(20), name: "volume-hud")
     }
 
+    @Test func debugWindow() throws {
+        try renderView(DebugContentView(snapshot: .sample), name: "debug")
+    }
+
     // MARK: - Helpers
 
     /// Hosts the view in a titled window so the toolbar, title, and subtitle

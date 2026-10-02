@@ -185,6 +185,25 @@ final class EngineDiagnostics {
         return Self.f(rate, 1) + " Hz"
     }
 
+    /// Reads the current values for the Debug window. Changes no audio state.
+    func snapshot() -> DebugSnapshot {
+        var stats = DomineKernelStats()
+        _ = domine_kernel_stats(kernel, &stats)
+        let speakers = devices.map { device in
+            DebugSnapshot.Speaker(
+                label: device.label, uid: device.uid,
+                sampleRate: try? hal.nominalSampleRate(of: device.id),
+                latency: try? hal.outputLatency(of: device.id))
+        }
+        let format = try? hal.tapFormat(of: tap.id)
+        return DebugSnapshot(
+            speakers: speakers,
+            aggregateRate: try? hal.nominalSampleRate(of: aggregate),
+            tapFormat: format.map(Self.describe),
+            kernel: DebugSnapshot.Kernel(stats),
+            window: lastWindow)
+    }
+
     // MARK: - Start-up log
 
     /// Logs the description passed to AudioHardwareCreateAggregateDevice.

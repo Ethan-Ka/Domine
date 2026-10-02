@@ -26,6 +26,13 @@ struct DomineApp: App {
         }
         .windowResizability(.contentSize)
 
+        Window("Debug", id: "debug") {
+            DebugView()
+                .environment(model)
+        }
+        .windowResizability(.contentMinSize)
+        .commands { DebugCommand() }
+
         Settings {
             AppSettingsView()
                 .environment(model)
@@ -47,5 +54,17 @@ struct DomineApp: App {
             set: { [model] inserted in
                 if !inserted && model.isInBackground { model.showMainWindow() }
             })
+    }
+}
+
+/// Debug menu item, Option-Command-D.
+private struct DebugCommand: Commands {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(after: .windowArrangement) {
+            Button("Debug") { openWindow(id: "debug") }
+                .keyboardShortcut("d", modifiers: [.option, .command])
+        }
     }
 }
