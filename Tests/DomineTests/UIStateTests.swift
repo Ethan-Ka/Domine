@@ -62,4 +62,24 @@ struct UIStateTests {
         #expect(layout.connectorEnd(.rearLeft) == CGPoint(x: 196, y: 254))
         #expect(layout.connectorEnd(.rearRight) == CGPoint(x: 420, y: 254))
     }
+
+    /// The banner stays between the rear cards so their text is not covered.
+    @Test(arguments: [StageLayout.designSize, CGSize(width: 900, height: 640), CGSize(width: 1400, height: 700)])
+    func bannerClearsTheRearCards(size: CGSize) {
+        let layout = StageLayout(size: size)
+        let bannerMinX = (size.width - layout.bannerWidth) / 2
+        let bannerMaxX = bannerMinX + layout.bannerWidth
+        let rearLeftMaxX = layout.cardCenter(.rearLeft).x + StageLayout.cardSize.width / 2
+        let rearRightMinX = layout.cardCenter(.rearRight).x - StageLayout.cardSize.width / 2
+        #expect(layout.bannerWidth > 150)
+        #expect(layout.bannerWidth <= StageLayout.bannerMaxWidth)
+        #expect(bannerMinX >= rearLeftMaxX + StageLayout.bannerGap)
+        #expect(bannerMaxX <= rearRightMinX - StageLayout.bannerGap)
+    }
+
+    @Test func bannerIsLevelWithTheRearCards() {
+        let layout = StageLayout(size: StageLayout.designSize)
+        let rearBottom = layout.cardCenter(.rearLeft).y + StageLayout.cardSize.height / 2
+        #expect(layout.size.height - layout.bannerBottomInset == rearBottom)
+    }
 }

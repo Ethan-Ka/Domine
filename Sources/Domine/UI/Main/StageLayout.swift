@@ -44,6 +44,21 @@ struct StageLayout: Equatable, Sendable {
         return CGPoint(x: macCenter.x + dx * scale, y: macCenter.y + dy * scale)
     }
 
+    /// Space kept between the banner and the rear cards.
+    static let bannerGap: CGFloat = 10
+    /// Widest the banner gets on a large stage (the mockup's width).
+    static let bannerMaxWidth: CGFloat = 316
+
+    /// The banner sits between the two rear cards, bottom-aligned with
+    /// them, so it never covers their text.
+    var bannerWidth: CGFloat {
+        let between = size.width - 2 * (Self.cardInset.width + cardSize.width + Self.bannerGap)
+        return max(0, min(Self.bannerMaxWidth, between))
+    }
+
+    /// Distance from the stage's bottom edge to the banner's bottom edge.
+    var bannerBottomInset: CGFloat { Self.cardInset.height }
+
     /// Radius around the Mac's center that connectors leave clear.
     static let macClearance: CGFloat = 50
 
