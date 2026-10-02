@@ -14,6 +14,8 @@ struct TuningState: Equatable, Sendable {
     var isClickTestAvailable = true
     /// Why the click test could not start, in one short line.
     var clickTestMessage: String?
+    /// Auto-calibrate progress or result; nil before a run.
+    var calibrationStatus: CalibrationStatus?
 
     static let normalRange = -50...50
     static let extendedRange = -300...300

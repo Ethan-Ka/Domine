@@ -8,17 +8,24 @@ extension AppModel {
             balance: Double(pairSettings.balance),
             reportedLatencies: reportedLatencyText,
             isClickTestPlaying: engine.clickTest,
-            isClickTestAvailable: engine.state != .starting && engine.state != .stopping,
-            clickTestMessage: clickTestMessage)
+            isClickTestAvailable: engine.state != .starting && engine.state != .stopping
+                && calibrationStatus != .listening,
+            clickTestMessage: clickTestMessage,
+            calibrationStatus: calibrationStatus)
     }
 
     var tuningActions: TuningActions {
-        TuningActions(
+        var calibrate: (@MainActor @Sendable () -> Void)?
+        if isCalibrationAvailable {
+            calibrate = { [weak self] in self?.autoCalibrate() }
+        }
+        return TuningActions(
             setDelayMs: { [weak self] in self?.setDelayMs($0) },
             setExtendedRange: { [weak self] in self?.setExtendedRange($0) },
             setBalance: { [weak self] in self?.setBalance($0) },
             playClickTest: { [weak self] in self?.toggleClickTest() },
-            autoCalibrate: nil,
+            autoCalibrate: calibrate,
+            openMicrophoneSettings: { [weak self] in self?.openMicrophoneSettings() },
             reset: { [weak self] in self?.resetTuning() },
             done: { [weak self] in self?.showsTuning = false })
     }
@@ -27,6 +34,8 @@ extension AppModel {
         applyInitialDelayIfUnset()
         reportedLatencyText = readReportedLatencies()
         clickTestMessage = nil
+        calibrationStatus = nil
+        isCalibrationAvailable = calibration.isAvailable
         showsTuning = true
     }
 
@@ -66,7 +75,7 @@ extension AppModel {
     }
 
     /// One short line on why routing did not start.
-    private var routingFailureText: String {
+    var routingFailureText: String {
         if let refusal = routingRefusal { return refusal }
         if let reason = engine.idleReason { return reason.description }
         return Self.routingErrorMessage

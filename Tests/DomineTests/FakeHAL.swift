@@ -75,6 +75,9 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
     private var aggregates: [AudioObjectID: [String: Any]] = [:]
     private var ioProcs: [IOProcHandle: IOProc] = [:]
     private var running: Set<IOProcHandle> = []
+    private var _ioProcDevices: [AudioObjectID] = []
+    /// Every device an IOProc was created on, in order.
+    var ioProcDevices: [AudioObjectID] { lock.withLock { _ioProcDevices } }
     private var aggregateStreamReads = 0
     private var _volumeWrites: [VolumeWrite] = []
     private var _defaultOutputWrites: [String] = []
@@ -643,6 +646,7 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
         try locked { () throws(HALError) -> IOProcHandle in
             try fail(.createIOProc, "AudioDeviceCreateIOProcID")
             _ops.append(.createIOProc)
+            _ioProcDevices.append(device)
             let handle = IOProcHandle(device: device, bits: UInt(nextID))
             nextID += 1
             ioProcs[handle] = IOProc(proc: proc, clientData: clientData)

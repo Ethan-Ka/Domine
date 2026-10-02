@@ -15,9 +15,14 @@
 extern "C" {
 #endif
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wnullability-extension"
+#pragma clang assume_nonnull begin
+
 typedef struct DomineRecorder DomineRecorder;
 
-DomineRecorder *domine_recorder_create(uint32_t capacityFrames);
+/// Returns NULL if allocation fails.
+DomineRecorder *_Nullable domine_recorder_create(uint32_t capacityFrames);
 void domine_recorder_destroy(DomineRecorder *r);
 
 /// Pass the recorder as the IOProc client data.
@@ -27,7 +32,7 @@ OSStatus domine_recorder_ioproc(AudioObjectID inDevice,
                                 const AudioTimeStamp *inInputTime,
                                 AudioBufferList *outOutputData,
                                 const AudioTimeStamp *inOutputTime,
-                                void *inClientData);
+                                void *_Nullable inClientData);
 
 /// Frames recorded so far (never above the capacity).
 uint32_t domine_recorder_frames_written(const DomineRecorder *r);
@@ -35,6 +40,9 @@ uint32_t domine_recorder_frames_written(const DomineRecorder *r);
 uint32_t domine_recorder_copy(const DomineRecorder *r, float *out, uint32_t maxFrames);
 /// Discards the recording.
 void domine_recorder_reset(DomineRecorder *r);
+
+#pragma clang assume_nonnull end
+#pragma clang diagnostic pop
 
 #ifdef __cplusplus
 }
