@@ -14,7 +14,7 @@ extension AppModel {
             statusLine: statusLine,
             isOn: engine.state.isActive,
             mode: routingMode,
-            isQuadAvailable: isQuadAvailable,
+            isQuadAvailable: true,
             canSwap: true,
             speakers: SpeakerPosition.positions(in: routingMode).map { card(for: $0) },
             masterVolume: Double(pairSettings.masterVolume),
@@ -66,7 +66,7 @@ extension AppModel {
         case .starting: return "Starting"
         case .running:
             if volumeKeysNeedAccessibility { return "Playing, volume keys need Accessibility" }
-            if routingMode == .quad { return "Quad" }
+            if routingMode == .quad { return isQuadAvailable ? "Quad" : "Quad: choose rear speakers" }
             return engine.swapSides ? "Playing, sides swapped" : "Playing"
         case .degraded(.monoFallback): return "Mono fallback"
         case .degraded(.quadFallback): return "Quad, some speakers missing"

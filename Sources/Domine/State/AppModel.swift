@@ -227,7 +227,6 @@ final class AppModel {
         // A new pair is not a speaker connecting, so it never auto-starts.
         bothSpeakersWerePresent = bothSelectedSpeakersPresent
         reloadQuadSettings()
-        if routingMode == .quad, !isQuadAvailable { setRoutingMode(.stereo) }
         syncVolumeLink()
         applyPairSettingsToEngine()
         if wasActive {
@@ -244,7 +243,6 @@ final class AppModel {
         store.lastRearLeftUID = left
         store.lastRearRightUID = right
         reloadQuadSettings()
-        if routingMode == .quad, !isQuadAvailable { setRoutingMode(.stereo) }
         syncVolumeLink()
         if wasQuadActive { Task { await startRouting() } }
     }
@@ -255,10 +253,9 @@ final class AppModel {
         return uids.count == 4 && Set(uids).count == 4
     }
 
-    /// Quad needs four assigned speakers. Until the engine supports it the
-    /// mode is shown but routing stays stereo.
+    /// Quad is always selectable. Until four distinct outputs are assigned
+    /// and present, routing stays stereo on the front pair.
     func setRoutingMode(_ mode: RoutingMode) {
-        guard mode == .stereo || isQuadAvailable else { return }
         guard mode != routingMode else { return }
         let wasActive = engine.state.isActive
         if wasActive { stopRouting() }

@@ -28,9 +28,25 @@ final class QuadModelTests {
         model.assign("C", to: .rearLeft)
         #expect(!model.isQuadAvailable)
         model.setRoutingMode(.quad)
-        #expect(model.routingMode == .stereo)
+        #expect(model.routingMode == .quad)
+        #expect(model.mainWindowState.speakers.count == 4)
         model.assign("D", to: .rearRight)
         #expect(model.isQuadAvailable)
+    }
+
+    @Test func quadSelectableWithTwoSpeakersKeepsStereoRouting() {
+        model.assign("A", to: .frontLeft)
+        model.assign("B", to: .frontRight)
+        model.setRoutingMode(.quad)
+        #expect(model.routingMode == .quad)
+        #expect(!model.isQuadAvailable)
+        #expect(model.mainWindowState.isQuadAvailable)
+        model.openAssign(.rearLeft)
+        #expect(model.assignPosition == .rearLeft)
+        model.assign("C", to: .rearLeft)
+        model.assign("D", to: .rearRight)
+        #expect(model.isQuadAvailable)
+        #expect(model.routingMode == .quad)
     }
 
     @Test func choosingQuadShowsFourCards() {
@@ -74,10 +90,11 @@ final class QuadModelTests {
         #expect(again.mainWindowState.rearMode == .matrix)
     }
 
-    @Test func clearingAFourthSpeakerFallsBackToStereo() {
+    @Test func clearingAFourthSpeakerKeepsQuadModeButStereoRouting() {
         assignAll()
         model.setRoutingMode(.quad)
         model.setRear(left: "C", right: "C")
-        #expect(model.routingMode == .stereo)
+        #expect(model.routingMode == .quad)
+        #expect(!model.isQuadAvailable)
     }
 }
