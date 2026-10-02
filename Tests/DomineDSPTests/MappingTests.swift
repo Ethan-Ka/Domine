@@ -83,6 +83,34 @@ struct MappingTests {
         #expect(kernel.peak(1) == 0)
     }
 
+    @Test func monoFallbackWithAAbsent() {
+        let kernel = Kernel()
+        domine_kernel_set_mode(kernel.raw, 1, 1, 1) // swap ignored
+        let left: [Float] = [0.5, 1, -1, 0.25]
+        let right: [Float] = [0.25, 0, 0.5, -0.75]
+        let out = TestBufferList(channelsPerBuffer: [2], frames: left.count)
+        kernel.process(.interleaved(left: left, right: right), out, a: noDevice, b: 0)
+        let expected: [Float] = [0.375, 0.5, -0.25, -0.25]
+        #expect(out.channel(0) == expected)
+        #expect(out.channel(1) == expected)
+        #expect(kernel.peak(0) == 0)
+        #expect(kernel.peak(1) == 0.5)
+    }
+
+    /// The remaining speaker keeps its own trim gain (position B here).
+    @Test func monoFallbackKeepsThePresentPositionsGain() {
+        let kernel = Kernel()
+        domine_kernel_set_mode(kernel.raw, 1, 0, 1)
+        domine_kernel_set_gains(kernel.raw, 0.25, 0.5)
+        let left: [Float] = [0.5, 1, -1, 0.25]
+        let right: [Float] = [0.5, 0, 1, -0.75]
+        let out = TestBufferList(channelsPerBuffer: [2], frames: left.count)
+        kernel.process(.interleaved(left: left, right: right), out, a: noDevice, b: 0)
+        let expected: [Float] = [0.25, 0.25, 0, -0.125]
+        #expect(out.channel(0) == expected)
+        #expect(out.channel(1) == expected)
+    }
+
     @Test func bAbsentZeroesItsOldChannels() {
         let kernel = Kernel()
         domine_kernel_set_mode(kernel.raw, 1, 0, 1)

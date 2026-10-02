@@ -187,6 +187,21 @@ struct MuteTests {
         #expect(up == expectedUp)
     }
 
+    @Test func startFadedOutFadesInFromSilence() {
+        let kernel = Kernel()
+        domine_kernel_start_faded_out(kernel.raw)
+        let up = Self.run(kernel, frames: 3000)
+        let expected = (0..<3000).map { Float(min(Self.fade, $0 + 1)) / Float(Self.fade) }
+        #expect(up == expected)
+    }
+
+    @Test func startFadedOutWhileMutedStaysSilent() {
+        let kernel = Kernel()
+        domine_kernel_set_muted(kernel.raw, 1)
+        domine_kernel_start_faded_out(kernel.raw)
+        #expect(Self.run(kernel, frames: 600) == Array(repeating: 0, count: 600))
+    }
+
     @Test func unmuteMidRampReversesFromCurrentLevel() {
         let kernel = Kernel()
         domine_kernel_set_muted(kernel.raw, 1)
