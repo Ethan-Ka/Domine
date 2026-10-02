@@ -12,14 +12,17 @@
 
 A macOS app that plays the left channel of system audio on one Bluetooth speaker and the right channel on another. It was built for two JBL Grip speakers but works with any two outputs.
 
-macOS can combine devices into a Multi-Output Device, but then every speaker plays both channels. Domine captures system audio with a Core Audio process tap, sends it to a private aggregate device, and writes left to one speaker and right to the other. The aggregate corrects clock drift between the two speakers, and a delay slider (1 ms steps) lines up their Bluetooth latency.
-
 
 
 | Menu bar panel | Main window |
 |---|---|
 | <img src="docs/assets/domine-menu.png" alt="Domine menu bar panel showing playback and speaker controls" height="420"> | <img src="docs/assets/domine-main-window.png" alt="Domine main window showing left and right JBL Grip speakers"> |
 | Keeps playback available in the background with quick access to volume, room, app exclusions, and speaker controls. | Shows each speaker's side, connection state, UID suffix, and live level meter around the Mac. |
+
+
+macOS can combine devices into a Multi-Output Device, but then every speaker plays both channels. 
+Domine captures system audio with a Core Audio process tap, sends it to a private aggregate device, and writes left to one speaker and right to the other. 
+The aggregate corrects clock drift between the two speakers, and a delay slider (1 ms steps) lines up their Bluetooth latency.
 
 ## Status: v0.1.0
 
