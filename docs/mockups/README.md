@@ -8,7 +8,7 @@ These are HTML mockups from the design canvas. They will not render on their own
 | Assign.dc.html | Choose speaker sheet | Sheet over main window. Radio list of outputs with name, UID suffix, status line, and a Play tone button per row. Cancel / Use This Speaker. |
 | Tuning.dc.html | Sync & Balance sheet | Delay offset slider (-50..+50 ms, readout like "Right +4 ms"), Extended range checkbox, Play Click Test, reported latencies line, Balance slider. Reset / Done. |
 | Welcome.dc.html | First-run setup | Three-step checklist with per-step action buttons, Continue. |
-| Disconnected.dc.html | Mono fallback | Front Right card in error state, Front Left tagged "L+R" with "Mono fallback · Full mix", banner explaining auto-reconnect. Toolbar status "Mono fallback · Waiting for Front Right". |
+| Disconnected.dc.html | Mono fallback | Front Right card in error state, Front Left tagged "L+R" with "Mono fallback", banner "Front Right disconnected. Front Left plays both sides until it reconnects." Toolbar status "Mono fallback". |
 | Quad.dc.html | Quad mode (v2 only) | All four positions active. Do not build in v1; keep the layout able to support it. |
 | SettingsGeneral.dc.html | Settings > General | Standard Settings scene, form with right-aligned labels. |
 | SettingsExclusions.dc.html | Settings > Exclusions | App list with +/- buttons, per-app mode, "Excluded apps play through" popup. |
