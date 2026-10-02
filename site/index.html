@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Domine</title>
+<meta name="description" content="Domine plays your Mac's left channel on one speaker and the right channel on another.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" type="image/png" href="favicon.png">
+<style>
+:root{
+  --bg:#F2F0EC; --bg2:#EAE7E1; --ink:#1E1D1B; --muted:#57524D; --rule:#CFC9BF;
+  --btn:#C73A29; --btn-hover:#B83221; --btn-active:#A52B1D; --btn-ink:#fff; --focus:#1E1D1B;
+  --font:system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#1E1D1B; --bg2:#242220; --ink:#EEEBE5; --muted:#A8A29A; --rule:#3B3835; --focus:#EEEBE5}
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; min-height:100vh; display:flex; flex-direction:column;
+  background:linear-gradient(180deg,var(--bg) 0,var(--bg) 55%,var(--bg2) 100%);
+  color:var(--ink); font:400 clamp(1rem,.95rem + .25vw,1.25rem)/1.55 var(--font);
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{width:100%; max-width:72rem; margin:0 auto; padding:0 clamp(1rem,5vw,3rem)}
+main{flex:1; display:flex; flex-direction:column; justify-content:center; padding:clamp(2rem,8vh,6rem) 0}
+.art{display:block; width:100%; max-width:56rem; overflow:hidden}
+.art img{display:block; width:110%; max-width:none; height:auto; margin-left:-7.86%}
+.body{
+  display:grid; gap:2.5rem clamp(2rem,6vw,6rem);
+  grid-template-columns:1fr; margin-top:clamp(2rem,6vw,4.5rem);
+  padding-top:clamp(1.5rem,3vw,2.5rem); border-top:1px solid var(--rule);
+}
+@media (min-width:52rem){.body{grid-template-columns:minmax(0,3fr) minmax(0,2fr); align-items:end}}
+.claim{
+  margin:0; max-width:30ch; font-size:clamp(1.5rem,1rem + 2.2vw,2.75rem);
+  line-height:1.15; letter-spacing:-.022em; font-weight:600; text-wrap:balance;
+}
+.actions{display:flex; flex-direction:column; align-items:flex-start; gap:1.25rem}
+.btn{
+  display:inline-block; padding:.8em 1.35em; border-radius:.55rem;
+  background:var(--btn); color:var(--btn-ink); font-weight:600; font-size:1.0625rem;
+  letter-spacing:-.005em; text-decoration:none; transition:background-color .12s ease, transform .12s ease;
+}
+.btn:hover{background:var(--btn-hover)}
+.btn:active{background:var(--btn-active); transform:translateY(1px)}
+.links{display:flex; flex-wrap:wrap; gap:.5rem 1.75rem}
+.links a{color:var(--ink); text-decoration:none; font-weight:500; padding:.2rem 0}
+.links a span{display:inline-block; color:var(--muted); transition:transform .12s ease}
+.links a:hover{text-decoration:underline; text-underline-offset:.25em}
+.links a:hover span{transform:translateX(3px)}
+a:focus-visible{outline:3px solid var(--focus); outline-offset:3px; border-radius:.35rem}
+footer{padding:1.5rem 0 2rem; color:var(--muted); font-size:.9rem}
+.sr{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<main>
+  <div class="wrap">
+    <h1 class="sr">Domine</h1>
+    <picture class="art">
+      <source srcset="header-dark.svg" media="(prefers-color-scheme: dark)">
+      <img src="header-light.svg" width="840" height="200" alt="Domine, with the left channel in off-white and the right channel in red">
+    </picture>
+    <div class="body">
+      <p class="claim">Plays your Mac's left channel on one Bluetooth speaker and the right on another.</p>
+      <div class="actions">
+        <a class="btn" href="https://github.com/Ethan-Ka/Domine/releases/latest">Download for macOS</a>
+        <nav class="links" aria-label="Links">
+          <a href="https://github.com/Ethan-Ka/Domine">GitHub <span aria-hidden="true">&rarr;</span></a>
+          <a href="https://ethankawley.com/">Ethan Kawley <span aria-hidden="true">&rarr;</span></a>
+        </nav>
+      </div>
+    </div>
+  </div>
+</main>
+<footer><div class="wrap">macOS 14.4 or later</div></footer>
+</body>
+</html>
