@@ -30,9 +30,10 @@
 #define DROP_TAU 0.450
 #define DROP_LEN 1.500
 #define DROP_FADE 0.300
-// |kick| <= gain * (1 + CLICK_LEVEL), so these gains give peaks of 0.8 and 0.5625.
-#define KICK_GAIN 0.64f
-#define ORBIT_KICK_GAIN 0.45f
+// Measured kick peak is about 1.13 * gain (bound 1.25 * gain): about 0.77 and
+// 0.53. The orbit kick plus the bass (0.42) stays under 0.96.
+#define KICK_GAIN 0.68f
+#define ORBIT_KICK_GAIN 0.47f
 
 // Ping-pong gaps.
 #define GAP_START 0.5
@@ -153,7 +154,8 @@ static void fire_hit(DomineDemo *d, int section) {
         double gap = GAP_START - (GAP_START - GAP_END) * (t - T_PING) / (T_ORBIT - T_PING);
         if (gap < GAP_END) gap = GAP_END;
         uint64_t next = d->frame + (uint64_t)llround(gap * sr);
-        d->nextHit = next < at(d, T_ORBIT) ? next : at(d, T_ORBIT);
+        // The last ping-pong tail ends before the orbit's first kick and the bass.
+        d->nextHit = next + at(d, KICK_LEN) <= at(d, T_ORBIT) ? next : at(d, T_ORBIT);
         break;
     }
     case DOMINE_DEMO_SECTION_ORBIT: {

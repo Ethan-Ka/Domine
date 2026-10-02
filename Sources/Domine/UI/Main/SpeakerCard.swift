@@ -12,11 +12,22 @@ struct SpeakerCard: View {
         case .placeholder:
             placeholder
         case .connected, .disconnected, .unassigned:
-            Button(action: onSelect) { card }
-                .buttonStyle(.plain)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(accessibilityText)
-                .accessibilityHint("Choose a speaker for \(state.position.title)")
+            if state.surround != nil {
+                // Surround cards are dragged, so the stage handles clicks
+                // (StageView) instead of a button that would eat the drag.
+                card
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(accessibilityText)
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityHint("Choose a different speaker")
+                    .accessibilityAction { onSelect() }
+            } else {
+                Button(action: onSelect) { card }
+                    .buttonStyle(.plain)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(accessibilityText)
+                    .accessibilityHint("Choose a speaker for \(state.title)")
+            }
         }
     }
 
@@ -31,7 +42,7 @@ struct SpeakerCard: View {
                     .frame(width: 28)
                 VStack(alignment: .leading, spacing: 1) {
                     HStack {
-                        Text(state.position.title)
+                        Text(state.title)
                             .font(.callout.weight(.semibold))
                         Spacer(minLength: 4)
                         Text(state.sideTag)
@@ -95,7 +106,10 @@ struct SpeakerCard: View {
     }
 
     private var accessibilityText: String {
-        var parts = [state.position.title]
+        var parts = [state.title]
+        if let surround = state.surround {
+            parts.append("\(state.sideTag) at \(surround.distance.formatted(.number.precision(.fractionLength(1)))) metres")
+        }
         if let name = state.deviceName {
             parts.append([name, state.uidSuffix].compactMap { $0 }.joined(separator: " "))
         }
