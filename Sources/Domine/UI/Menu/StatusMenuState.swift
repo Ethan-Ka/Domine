@@ -7,4 +7,9 @@ struct StatusMenuState: Equatable, Sendable {
     var right: StatusMenuSpeaker
     /// 0...1
     var masterVolume: Double
+    var isMuted = false
+    /// The preset the current sound settings match, if any.
+    var preset: PairSettings.Preset? = .flat
+    /// Auto-calibrate is offered only while routing.
+    var isRouting = false
 }

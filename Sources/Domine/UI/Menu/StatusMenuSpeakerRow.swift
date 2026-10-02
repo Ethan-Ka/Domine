@@ -3,6 +3,7 @@ import SwiftUI
 /// Connection dot, position name, and device label for one speaker.
 struct StatusMenuSpeakerRow: View {
     let speaker: StatusMenuSpeaker
+    var identify: () -> Void = {}
 
     var body: some View {
         HStack(spacing: 8) {

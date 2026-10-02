@@ -169,6 +169,31 @@ final class BackgroundModeTests {
         #expect(hal.defaultOutputUID == Self.speakers.uid)
     }
 
+    // MARK: Menu quick controls
+
+    @Test func menuMuteAndPresetEditsReachTheModel() async {
+        startWithGrips()
+        await model.startRouting()
+        var edited = model.statusMenuState
+        #expect(edited.isRouting)
+        #expect(edited.preset == .flat)
+        edited.isMuted = true
+        edited.preset = .bassBoost
+        model.applyStatusMenuEdit(edited)
+        #expect(model.isMuted)
+        #expect(model.pairSettings.effects == PairSettings.Preset.bassBoost.settings)
+        #expect(model.statusMenuState.preset == .bassBoost)
+    }
+
+    @Test func menuSwapAndIdentifyCallTheModel() async {
+        startWithGrips()
+        await model.startRouting()
+        let before = model.engine.swapSides
+        model.statusMenuActions.swapSides()
+        #expect(model.engine.swapSides != before)
+        model.statusMenuActions.identifySpeaker(.frontLeft)
+    }
+
     // MARK: Menu content
 
     @Test func menuShowsBothSpeakersConnected() async {

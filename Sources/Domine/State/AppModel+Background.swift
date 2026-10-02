@@ -69,7 +69,10 @@ extension AppModel {
             isOn: engine.state.isActive,
             left: statusMenuSpeaker(.frontLeft),
             right: statusMenuSpeaker(.frontRight),
-            masterVolume: Double(pairSettings.masterVolume))
+            masterVolume: Double(pairSettings.masterVolume),
+            isMuted: isMuted,
+            preset: PairSettings.Preset.allCases.first { $0.settings == pairSettings.effects },
+            isRouting: engine.state.isRouting)
     }
 
     /// Applies an edit made through the menu's switch or volume slider.
@@ -81,11 +84,23 @@ extension AppModel {
         if edited.masterVolume != current.masterVolume {
             mainWindowActions.setMasterVolume(edited.masterVolume)
         }
+        if edited.isMuted != current.isMuted {
+            setMuted(edited.isMuted)
+        }
+        if let preset = edited.preset, preset != current.preset {
+            applyPreset(preset)
+        }
     }
 
     var statusMenuActions: StatusMenuActions {
         StatusMenuActions(
             openMainWindow: { [weak self] in self?.showMainWindow() },
+            identifySpeaker: { [weak self] position in
+                guard let self, let uid = self.uid(at: position) else { return }
+                self.playAssignTone(uid: uid)
+            },
+            swapSides: { [weak self] in self?.swapSides() },
+            autoCalibrate: { [weak self] in self?.autoCalibrate() },
             quit: { [weak self] in self?.quit() })
     }
 

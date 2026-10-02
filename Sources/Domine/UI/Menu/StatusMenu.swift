@@ -25,25 +25,56 @@ struct StatusMenu: View {
 
             StatusMenuSeparator()
 
-            VStack(alignment: .leading, spacing: 6) {
-                StatusMenuSpeakerRow(speaker: state.left)
-                StatusMenuSpeakerRow(speaker: state.right)
+            VStack(alignment: .leading, spacing: 0) {
+                speakerButton(state.left, .frontLeft)
+                speakerButton(state.right, .frontRight)
             }
             .font(.callout)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
 
             HStack(spacing: 8) {
-                Image(systemName: "speaker.wave.1.fill")
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
+                Button { state.isMuted.toggle() } label: {
+                    Image(systemName: muteSymbol)
+                        .frame(width: 18)
+                }
+                .buttonStyle(.borderless)
+                .help(state.isMuted ? "Unmute" : "Mute")
+                .accessibilityLabel(state.isMuted ? "Unmute" : "Mute")
                 Slider(value: $state.masterVolume, in: 0...1)
                     .controlSize(.small)
                     .accessibilityLabel("Master volume")
+                Text("\(Int((state.masterVolume * 100).rounded()))%")
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .frame(width: 38, alignment: .trailing)
             }
             .padding(.horizontal, 10)
-            .padding(.top, 4)
-            .padding(.bottom, 8)
+            .padding(.vertical, 6)
+
+            HStack {
+                Text("Sound")
+                Spacer()
+                Picker("Sound", selection: presetBinding) {
+                    if state.preset == nil { Text("Custom").tag(PairSettings.Preset?.none) }
+                    ForEach(PairSettings.Preset.allCases, id: \.self) { preset in
+                        Text(preset.rawValue).tag(PairSettings.Preset?.some(preset))
+                    }
+                }
+                .labelsHidden()
+                .fixedSize()
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 2)
+
+            StatusMenuSeparator()
+
+            Button { actions.swapSides() } label: {
+                StatusMenuItemLabel(title: "Swap Left and Right")
+            }
+            if state.isRouting {
+                Button { actions.autoCalibrate() } label: {
+                    StatusMenuItemLabel(title: "Auto-calibrate")
+                }
+            }
 
             StatusMenuSeparator()
 
@@ -65,6 +96,23 @@ struct StatusMenu: View {
         .buttonStyle(StatusMenuItemStyle())
         .padding(6)
         .frame(width: 300)
+    }
+
+    private var muteSymbol: String {
+        if state.isMuted { return "speaker.slash.fill" }
+        return state.masterVolume < 0.34 ? "speaker.wave.1.fill" : "speaker.wave.2.fill"
+    }
+
+    private var presetBinding: Binding<PairSettings.Preset?> {
+        Binding(get: { state.preset }, set: { state.preset = $0 })
+    }
+
+    private func speakerButton(_ speaker: StatusMenuSpeaker, _ position: SpeakerPosition) -> some View {
+        Button { actions.identifySpeaker(position) } label: {
+            StatusMenuSpeakerRow(speaker: speaker)
+        }
+        .disabled(!speaker.isConnected)
+        .help("Play identification tone")
     }
 }
 

@@ -43,6 +43,10 @@ struct SecondaryUIRenderTests {
     @Test func rendersStatusMenu() throws {
         try render(StatusMenu(state: .constant(.sample)), named: "statusmenu")
         try render(StatusMenu(state: .constant(.sampleLeftOff)), named: "statusmenu-leftoff")
+        var muted = StatusMenuState.sample
+        muted.isMuted = true
+        muted.preset = nil
+        try render(StatusMenu(state: .constant(muted)), named: "statusmenu-muted")
     }
 
     /// Hosts the view in an offscreen window so AppKit-backed controls
