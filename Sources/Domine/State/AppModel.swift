@@ -182,7 +182,9 @@ final class AppModel {
             self?.outputRestorer.setExclusionsActive(!processes.isEmpty)
             self?.syncVirtualOutput()
             await engine.setExcludedProcesses(processes)
+            self?.applyAppVolumesToEngine()
         }
+        appAudio.onRefresh = { [weak self] in self?.applyAppVolumesToEngine() }
     }
 
     func start() {

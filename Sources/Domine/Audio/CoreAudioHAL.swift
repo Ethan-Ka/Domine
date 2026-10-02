@@ -264,6 +264,24 @@ final class CoreAudioHAL: AudioHAL {
         }
     }
 
+    func createProcessTap(including processes: [AudioObjectID]) throws(HALError) -> ProcessTap {
+        let description = CATapDescription(stereoMixdownOfProcesses: processes)
+        description.name = "Domine app"
+        description.muteBehavior = .muted
+        description.isPrivate = true
+        var tap = AudioObjectID(kAudioObjectUnknown)
+        try HALError.check(AudioHardwareCreateProcessTap(description, &tap), "AudioHardwareCreateProcessTap")
+        do {
+            return ProcessTap(id: tap, uid: try readString(tap, kAudioTapPropertyUID))
+        } catch {
+            let status = AudioHardwareDestroyProcessTap(tap)
+            if status != noErr {
+                Self.log.error("\(HALError(status, "AudioHardwareDestroyProcessTap").description)")
+            }
+            throw error
+        }
+    }
+
     func destroyProcessTap(_ tap: AudioObjectID) throws(HALError) {
         try HALError.check(AudioHardwareDestroyProcessTap(tap), "AudioHardwareDestroyProcessTap")
     }

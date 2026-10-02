@@ -22,8 +22,25 @@ extension AppModel {
         applyAppVolumesToEngine()
     }
 
-    /// Seam for the kernel mixer: pushes `appVolumes` to the engine. Does nothing yet.
-    func applyAppVolumesToEngine() {}
+    /// Gives each app with a saved volume below 100 percent (and not excluded)
+    /// its own tap, and pushes the volumes as gains.
+    func applyAppVolumesToEngine() {
+        let excluded = Set(engine.excludedProcesses)
+        let alwaysExcluded = Set(exclusionsSettings.items.filter { $0.mode == .always }.map(\.bundleID))
+        let reduced = appVolumes.filter { $0.value < 1 && !alwaysExcluded.contains($0.key) }
+        var requests: [AppTapRequest] = []
+        if !reduced.isEmpty, let processes = try? hal.processObjects() {
+            for (bundleID, volume) in reduced {
+                let own = processes.filter { process in
+                    guard !excluded.contains(process),
+                          let id = try? hal.processBundleID(of: process) else { return false }
+                    return id == bundleID || id.hasPrefix(bundleID + ".")
+                }
+                if !own.isEmpty { requests.append(AppTapRequest(key: bundleID, processes: own, gain: volume)) }
+            }
+        }
+        engine.setAppTaps(requests)
+    }
 
     /// On: exclude with mode Always. Off: remove the exclusion.
     func setAppExcluded(bundleID: String, _ excluded: Bool) {
