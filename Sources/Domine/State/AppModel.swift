@@ -113,10 +113,12 @@ final class AppModel {
     @ObservationIgnored var isSettingsVisible = false
     /// How often trust is re-read while a "not granted" note shows.
     @ObservationIgnored var trustPollInterval: Duration = .seconds(2)
+    @ObservationIgnored private let hal: any AudioHAL
 
     init(hal: any AudioHAL = CoreAudioHAL(), defaults: UserDefaults = .standard,
          services: SystemServices = .live) {
         let store = SettingsStore(defaults: defaults)
+        self.hal = hal
         let catalog = DeviceCatalog(hal: hal)
         self.catalog = catalog
         volumeLink = SpeakerVolumeLink(hal: hal)
@@ -138,6 +140,7 @@ final class AppModel {
     }
 
     func start() {
+        StaleAggregateCleaner.clean(hal: hal)
         catalog.start()
         if !engine.state.isActive {
             outputRestorer.recoverAfterCrash(enabled: store.restorePreviousOutput)
