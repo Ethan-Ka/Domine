@@ -20,6 +20,13 @@ struct TuningState: Equatable, Sendable {
     var isDemoPlaying = false
     /// The demo's current part, e.g. "Orbit", shown under the button.
     var demoSectionTitle: String?
+    /// Routing with at least two speakers present.
+    var canPlayDemo = true
+    /// Surround mode: one row per speaker, replacing the pair's delay offset
+    /// and balance. Nil in Stereo.
+    var surroundRows: [SurroundTuningRow]?
+
+    var isDemoButtonEnabled: Bool { isDemoPlaying || canPlayDemo }
 
     var demoButtonTitle: String { isDemoPlaying ? "Stop Demo" : "Play Demo" }
 

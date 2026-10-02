@@ -129,4 +129,29 @@ enum SampleStates {
         state.demoSectionTitle = "Ping-pong"
         return state
     }()
+
+    static let tuningSurround: TuningState = {
+        var state = SampleStates.tuning
+        state.surroundRows = [
+            SurroundTuningRow(uid: "60-FD-A6-19-4F-2A:output", title: "Front Left", suffix: "4F2A", trim: 1, offsetMs: 0),
+            SurroundTuningRow(uid: "60-FD-A6-19-9C-11:output", title: "Front Right", suffix: "9C11", trim: 0.9, offsetMs: 12),
+            SurroundTuningRow(uid: "60-FD-A6-19-5D-80:output", title: "Center", suffix: "5D80", trim: 0.8, offsetMs: 4),
+            SurroundTuningRow(uid: "60-FD-A6-19-22-B7:output", title: "Rear Left", suffix: "22B7", trim: 1, offsetMs: 30),
+            SurroundTuningRow(uid: "60-FD-A6-19-E0-3D:output", title: "Rear Right", suffix: "E03D", trim: 1, offsetMs: 28),
+        ]
+        return state
+    }()
+
+    static let soundSurround = SoundState(
+        effects: PairSettings.Preset.night.settings,
+        surround: SurroundSound(
+            speakers: [
+                .init(uid: "60-FD-A6-19-4F-2A:output", title: "Front Left", suffix: "4F2A",
+                      effects: PairSettings.Preset.night.settings.left),
+                .init(uid: "60-FD-A6-19-9C-11:output", title: "Front Right", suffix: "9C11",
+                      effects: PairSettings.Preset.bassBoost.settings.left),
+                .init(uid: "60-FD-A6-19-5D-80:output", title: "Center", suffix: "5D80",
+                      effects: PairSettings.SideEffects()),
+            ],
+            isLinked: false))
 }

@@ -139,4 +139,42 @@ struct SurroundUITests {
         #expect(SurroundAssignTarget.replace(uid: "x").replacedUID == "x")
         #expect(SurroundAssignTarget.add.replacedUID == nil)
     }
+
+    @Test func demoButtonsFollowCanPlay() {
+        #expect(!DemoState(isPlaying: false, canPlay: false).isButtonEnabled)
+        #expect(DemoState(isPlaying: true, canPlay: false).isButtonEnabled)
+        var tuning = SampleStates.tuning
+        tuning.canPlayDemo = false
+        #expect(!tuning.isDemoButtonEnabled)
+        tuning.isDemoPlaying = true
+        #expect(tuning.isDemoButtonEnabled)
+    }
+
+    @Test func surroundTuningReadouts() throws {
+        let rows = try #require(SampleStates.tuningSurround.surroundRows)
+        #expect(rows.count == 5)
+        #expect(rows[0].offsetReadout == "No delay")
+        #expect(rows[1].offsetReadout == "+12 ms")
+        #expect(rows[1].trimReadout == "90%")
+        #expect(rows[1].label == "Front Right 9C11")
+        #expect(SampleStates.tuning.surroundRows == nil)
+    }
+
+    @Test func surroundSoundEditsThePickedSpeaker() throws {
+        let sound = try #require(SampleStates.soundSurround.surround)
+        #expect(sound.editedUID(selection: nil) == sound.speakers[0].uid)
+        #expect(sound.editedUID(selection: sound.speakers[1].uid) == sound.speakers[1].uid)
+        #expect(sound.editedUID(selection: "gone") == sound.speakers[0].uid)
+        var linked = sound
+        linked.isLinked = true
+        #expect(linked.editedUID(selection: sound.speakers[1].uid) == sound.speakers[0].uid)
+        #expect(sound.effects(for: sound.speakers[1].uid) == PairSettings.Preset.bassBoost.settings.left)
+    }
+
+    @Test func presetsNeedTheRightSpeakerCount() {
+        let count = SampleStates.surround.surroundCards.count
+        #expect(SurroundPreset.five.isEnabled(speakerCount: count))
+        #expect(!SurroundPreset.quad.isEnabled(speakerCount: count))
+        #expect(SurroundPreset.ring.isEnabled(speakerCount: count))
+    }
 }

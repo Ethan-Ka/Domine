@@ -122,6 +122,9 @@ struct StageView: View {
             .onTapGesture { actions.chooseSurroundSpeaker(info.uid) }
             .gesture(dragGesture(info: info, layout: layout))
             .contextMenu {
+                Button("Play Test Tone") { actions.playSurroundTestTone(info.uid) }
+                    .disabled(card.connection != .connected)
+                Divider()
                 Button("Choose Speaker…") { actions.chooseSurroundSpeaker(info.uid) }
                 Button("Remove Speaker") { actions.removeSurroundSpeaker(info.uid) }
             }

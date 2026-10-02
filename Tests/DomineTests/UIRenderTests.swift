@@ -69,6 +69,14 @@ struct UIRenderTests {
         try renderView(TuningSheet(state: SampleStates.tuningDemo), name: "tuning-demo")
     }
 
+    @Test func tuningSheetSurround() throws {
+        try renderView(TuningSheet(state: SampleStates.tuningSurround), name: "tuning-surround")
+    }
+
+    @Test func soundSheetSurround() throws {
+        try renderView(SoundSheet(state: SampleStates.soundSurround), name: "sound-surround")
+    }
+
     @Test func tuningSheet() throws {
         try renderView(TuningSheet(state: SampleStates.tuning), name: "tuning")
     }

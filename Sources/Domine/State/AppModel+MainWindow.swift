@@ -43,7 +43,8 @@ extension AppModel {
             demo: DemoState(
                 isPlaying: demoPlaying,
                 azimuth: Double(demoAzimuth),
-                sectionTitle: demoSectionTitle),
+                sectionTitle: demoSectionTitle,
+                canPlay: canPlayDemo),
             rooms: rooms,
             currentRoomID: currentRoomID)
     }
@@ -68,6 +69,8 @@ extension AppModel {
             moveSurroundSpeaker: { [weak self] uid, azimuth, distance in
                 self?.moveSurroundSpeaker(uid: uid, azimuth: Float(azimuth), distance: Float(distance))
             },
+            resetSurroundOrbit: { [weak self] in self?.resetSurroundOrbit() },
+            playSurroundTestTone: { [weak self] in self?.playTestTone(surroundUID: $0) },
             applySurroundPreset: { [weak self] in self?.applySurroundPreset($0) },
             setSurroundWidth: { [weak self] in self?.setSurroundWidth(Float($0)) },
             setSurroundLevel: { [weak self] in self?.setSurroundLevel(Float($0)) },
@@ -89,12 +92,53 @@ extension AppModel {
         var state = tuningState
         state.isDemoPlaying = demoPlaying
         state.demoSectionTitle = demoPlaying ? demoSectionTitle : nil
+        state.canPlayDemo = canPlayDemo
+        if routingMode == .surround, !surroundSpeakers.isEmpty {
+            let settings = surroundSettings
+            state.surroundRows = settings.speakers.map { (speaker: SurroundSpeaker) -> SurroundTuningRow in
+                SurroundTuningRow(
+                    uid: speaker.uid,
+                    title: SurroundCardInfo.title(forAzimuth: Double(speaker.azimuth)),
+                    suffix: catalog.device(uid: speaker.uid)?.uidSuffix ?? OutputDevice.suffix(forUID: speaker.uid),
+                    trim: Double(settings.trim(for: speaker.uid)),
+                    offsetMs: Double(settings.offsetMs(for: speaker.uid)))
+            }
+        }
         return state
     }
 
     var tuningSheetActions: TuningActions {
         var actions = tuningActions
         actions.toggleDemo = { [weak self] in self?.toggleDemo() }
+        actions.setSurroundTrim = { [weak self] uid, trim in self?.setSurroundTrim(uid: uid, Float(trim)) }
+        actions.setSurroundOffset = { [weak self] uid, ms in
+            self?.setSurroundOffset(uid: uid, ms: Float(ms.rounded()))
+        }
+        return actions
+    }
+
+    /// The Sound sheet with Surround's per-speaker effects filled in.
+    var soundSheetState: SoundState {
+        var state = soundState
+        if routingMode == .surround, !surroundSpeakers.isEmpty {
+            let settings = surroundSettings
+            state.surround = SurroundSound(
+                speakers: settings.speakers.map { (speaker: SurroundSpeaker) -> SurroundSound.Speaker in
+                    SurroundSound.Speaker(
+                        uid: speaker.uid,
+                        title: SurroundCardInfo.title(forAzimuth: Double(speaker.azimuth)),
+                        suffix: catalog.device(uid: speaker.uid)?.uidSuffix ?? OutputDevice.suffix(forUID: speaker.uid),
+                        effects: surroundEffects(uid: speaker.uid))
+                },
+                isLinked: settings.linkEffects)
+        }
+        return state
+    }
+
+    var soundSheetActions: SoundActions {
+        var actions = soundActions
+        actions.setSurroundEffects = { [weak self] uid, effects in self?.setSurroundEffects(uid: uid, effects) }
+        actions.setSurroundLinked = { [weak self] in self?.setSurroundEffectsLinked($0) }
         return actions
     }
 
@@ -102,7 +146,9 @@ extension AppModel {
 
     /// One card per Surround speaker, in the model's order.
     var surroundCards: [SpeakerCardState] {
-        surroundSpeakers.map { (speaker: SurroundSpeaker) -> SpeakerCardState in
+        let toneUID = surroundTestToneUID
+        let routing = engine.state.isRouting
+        return surroundSpeakers.map { (speaker: SurroundSpeaker) -> SpeakerCardState in
             let info = SurroundCardInfo(
                 uid: speaker.uid, azimuth: Double(speaker.azimuth), distance: Double(speaker.distance))
             guard let device = catalog.device(uid: speaker.uid) else {
@@ -113,14 +159,17 @@ extension AppModel {
             }
             return SpeakerCardState.surroundCard(
                 info, deviceName: device.name, uidSuffix: device.uidSuffix,
-                statusText: "Connected", connection: .connected)
+                statusText: toneUID == speaker.uid ? "Playing test tone" : "Connected",
+                connection: .connected,
+                level: routing ? Double(surroundLevel(uid: speaker.uid)) : 0)
         }
     }
 
     /// The Choose Speaker sheet in Surround mode.
     func surroundAssignSheetState(for target: SurroundAssignTarget, selection: String?) -> AssignSheetState {
         let speakers = surroundSpeakers
-        let rows = catalog.outputs.map { (device: OutputDevice) -> AssignRow in
+        // Outputs with one channel cannot join a surround set (SPEC 13.2).
+        let rows = surroundEligibleOutputs.map { (device: OutputDevice) -> AssignRow in
             var details = [device.transportName]
             if device.uid != target.replacedUID, let placed = speakers.first(where: { $0.uid == device.uid }) {
                 details.append("Placed at \(SurroundCardInfo.angleTag(Double(placed.azimuth)))")
@@ -156,8 +205,8 @@ extension AppModel {
                 moveSurroundSpeaker(uid: uid, azimuth: current.azimuth, distance: current.distance)
                 moveSurroundSpeaker(uid: old, azimuth: other.azimuth, distance: other.distance)
             } else {
-                removeSurroundSpeaker(uid: old)
-                addSurroundSpeaker(uid: uid)
+                // One set change keeps the index and rebuilds routing once.
+                changeSurroundSet(speakers.map { $0.uid == old ? uid : $0.uid })
                 moveSurroundSpeaker(uid: uid, azimuth: current.azimuth, distance: current.distance)
             }
         }

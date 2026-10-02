@@ -29,13 +29,22 @@ struct MainBottomBar: View {
                         .disabled(!state.canAddSurroundSpeaker)
                 }
                 GridRow {
-                    compactSlider("Orbit", value: controls.orbitRate, range: SurroundControls.orbitRange,
-                                  text: controls.orbitText, set: actions.setOrbitRate)
+                    HStack(spacing: 4) {
+                        compactSlider("Orbit", value: controls.orbitRate, range: SurroundControls.orbitRange,
+                                      text: controls.orbitText, set: actions.setOrbitRate)
+                        Button(action: actions.resetSurroundOrbit) {
+                            Image(systemName: "arrow.counterclockwise")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Turn the orbit back to the front")
+                        .accessibilityLabel("Reset orbit")
+                    }
                     compactSlider("Rotation", value: controls.rotation, range: SurroundControls.rotationRange,
                                   text: controls.rotationText, set: actions.setSurroundRotation)
                     Menu("Presets") {
                         ForEach(SurroundPreset.allCases, id: \.self) { preset in
                             Button(preset.title) { actions.applySurroundPreset(preset) }
+                                .disabled(!preset.isEnabled(speakerCount: state.surroundCards.count))
                         }
                     }
                     .fixedSize()
@@ -102,6 +111,7 @@ struct MainBottomBar: View {
             }
 
             Button(state.demo.buttonTitle, action: actions.toggleDemo)
+                .disabled(!state.demo.isButtonEnabled)
                 .help("Bass hits and a growl that move around the speakers")
 
             Button("Sound…", action: actions.openSound)

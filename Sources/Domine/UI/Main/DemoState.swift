@@ -6,6 +6,11 @@ struct DemoState: Equatable, Sendable {
     var azimuth: Double = 0
     /// e.g. "Roll call"; nil while idle.
     var sectionTitle: String?
+    /// Routing with at least two speakers present. "Stop Demo" stays
+    /// enabled while playing regardless.
+    var canPlay = true
+
+    var isButtonEnabled: Bool { isPlaying || canPlay }
 
     var buttonTitle: String { isPlaying ? "Stop Demo" : "Play Demo" }
 
