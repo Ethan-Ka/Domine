@@ -5,7 +5,7 @@
 
 /// Mono feed-forward compressor with a 6 dB soft knee, followed by a
 /// brickwall-ish limiter. Real-time safe: `process` does no allocation, locking or I/O.
-/// `enabled == 0` leaves samples bit-exact.
+/// `enabled == 0` leaves samples bit-exact once the 10 ms crossfade to dry has finished.
 typedef struct {
     int enabled;
     float thresholdDb;      // default -18
@@ -28,7 +28,7 @@ void domine_compressor_set_params(DomineCompressor *c, const DomineCompressorPar
 /// Processes mono samples in place.
 void domine_compressor_process(DomineCompressor *c, float *samples, uint32_t frames);
 
-/// Nonzero when the active parameters are disabled, so the caller may skip process.
+/// Nonzero when disabled and the fade to dry has finished, so the caller may skip process.
 int domine_compressor_is_idle(const DomineCompressor *c);
 
 #endif

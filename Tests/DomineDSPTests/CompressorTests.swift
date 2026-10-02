@@ -100,4 +100,46 @@ struct CompressorTests {
         }
         #expect(maxStep < 0.1, "max step \(maxStep)")
     }
+
+    @Test func disableFadesLinearlyToBitExactAndIdles() {
+        let on = Self.params(thr: -40, ratio: 100, makeup: 0)
+        let c = Self.make(on)
+        defer { domine_compressor_destroy(c) }
+        var warm = [Float](repeating: 0.5, count: 4800)
+        domine_compressor_process(c, &warm, 4800)
+        #expect(domine_compressor_is_idle(c) == 0)
+        let proc = warm[4799]
+        #expect(proc < 0.4)
+
+        var off = Self.params(enabled: false)
+        domine_compressor_set_params(c, &off)
+        #expect(domine_compressor_is_idle(c) == 0)
+        var x = [Float](repeating: 0.5, count: 960)
+        domine_compressor_process(c, &x, 960)
+        // Mix falls by 1/480 per sample: sample i is dry + (1 - (i+1)/480) * (processed - dry).
+        #expect(abs(x[0] - 0.5) > abs(x[239] - 0.5))
+        #expect(abs(x[239] - 0.5) > abs(x[400] - 0.5))
+        #expect(x[479].bitPattern == Float(0.5).bitPattern)
+        #expect(x[959].bitPattern == Float(0.5).bitPattern)
+        #expect(domine_compressor_is_idle(c) != 0)
+
+        var y = [Float](repeating: 0.25, count: 64)
+        domine_compressor_process(c, &y, 64)
+        #expect(y.allSatisfy { $0.bitPattern == Float(0.25).bitPattern })
+    }
+
+    @Test func enableFadesInFromDry() {
+        let c = Self.make(Self.params(enabled: false))
+        defer { domine_compressor_destroy(c) }
+        var x0 = [Float](repeating: 0.5, count: 64)
+        domine_compressor_process(c, &x0, 64) // primes at rest
+        var on = Self.params(thr: -40, ratio: 100)
+        domine_compressor_set_params(c, &on)
+        #expect(domine_compressor_is_idle(c) == 0)
+        var x = [Float](repeating: 0.5, count: 960)
+        domine_compressor_process(c, &x, 960)
+        #expect(abs(x[0] - 0.5) < 0.01)
+        #expect(x[959] < 0.4)
+        #expect(zip(x, x.dropFirst()).allSatisfy { $0 >= $1 })
+    }
 }

@@ -6,6 +6,7 @@
 
 #define KNEE_DB 6.0
 #define LIMITER_RELEASE_S 0.05
+#define FADE_S 0.01
 
 struct DomineCompressor {
     double sampleRate;
@@ -13,6 +14,8 @@ struct DomineCompressor {
     _Atomic int active; // index of the params copy the audio thread reads
     double gainDb;      // smoothed compressor gain (audio thread only)
     double limGain;     // linear limiter gain, <= 1 (audio thread only)
+    double mix;         // 0 = dry, 1 = processed; ramps over FADE_S (audio thread only)
+    int primed;         // set once process has run, so the first call snaps mix
 };
 
 static DomineCompressorParams default_params(void) {
@@ -61,7 +64,18 @@ void domine_compressor_process(DomineCompressor *c, float *samples, uint32_t fra
     if (!c || !samples) return;
     int idx = atomic_load_explicit(&c->active, memory_order_acquire);
     const DomineCompressorParams *p = &c->params[idx];
-    if (!p->enabled) return;
+    if (!c->primed) {
+        c->primed = 1;
+        c->mix = p->enabled ? 1.0 : 0.0;
+    }
+    if (!p->enabled && c->mix <= 0.0) return; // settled: bit-exact passthrough
+    if (p->enabled && c->mix <= 0.0) { // leaving rest: start from a clean state
+        c->gainDb = 0.0;
+        c->limGain = 1.0;
+    }
+    const double target_mix = p->enabled ? 1.0 : 0.0;
+    const double mixStep = 1.0 / (FADE_S * c->sampleRate);
+    double m = c->mix;
 
     const double thr = p->thresholdDb;
     const double ratio = p->ratio < 1.0f ? 1.0 : p->ratio;
@@ -91,8 +105,14 @@ void domine_compressor_process(DomineCompressor *c, float *samples, uint32_t fra
         y *= (float)lg;
         if (y > ceil) y = ceil;
         else if (y < -ceil) y = -ceil;
-        samples[i] = y;
+        if (m != target_mix) {
+            m += m < target_mix ? mixStep : -mixStep;
+            if (m > 1.0) m = 1.0;
+            if (m < 0.0) m = 0.0;
+        }
+        samples[i] = m >= 1.0 ? y : x + (float)m * (y - x);
     }
+    c->mix = m;
     c->gainDb = g;
     c->limGain = lg;
 }
@@ -100,5 +120,5 @@ void domine_compressor_process(DomineCompressor *c, float *samples, uint32_t fra
 int domine_compressor_is_idle(const DomineCompressor *c) {
     if (!c) return 1;
     int idx = atomic_load_explicit(&((DomineCompressor *)c)->active, memory_order_acquire);
-    return !c->params[idx].enabled;
+    return !c->params[idx].enabled && c->mix <= 0.0;
 }
