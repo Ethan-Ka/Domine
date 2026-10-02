@@ -58,6 +58,8 @@ struct DomineKernel {
     // EFFECTS BLOCK (SPEC 5a): per-position effect instances, index 0 = A,
     // 1 = B. Allocated in create, freed in destroy. Other modules add here.
     DomineEQ *eq[2];
+    DomineBass *bass[2];
+    DomineCompressor *comp[2];
 
     // Render thread state only.
     float *ringA;
@@ -246,7 +248,9 @@ DomineKernel *domine_kernel_create(double sampleRate, uint32_t maxFrames) {
     // EFFECTS BLOCK (SPEC 5a): create.
     for (int i = 0; i < 2; i++) {
         k->eq[i] = domine_eq_create(sampleRate);
-        if (k->eq[i] == NULL) {
+        k->bass[i] = domine_bass_create(sampleRate);
+        k->comp[i] = domine_compressor_create(sampleRate);
+        if (k->eq[i] == NULL || k->bass[i] == NULL || k->comp[i] == NULL) {
             domine_kernel_destroy(k);
             return NULL;
         }
@@ -300,7 +304,11 @@ DomineKernel *domine_kernel_create(double sampleRate, uint32_t maxFrames) {
 void domine_kernel_destroy(DomineKernel *k) {
     if (k == NULL) return;
     // EFFECTS BLOCK (SPEC 5a): destroy.
-    for (int i = 0; i < 2; i++) domine_eq_destroy(k->eq[i]);
+    for (int i = 0; i < 2; i++) {
+        domine_eq_destroy(k->eq[i]);
+        if (k->bass[i] != NULL) domine_bass_destroy(k->bass[i]);
+        domine_compressor_destroy(k->comp[i]);
+    }
     // END EFFECTS BLOCK
     free(k->ringA);
     free(k->ringB);
@@ -347,6 +355,16 @@ void domine_kernel_set_click_test(DomineKernel *k, int mode) {
 void domine_kernel_set_eq(DomineKernel *k, int position, const DomineEQParams *params) {
     if ((position != 0 && position != 1) || params == NULL) return;
     domine_eq_set_params(k->eq[position], params);
+}
+
+void domine_kernel_set_bass(DomineKernel *k, int position, const DomineBassParams *params) {
+    if (k == NULL || (position != 0 && position != 1) || params == NULL) return;
+    domine_bass_set_params(k->bass[position], params);
+}
+
+void domine_kernel_set_compressor(DomineKernel *k, int position, const DomineCompressorParams *params) {
+    if (k == NULL || (position != 0 && position != 1) || params == NULL) return;
+    domine_compressor_set_params(k->comp[position], params);
 }
 // END EFFECTS BLOCK
 
@@ -592,6 +610,10 @@ static RenderResult render(DomineKernel *k,
         // Order: EQ, bass enhancer, compressor/limiter. An idle stage is skipped.
         if (!domine_eq_is_idle(k->eq[0])) domine_eq_process(k->eq[0], &srcA, 1);
         if (!domine_eq_is_idle(k->eq[1])) domine_eq_process(k->eq[1], &srcB, 1);
+        if (!domine_bass_is_idle(k->bass[0])) domine_bass_process(k->bass[0], &srcA, 1);
+        if (!domine_bass_is_idle(k->bass[1])) domine_bass_process(k->bass[1], &srcB, 1);
+        if (!domine_compressor_is_idle(k->comp[0])) domine_compressor_process(k->comp[0], &srcA, 1);
+        if (!domine_compressor_is_idle(k->comp[1])) domine_compressor_process(k->comp[1], &srcB, 1);
         // END EFFECTS BLOCK
 
         // Click test: replaces the source before the delay line.

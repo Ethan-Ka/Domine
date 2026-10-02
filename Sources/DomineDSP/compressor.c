@@ -96,3 +96,9 @@ void domine_compressor_process(DomineCompressor *c, float *samples, uint32_t fra
     c->gainDb = g;
     c->limGain = lg;
 }
+
+int domine_compressor_is_idle(const DomineCompressor *c) {
+    if (!c) return 1;
+    int idx = atomic_load_explicit(&((DomineCompressor *)c)->active, memory_order_acquire);
+    return !c->params[idx].enabled;
+}

@@ -18,6 +18,8 @@
 #include <stdint.h>
 #include "DomineChime.h"
 #include "DomineEQ.h"
+#include "DomineBass.h"
+#include "DomineCompressor.h"
 #include <CoreAudio/CoreAudioTypes.h>
 #include <CoreAudio/AudioHardwareBase.h> // AudioObjectID only; no Core Audio calls
 
@@ -165,6 +167,10 @@ void domine_calibration_chirp(float *out, uint32_t frames, double sampleRate, in
 /// disabled and settled are skipped, so with all effects off the transparency
 /// guarantee below holds. Other values of position are ignored.
 void domine_kernel_set_eq(DomineKernel *k, int position, const DomineEQParams *params);
+/// Bass enhancer and compressor for one position (0 = A, 1 = B). They run after
+/// the EQ in that order; a disabled stage is skipped once settled.
+void domine_kernel_set_bass(DomineKernel *k, int position, const DomineBassParams *params);
+void domine_kernel_set_compressor(DomineKernel *k, int position, const DomineCompressorParams *params);
 
 /// Muted (nonzero) or unmuted (0). The output gain ramps linearly toward the
 /// target over 50 ms of samples (round(0.05 * sampleRate)). A new kernel
