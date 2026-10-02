@@ -47,6 +47,8 @@ struct DomineSurround {
     _Atomic uint32_t delaySamples[NSPK];
     _Atomic uint32_t peakBits[NSPK];
     _Atomic int muted;
+    _Atomic int toneSpeaker; // -1 off
+    _Atomic int clickOn;
     // Demo control and status.
     _Atomic uint32_t demoStartReq;
     _Atomic int demoWanted;
@@ -85,6 +87,13 @@ struct DomineSurround {
     int demoPlaying;      // demo audio wanted (not stopped, not finished)
     int demoSection;
     uint32_t demoPos;     // 0 = program only, fadeLength = demo only
+    // Test tone and click test, as in kernel.c.
+    uint32_t toneFadeLength;
+    int playingTone;      // speaker the tone envelope belongs to, -1 = none
+    uint32_t toneLevel;   // 0 = program only, toneFadeLength = tone only
+    double tonePhase, tonePhaseStep;
+    uint32_t clickLevel;  // 0 = program only, toneFadeLength = clicks only
+    uint32_t clickCounter, clickLength, clickPeriod;
 };
 
 typedef struct { float *data; uint32_t stride, frames; } OutCh;
@@ -277,6 +286,18 @@ DomineSurround *domine_surround_create(double sampleRate, uint32_t maxFrames) {
         s->fadePosition = s->fadeLength;
     }
     s->demoSection = DOMINE_DEMO_SECTION_IDLE;
+    {
+        const uint32_t toneFade = (uint32_t)lround(sampleRate * DOMINE_TONE_FADE_MS / 1000.0);
+        s->toneFadeLength = toneFade > 0 ? toneFade : 1;
+        s->tonePhaseStep = 1.0 / sampleRate;
+        s->playingTone = -1;
+        const uint32_t clickLength = (uint32_t)lround(sampleRate * DOMINE_CLICK_MS / 1000.0);
+        s->clickLength = clickLength > 0 ? clickLength : 1;
+        const uint32_t clickPeriod = (uint32_t)lround(sampleRate * DOMINE_CLICK_PERIOD_MS / 1000.0);
+        s->clickPeriod = clickPeriod > s->clickLength ? clickPeriod : s->clickLength + 1;
+    }
+    atomic_init(&s->toneSpeaker, -1);
+    atomic_init(&s->clickOn, 0);
     int ok = s->spatial != NULL;
     for (int i = 0; i < NSPK; i++) ok = ok && s->ring[i] && s->eq[i] && s->bass[i] && s->comp[i];
     if (!ok) { domine_surround_destroy(s); return NULL; }
@@ -377,6 +398,17 @@ void domine_surround_set_muted(DomineSurround *s, int muted) {
 void domine_surround_start_faded_out(DomineSurround *s) {
     if (s == NULL) return;
     s->fadePosition = 0;
+}
+
+void domine_surround_set_test_tone(DomineSurround *s, int speaker) {
+    if (s == NULL) return;
+    const int v = speaker >= 0 && speaker < NSPK ? speaker : -1;
+    atomic_store_explicit(&s->toneSpeaker, v, memory_order_relaxed);
+}
+
+void domine_surround_set_click_test(DomineSurround *s, int on) {
+    if (s == NULL) return;
+    atomic_store_explicit(&s->clickOn, on != 0, memory_order_relaxed);
 }
 
 void domine_surround_set_demo(DomineSurround *s, int on) {
@@ -554,6 +586,9 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
     for (int v = 0; v < DOMINE_DEMO_VOICES; v++) { voiceAz[v] = NAN; voiceOmni[v] = NAN; }
 
     const uint32_t fadeTarget = atomic_load_explicit(&s->muted, memory_order_relaxed) ? 0 : s->fadeLength;
+    const int toneReq = atomic_load_explicit(&s->toneSpeaker, memory_order_relaxed);
+    const int clickOn = atomic_load_explicit(&s->clickOn, memory_order_relaxed);
+    const uint32_t tfull = s->toneFadeLength;
     float peak[NSPK] = { 0 };
     for (uint32_t f = 0; f < frames; f++) {
         if (s->fadePosition < fadeTarget) s->fadePosition++;
@@ -596,6 +631,49 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
         const float progAmt = s->demoPos == 0 ? 1.0f : (float)(s->fadeLength - s->demoPos) / (float)s->fadeLength;
         const int last = f + 1 == frames;
 
+        // Click test (kernel.c click_mix): replaces the source before gain
+        // and delay on every speaker, on the same sample.
+        const int clickActive = clickOn || s->clickLevel != 0;
+        float click = 0.0f, clickKeep = 1.0f;
+        if (clickActive) {
+            if (clickOn && s->clickLevel == tfull) {
+                const uint32_t c = s->clickCounter;
+                if (c < s->clickLength) {
+                    const double window = 0.5 - 0.5 * cos(2.0 * M_PI * (double)c / (double)s->clickLength);
+                    click = (float)(DOMINE_CLICK_AMPLITUDE * window
+                                    * sin(2.0 * M_PI * DOMINE_CLICK_HZ * (double)c / s->sampleRate));
+                }
+                s->clickCounter = c + 1 < s->clickPeriod ? c + 1 : 0;
+            } else {
+                s->clickCounter = 0;
+            }
+            clickKeep = s->clickLevel == tfull ? 0.0f : 1.0f - (float)s->clickLevel / (float)tfull;
+            const uint32_t target = clickOn ? tfull : 0;
+            if (s->clickLevel < target) s->clickLevel++;
+            else if (s->clickLevel > target) s->clickLevel--;
+        }
+
+        // Test tone (kernel.c): a new request takes over once the current
+        // tone has faded out. Replaces the output after gain and delay.
+        if (s->toneLevel == 0 && s->playingTone != toneReq) {
+            s->playingTone = toneReq;
+            s->tonePhase = 0.0;
+        }
+        const int toneActive = s->playingTone >= 0;
+        float tone = 0.0f, toneE = 0.0f, toneKeep = 1.0f;
+        int toneFull = 0;
+        if (toneActive) {
+            tone = (float)domine_chime_sample(s->tonePhase);
+            s->tonePhase += s->tonePhaseStep;
+            if (s->tonePhase >= DOMINE_CHIME_PERIOD_S) s->tonePhase -= DOMINE_CHIME_PERIOD_S;
+            const uint32_t target = toneReq == s->playingTone ? tfull : 0;
+            toneFull = s->toneLevel == tfull && target == tfull;
+            toneE = (float)s->toneLevel / (float)tfull;
+            toneKeep = 1.0f - toneE;
+            if (s->toneLevel < target) s->toneLevel++;
+            else if (s->toneLevel > target) s->toneLevel--;
+        }
+
         for (uint32_t k = 0; k < n; k++) {
             float x = 0.0f;
             for (int j = 0; j < loopSrc; j++) {
@@ -609,6 +687,7 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
             if (!domine_eq_is_idle(s->eq[k])) domine_eq_process(s->eq[k], &x, 1);
             if (!domine_bass_is_idle(s->bass[k])) domine_bass_process(s->bass[k], &x, 1);
             if (!domine_compressor_is_idle(s->comp[k])) domine_compressor_process(s->comp[k], &x, 1);
+            if (clickActive) x = clickKeep == 0.0f ? click : x * clickKeep + click;
 
             GainState *g = &s->gain[k];
             if (g->i < g->len) {
@@ -620,6 +699,11 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
 
             s->ring[k][s->ringPos & s->ringMask] = x;
             float o = delay[k] > 0 ? s->ring[k][(s->ringPos - delay[k]) & s->ringMask] : x;
+            if (toneActive) {
+                const int mine = (int)k == s->playingTone;
+                if (toneFull) o = mine ? tone : 0.0f;
+                else o = mine ? tone * toneE + o * toneKeep : o * toneKeep;
+            }
             if (fade != 1.0f) o *= fade;
             if (present[k]) {
                 const float a = fabsf(o);

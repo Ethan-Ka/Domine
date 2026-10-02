@@ -43,7 +43,7 @@ static int count_section(const Hits *h, int sec, int *first) {
     return c;
 }
 
-static void test_section_boundaries(void) {
+static void test_section_boundaries(double sr) {
     static const struct { double s; int sec; } b[] = {
         { 8.0, DOMINE_DEMO_SECTION_PING_PONG }, { 14.0, DOMINE_DEMO_SECTION_ORBIT },
         { 26.0, DOMINE_DEMO_SECTION_SWELL }, { 30.0, DOMINE_DEMO_SECTION_DROP },
@@ -51,19 +51,19 @@ static void test_section_boundaries(void) {
     };
     DomineDemo d;
     float az[2] = { -90.0f, 90.0f };
-    domine_demo_reset(&d, SR, 2, az);
+    domine_demo_reset(&d, sr, 2, az);
     CHECK(d.section == DOMINE_DEMO_SECTION_ROLL_CALL);
     CHECK(domine_demo_seconds(&d) == 0.0);
     DomineDemoVoice v[DOMINE_DEMO_VOICES];
     int prev = DOMINE_DEMO_SECTION_ROLL_CALL, bi = 0;
-    for (uint64_t f = 0; f < at(32.0) + 100; f++) {
+    for (uint64_t f = 0; f < (uint64_t)llround(32.0 * sr) + 100; f++) {
         int sec = domine_demo_tick(&d, v);
         if (f == 0) CHECK(sec == DOMINE_DEMO_SECTION_ROLL_CALL);
         if (sec != prev) {
             CHECK(bi < 5);
             if (bi < 5) {
                 CHECK(sec == b[bi].sec);
-                CHECK(f == at(b[bi].s));
+                CHECK(f == (uint64_t)llround(b[bi].s * sr));
             }
             bi++;
             prev = sec;
@@ -105,6 +105,15 @@ static void test_roll_calls(void) {
         e16[i] = a > 180.0f ? a - 360.0f : a;
     }
     test_roll_call(16, s16, e16);
+    // 8 speakers get two rounds, 9 get one.
+    float s8[8], e8[8], s9[9], e9[9];
+    for (int i = 0; i < 8; i++) { s8[i] = -135.0f + 45.0f * (float)i; }
+    for (int i = 0; i < 8; i++) { float a = -90.0f + 45.0f * (float)i; e8[i] = a > 180.0f ? a - 360.0f : a; }
+    test_roll_call(8, s8, e8);
+    for (int i = 0; i < 9; i++) { s9[i] = 40.0f * (float)i - 160.0f; }  // -160 ... 160
+    static const float e9c[9] = { -80.0f, -40.0f, 0.0f, 40.0f, 80.0f, 120.0f, 160.0f, -160.0f, -120.0f };
+    for (int i = 0; i < 9; i++) e9[i] = e9c[i];
+    test_roll_call(9, s9, e9);
     // Count 0 is one speaker at 0: two hits.
     static Hits h;
     DomineDemo d;
@@ -284,7 +293,8 @@ static void test_odd_inputs(void) {
 }
 
 int main(void) {
-    test_section_boundaries();
+    test_section_boundaries(48000.0);
+    test_section_boundaries(44100.0);
     test_roll_calls();
     test_ping_pong();
     test_orbit();

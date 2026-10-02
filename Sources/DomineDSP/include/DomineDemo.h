@@ -15,22 +15,29 @@
 //         N > 8, hits evenly spaced (8 / hits seconds). Each kick sits
 //         exactly on its speaker's azimuth.
 //   8-14  Ping-pong: kicks alternate -90 and +90, first one on the left. The
-//         gap between hits shrinks linearly from 0.5 s to 0.15 s.
-//   14-26 Orbit: a growling bass (saw plus sub sine, 55 Hz, wobbling low-pass
-//         300-900 Hz at 4 Hz) circles clockwise from 0 degrees. Speed rises
+//         gap between hits shrinks linearly from 0.5 s to 0.15 s (gap set by
+//         the time of the hit before it). No hit starts within 220 ms of 14 s,
+//         so the last tail ends before the orbit begins.
+//   14-26 Orbit: a growling bass (polyBLEP saw plus a sine at the same 55 Hz,
+//         through a resonant low-pass (Q 2.2) wobbling 300-900 Hz at 4 Hz,
+//         then tanh saturation) circles clockwise from 0 degrees. Speed rises
 //         linearly from 0.2 to 0.8 turns per second. A kick every 0.5 s on
-//         the bass's current azimuth.
-//   26-29.5 Swell: the bass keeps orbiting; omni rises 0 to 1, pitch glides
-//         55 to 82.5 Hz, the filter opens to 2 kHz, level rises.
-//   29.5-30 Break: silence (bass fades out over 30 ms).
-//   30-32 Drop: one long kick (1.5 s decay) on every speaker (omni 1), then
-//         the demo ends; status reports finished.
+//         the bass's current azimuth, starting at 14 s.
+//   26-29.5 Swell: the bass keeps orbiting at 0.8 turns per second; omni
+//         rises 0 to 1, pitch glides 55 to 82.5 Hz (exponential), the filter
+//         opens to 2 kHz, level rises from 0.42 to 0.75. No kicks.
+//   29.5-30 Break: silence (bass fades out over 30 ms). Section stays SWELL.
+//   30-32 Drop: one long kick on every speaker (omni 1): amplitude
+//         exp(-t / 450 ms) with a 300 ms cosine fade to 0 at 1.5 s. Then the
+//         demo ends; status reports finished.
 //
 // Sounds: kick = sine with pitch falling 150 to 45 Hz (tau 30 ms), amplitude
 // exp(-t / 90 ms) with a 1 ms attack and a 20 ms cosine fade to 0 at 220 ms,
 // plus a 1.8 kHz click (tau 4 ms, 0.25) so its position is easy to place.
-// Kicks alternate between two voices so a tail is never cut. Peak output of
-// any one voice stays within 0.8; the sum of all voices within 1.0.
+// Kicks alternate between two voices (0 and 1) so a tail is never cut; voice 2
+// is the bass. Kick peaks are about 0.77 (orbit kicks about 0.53, so a kick
+// plus the bass stays under 1). Peak output of any one voice stays within
+// 0.8; the sum of all voices within 1.0.
 //
 // Deterministic: same speaker set and sample rate give the same samples.
 // Real-time safe in tick (no allocation, locks, logging, I/O). Not thread
@@ -81,7 +88,6 @@ typedef struct {
     double bassPhase, subPhase, orbitPhase, lfoPhase;
     float lp1, lp2;
     float bassAz;
-    // Added for demo.c.
     uint32_t rollCallHits;
     float kickGain[2];
     float kickLen[2];

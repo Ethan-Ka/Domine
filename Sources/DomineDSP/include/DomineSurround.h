@@ -13,9 +13,21 @@
 //   source 4..: demo voices (DomineDemo.h) while the demo plays
 //
 // Ambience comes from the spatial upmixer (DomineSpatial.h). Sources 2 and 3
-// are only used with 3 or more speakers, so 2 speakers at -width and +width
-// play L and R bit for bit, and 1 speaker plays (L + R) / 2 bit for bit.
+// are only used with 3 or more PRESENT speakers (absent ones, with a
+// DOMINE_NO_DEVICE offset, do not count), so 2 speakers at -width and +width
+// play L and R bit for bit, and 1 speaker plays (L + R) / 2 bit for bit
+// (computed as 0.5 * L + 0.5 * R, which equals 0.5 * (L + R) exactly).
 // Every source azimuth is offset by rotation (static) plus the orbit phase.
+// Demo voices are not rotated, so roll-call kicks sit on the speakers.
+//
+// Headroom: the pan gains G[source][speaker] of the program sources (0 to 3)
+// are VBAP gains (each source has unit power). Each speaker's program column
+// is then scaled by 1 / max(1, sum over program sources of |G|), so a speaker
+// never exceeds full scale for program inputs within +-1 (before effects).
+// The surround level scales the ambience signal, not G, so it does not enter
+// the sum. The matrix is recomputed at the start of every process call (orbit
+// phase at the end of the call) and ramps linearly from the previous one
+// across the call.
 //
 // Azimuth convention: degrees, 0 is straight ahead of the listener, positive
 // is clockwise seen from above (to the right), range (-180, 180]. Any finite
@@ -92,6 +104,22 @@ void domine_surround_set_compressor(DomineSurround *s, uint32_t speaker, const D
 /// Mute with the 50 ms fade (DOMINE_FADE_MS), same contract as the quad kernel.
 void domine_surround_set_muted(DomineSurround *s, int muted);
 void domine_surround_start_faded_out(DomineSurround *s);
+
+/// Test tone: speaker index plays the shared chime (DomineChime.h) in place of
+/// program audio and the other speakers are silent; -1 (or any value out of
+/// range) is off. Same contract as domine_kernel_set_test_tone: 40 ms
+/// (DOMINE_TONE_FADE_MS) crossfade against program audio, a new request takes
+/// over once the current tone has faded out, the tone ignores pan, trim gain
+/// and delay, and follows the mute fade. Default -1.
+void domine_surround_set_test_tone(DomineSurround *s, int speaker);
+/// Click test (nonzero on): the stereo kernel's mode 1 click (Hann-windowed
+/// 2 kHz, 2 ms, 0.5 peak, every 1000 ms; DOMINE_CLICK_*) fed to every speaker
+/// on the same sample in place of program audio, after the effects and
+/// before the trim gain and delay line, so each speaker's gain and delay
+/// apply to it exactly as to program audio (that is what lines the speakers
+/// up by ear). Crossfades with program audio over 40 ms like the stereo
+/// kernel. Default off.
+void domine_surround_set_click_test(DomineSurround *s, int on);
 
 /// Demo (DomineDemo.h). on nonzero starts it from 0 s (restarts if playing);
 /// 0 stops it. Program audio crossfades out over 50 ms while the demo plays
