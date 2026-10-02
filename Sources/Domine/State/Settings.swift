@@ -87,7 +87,7 @@ final class SettingsStore {
 
     /// SPEC section 6a. Off by default.
     var startWhenBothConnect: Bool {
-        get { bool(.startWhenBothConnect, default: false) }
+        get { bool(.startWhenBothConnect, default: true) }
         set { defaults.set(newValue, forKey: Key.startWhenBothConnect.name) }
     }
 

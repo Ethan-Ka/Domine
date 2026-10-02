@@ -136,7 +136,7 @@ final class SettingsTests {
         #expect(store.volumeKeysEnabled == false)
         #expect(store.restorePreviousOutput == true)
         #expect(store.closeBehavior == .keepPlaying)
-        #expect(store.startWhenBothConnect == false)
+        #expect(store.startWhenBothConnect == true)
         #expect(store.previousOutputUID == nil)
         #expect(store.excludedAppsPlayThroughUID == nil)
         #expect(store.exclusions == [])

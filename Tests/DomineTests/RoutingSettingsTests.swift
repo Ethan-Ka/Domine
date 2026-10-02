@@ -71,7 +71,8 @@ final class RoutingSettingsTests {
         #expect(model.engine.state == .running)
     }
 
-    @Test func offByDefault() async {
+    @Test func offWhenTurnedOff() async {
+        model.generalSettings.startWhenBothConnect = false
         model.setSpeakers(left: Self.gripA.uid, right: Self.gripB.uid)
         hal.add(Self.speakers)
         hal.add(Self.gripA)
