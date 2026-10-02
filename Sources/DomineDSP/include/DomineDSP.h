@@ -47,6 +47,17 @@ typedef struct DomineKernel DomineKernel;
 #define DOMINE_CLICK_MS 2.0
 #define DOMINE_CLICK_PERIOD_MS 1000.0
 
+/// Calibration chirps (click test mode 2): every DOMINE_CLICK_PERIOD_MS,
+/// position A plays a rising exponential sweep and position B a falling one,
+/// starting on the same sample, after the mode's fade-in. Tukey envelope with a
+/// soft exponential tail, through the gains, bypassing the delay line.
+#define DOMINE_CHIRP_MS 120.0
+#define DOMINE_CHIRP_F0_HZ 300.0
+#define DOMINE_CHIRP_F1_HZ 3000.0
+#define DOMINE_CHIRP_AMPLITUDE 0.3
+#define DOMINE_CHIRP_TAPER 0.25      // fraction of the length in the Tukey tapers
+#define DOMINE_CHIRP_TAIL_MS 20.0    // exponential tail at the end
+#define DOMINE_CHIRP_TAIL_DECAY 3.0  // e-folds over the tail
 /// Length of the mute and unmute fade.
 #define DOMINE_FADE_MS 50.0
 
@@ -112,7 +123,7 @@ void domine_kernel_set_mode(DomineKernel *k, int monoPerSpeaker, int swapSides, 
 /// request takes over (program alone, or the new position from phase 0).
 void domine_kernel_set_test_tone(DomineKernel *k, int side);
 
-/// Click test mode: 0 off, 1 clicks. Other values are treated as 0 (reserved
+/// Click test mode: 0 off, 1 clicks, 2 calibration chirps. Other values are treated as 0 (reserved
 /// for later modes). Used to line the two speakers up by ear. While mode 1 is
 /// on, the same click is fed to both positions in place of program
 /// audio, before the delay line, so each position's delay and trim gain apply
@@ -134,6 +145,11 @@ void domine_kernel_set_test_tone(DomineKernel *k, int side);
 /// test off stops the generator at once (n resets to 0) and fades program
 /// audio back in. The test tone, when on, still overrides the delayed output.
 void domine_kernel_set_click_test(DomineKernel *k, int mode);
+
+/// Writes exactly the samples the kernel emits (before gain) for one
+/// calibration chirp: `frames` samples from the chirp start, zero past its end.
+/// Real-time safe.
+void domine_calibration_chirp(float *out, uint32_t frames, double sampleRate, int rising);
 
 /// Muted (nonzero) or unmuted (0). The output gain ramps linearly toward the
 /// target over 50 ms of samples (round(0.05 * sampleRate)). A new kernel

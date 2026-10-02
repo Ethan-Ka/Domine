@@ -2,5 +2,6 @@ module DomineDSP {
     header "include/DomineDSP.h"
     header "include/DomineProbe.h"
     header "include/DomineTone.h"
+    header "include/DomineRecorder.h"
     export *
 }

@@ -89,6 +89,9 @@ struct DomineKernel {
     uint32_t clickCounter; // samples since the current click started
     uint32_t clickLength;  // samples in one click
     uint32_t clickPeriod;  // samples from one click to the next
+    uint32_t chirpLevel;   // calibration chirp crossfade, 0..toneFadeLength
+    uint32_t chirpCounter; // samples since the current chirp started
+    uint32_t chirpLength;  // samples in one chirp
 };
 
 // A resolved output channel: base pointer, stride in floats, usable frames.
@@ -252,6 +255,9 @@ DomineKernel *domine_kernel_create(double sampleRate, uint32_t maxFrames) {
     atomic_init(&k->monoFallback, 0);
     atomic_init(&k->toneSide, 0);
     atomic_init(&k->muted, 0);
+    k->chirpLength = (uint32_t)lround(sampleRate * DOMINE_CHIRP_MS / 1000.0);
+    if (k->chirpLength < 2) k->chirpLength = 2;
+    if (k->clickPeriod <= k->chirpLength) k->clickPeriod = k->chirpLength + 1;
     atomic_init(&k->clickTest, 0);
     atomic_init(&k->layoutInFirstBuffer, 0);
     atomic_init(&k->layoutOutA, 0);
@@ -306,7 +312,7 @@ void domine_kernel_set_test_tone(DomineKernel *k, int side) {
 
 void domine_kernel_set_click_test(DomineKernel *k, int mode) {
     if (k == NULL) return;
-    atomic_store_explicit(&k->clickTest, mode == 1 ? 1 : 0, memory_order_relaxed);
+    atomic_store_explicit(&k->clickTest, (mode == 1 || mode == 2) ? mode : 0, memory_order_relaxed);
 }
 
 void domine_kernel_set_muted(DomineKernel *k, int muted) {
@@ -334,6 +340,36 @@ void domine_kernel_set_layout(DomineKernel *k,
     atomic_store_explicit(&k->layoutInFirstBuffer, inFirstBuffer, memory_order_relaxed);
     atomic_store_explicit(&k->layoutOutA, outAChannelOffset, memory_order_relaxed);
     atomic_store_explicit(&k->layoutOutB, outBChannelOffset, memory_order_relaxed);
+}
+
+// One calibration chirp sample, n samples after its start (0 outside the chirp).
+// Exponential sweep, Tukey envelope (raised-cosine taper on DOMINE_CHIRP_TAPER of
+// the length, split between both ends), and an exponential tail over the last
+// DOMINE_CHIRP_TAIL_MS.
+static double chirp_sample(uint32_t n, uint32_t length, double sampleRate, int rising) {
+    if (n >= length) return 0.0;
+    const double duration = (double)length / sampleRate;
+    const double f0 = rising ? DOMINE_CHIRP_F0_HZ : DOMINE_CHIRP_F1_HZ;
+    const double f1 = rising ? DOMINE_CHIRP_F1_HZ : DOMINE_CHIRP_F0_HZ;
+    const double ratio = f1 / f0;
+    const double t = (double)n / sampleRate;
+    const double phase = 2.0 * M_PI * f0 * duration / log(ratio) * (pow(ratio, t / duration) - 1.0);
+    const double x = (double)n / (double)length;
+    const double half = DOMINE_CHIRP_TAPER / 2.0;
+    double envelope = 1.0;
+    if (x < half) envelope = 0.5 - 0.5 * cos(M_PI * x / half);
+    else if (x > 1.0 - half) envelope = 0.5 - 0.5 * cos(M_PI * (1.0 - x) / half);
+    const double tail = lround(sampleRate * DOMINE_CHIRP_TAIL_MS / 1000.0);
+    const double intoTail = (double)n - ((double)length - tail);
+    if (tail > 0.0 && intoTail > 0.0) envelope *= exp(-DOMINE_CHIRP_TAIL_DECAY * intoTail / tail);
+    return DOMINE_CHIRP_AMPLITUDE * envelope * sin(phase);
+}
+
+void domine_calibration_chirp(float *out, uint32_t frames, double sampleRate, int rising) {
+    if (out == NULL || sampleRate <= 0.0) return;
+    uint32_t length = (uint32_t)lround(sampleRate * DOMINE_CHIRP_MS / 1000.0);
+    if (length < 2) length = 2;
+    for (uint32_t n = 0; n < frames; n++) out[n] = (float)chirp_sample(n, length, sampleRate, rising);
 }
 
 // Click test, one frame. Mixes the click into both positions' sources (which
@@ -501,7 +537,7 @@ static RenderResult render(DomineKernel *k,
         }
 
         // Click test: replaces the source before the delay line.
-        if (clickTest || k->clickLevel != 0) click_mix(k, clickTest, &srcA, &srcB);
+        if (clickTest == 1 || k->clickLevel != 0) click_mix(k, clickTest == 1, &srcA, &srcB);
 
         const uint32_t w = k->ringWrite;
         k->ringA[w] = srcA;
@@ -514,6 +550,35 @@ static RenderResult render(DomineKernel *k,
         float outB = k->ringB[(w - delayB) & mask];
         if (gainA != 1.0f) outA *= gainA;
         if (gainB != 1.0f) outB *= gainB;
+
+        // Calibration chirps (click test mode 2): replace both positions after
+        // the gains, bypassing the delay line. Rising on A, falling on B, both
+        // starting on the same sample.
+        if (clickTest == 2 || k->chirpLevel != 0) {
+            const uint32_t full = k->toneFadeLength;
+            float chirpA = 0.0f, chirpB = 0.0f;
+            if (clickTest == 2 && k->chirpLevel == full) {
+                const uint32_t n = k->chirpCounter;
+                chirpA = (float)chirp_sample(n, k->chirpLength, k->sampleRate, 1);
+                chirpB = (float)chirp_sample(n, k->chirpLength, k->sampleRate, 0);
+                k->chirpCounter = n + 1 < k->clickPeriod ? n + 1 : 0;
+            } else {
+                k->chirpCounter = 0;
+            }
+            if (gainA != 1.0f) chirpA *= gainA;
+            if (gainB != 1.0f) chirpB *= gainB;
+            if (k->chirpLevel == full) {
+                outA = chirpA;
+                outB = chirpB;
+            } else {
+                const float keep = 1.0f - (float)k->chirpLevel / (float)full;
+                outA = outA * keep + chirpA;
+                outB = outB * keep + chirpB;
+            }
+            const uint32_t chirpTarget = clickTest == 2 ? full : 0;
+            if (k->chirpLevel < chirpTarget) k->chirpLevel++;
+            else if (k->chirpLevel > chirpTarget) k->chirpLevel--;
+        }
 
         // A new request takes over only once the current tone has faded out.
         if (k->toneLevel == 0 && k->playingToneSide != toneSide) {
