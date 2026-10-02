@@ -30,7 +30,9 @@ extension AppModel {
                 || anyAssigned,
             bannerMessage: monoFallbackBanner ?? (showsGripPairingHint ? Self.gripPairingHint : nil),
             rearMode: RearMode(rawValue: quadSettings.rearMode) ?? .mirror,
-            rearLevel: Double(quadSettings.rearTrim))
+            rearLevel: Double(quadSettings.rearTrim),
+            rooms: rooms,
+            currentRoomID: currentRoomID)
     }
 
     var mainWindowActions: MainWindowActions {
@@ -48,7 +50,10 @@ extension AppModel {
             playTestTone: { [weak self] in self?.playTestTone($0) },
             selectSpeaker: { [weak self] in self?.openAssign($0) },
             openTuning: { [weak self] in self?.openTuning() },
-            openSound: { [weak self] in self?.openSound() })
+            openSound: { [weak self] in self?.openSound() },
+            selectRoom: { [weak self] in self?.selectRoom($0) },
+            saveRoom: { [weak self] in self?.showsSaveRoom = true },
+            manageRooms: { [weak self] in self?.showsManageRooms = true })
     }
 
     /// The missing speaker's position while the engine is in mono fallback.

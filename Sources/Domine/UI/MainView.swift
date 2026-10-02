@@ -19,6 +19,18 @@ struct MainView: View {
             .sheet(isPresented: $model.showsSound) {
                 SoundSheet(state: model.soundState, actions: model.soundActions)
             }
+            .sheet(isPresented: $model.showsSaveRoom) {
+                SaveRoomSheet(
+                    save: { model.saveCurrentAsRoom(name: $0); model.showsSaveRoom = false },
+                    cancel: { model.showsSaveRoom = false })
+            }
+            .sheet(isPresented: $model.showsManageRooms) {
+                ManageRoomsSheet(
+                    rooms: model.rooms,
+                    rename: { model.renameRoom($0, to: $1) },
+                    delete: { model.deleteRoom($0) },
+                    done: { model.showsManageRooms = false })
+            }
             .sheet(isPresented: $model.showsWelcome) {
                 WelcomeView(state: model.welcomeState, actions: model.welcomeActions)
                     .interactiveDismissDisabled()

@@ -16,5 +16,11 @@ struct MainWindowActions: Sendable {
     /// "Sound…" was clicked; the owner presents `SoundSheet`.
     var openSound: @MainActor @Sendable () -> Void = {}
 
+    var selectRoom: @MainActor @Sendable (Room.ID) -> Void = { _ in }
+    /// "Save Current Setup…": the owner presents `SaveRoomSheet`.
+    var saveRoom: @MainActor @Sendable () -> Void = {}
+    /// "Manage Rooms…": the owner presents `ManageRoomsSheet`.
+    var manageRooms: @MainActor @Sendable () -> Void = {}
+
     static let none = MainWindowActions()
 }

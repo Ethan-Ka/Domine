@@ -82,7 +82,9 @@ extension AppModel {
             isMuted: isMuted,
             preset: matched,
             isRouting: engine.state.isRouting,
-            apps: statusMenuApps)
+            apps: statusMenuApps,
+            rooms: rooms,
+            currentRoomID: currentRoomID)
     }
 
     /// Applies an edit made through the menu's switch or volume slider.
@@ -116,6 +118,15 @@ extension AppModel {
             },
             swapSides: { [weak self] in self?.swapSides() },
             autoCalibrate: { [weak self] in self?.autoCalibrate() },
+            selectRoom: { [weak self] in self?.selectRoom($0) },
+            saveRoom: { [weak self] in
+                self?.showsSaveRoom = true
+                self?.showMainWindow()
+            },
+            manageRooms: { [weak self] in
+                self?.showsManageRooms = true
+                self?.showMainWindow()
+            },
             quit: { [weak self] in self?.quit() })
     }
 

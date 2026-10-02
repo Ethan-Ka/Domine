@@ -24,6 +24,8 @@ struct MainWindowState: Equatable, Sendable {
     var rearLevel: Double
     /// Shown at the bottom of the stage, e.g. while in mono fallback.
     var bannerMessage: String?
+    var rooms: [Room] = []
+    var currentRoomID: Room.ID?
 
     init(
         statusLine: String,
@@ -38,8 +40,12 @@ struct MainWindowState: Equatable, Sendable {
         canPlayTestTones: Bool = true,
         bannerMessage: String? = nil,
         rearMode: RearMode = .mirror,
-        rearLevel: Double = 1
+        rearLevel: Double = 1,
+        rooms: [Room] = [],
+        currentRoomID: Room.ID? = nil
     ) {
+        self.rooms = rooms
+        self.currentRoomID = currentRoomID
         self.rearMode = rearMode
         self.rearLevel = rearLevel
         self.statusLine = statusLine

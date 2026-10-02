@@ -1,5 +1,5 @@
 /// The Stereo / Quad control in the toolbar. Quad is v2 (SPEC section 11).
-enum RoutingMode: String, CaseIterable, Identifiable, Sendable {
+enum RoutingMode: String, CaseIterable, Identifiable, Sendable, Codable {
     case stereo
     case quad
 

@@ -14,6 +14,8 @@ struct StatusMenuState: Equatable, Sendable {
     var isRouting = false
     /// Apps playing audio now.
     var apps: [StatusMenuApp] = []
+    var rooms: [Room] = []
+    var currentRoomID: Room.ID?
 }
 
 /// One row of the menu's Apps section.

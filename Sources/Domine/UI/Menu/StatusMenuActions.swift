@@ -8,5 +8,8 @@ struct StatusMenuActions {
     var identifySpeaker: @MainActor (SpeakerPosition) -> Void = { _ in }
     var swapSides: @MainActor () -> Void = {}
     var autoCalibrate: @MainActor () -> Void = {}
+    var selectRoom: @MainActor (Room.ID) -> Void = { _ in }
+    var saveRoom: @MainActor () -> Void = {}
+    var manageRooms: @MainActor () -> Void = {}
     var quit: @MainActor () -> Void = {}
 }

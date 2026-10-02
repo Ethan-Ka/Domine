@@ -48,6 +48,12 @@ final class AppModel {
     /// Tuning for the selected pair, seen with `leftUID` as Front Left.
     private(set) var pairSettings = PairSettings()
 
+    /// Saved speaker setups. `currentRoomID` is the one matching the current setup.
+    var rooms: [Room] = []
+    var currentRoomID: UUID?
+    var showsSaveRoom = false
+    var showsManageRooms = false
+
     /// The position whose Choose Speaker sheet is open.
     var assignPosition: SpeakerPosition?
     /// The radio selection in that sheet.
@@ -165,6 +171,8 @@ final class AppModel {
         rearLeftUID = store.lastRearLeftUID
         rearRightUID = store.lastRearRightUID
         routingMode = store.routingMode
+        rooms = store.rooms
+        currentRoomID = store.currentRoomID.flatMap { id in rooms.contains { $0.id == id } ? id : nil }
         pairSettings = Self.loadPairSettings(store: store, left: leftUID, right: rightUID)
         applyPairSettingsToEngine()
         volumeLink.onExternalChange = { [weak self] volume in self?.adoptHardwareVolume(volume) }
@@ -229,6 +237,7 @@ final class AppModel {
         routingRefusal = nil
         store.lastLeftUID = left
         store.lastRightUID = right
+        refreshCurrentRoom()
         pairSettings = Self.loadPairSettings(store: store, left: left, right: right)
         // A new pair is not a speaker connecting, so it never auto-starts.
         bothSpeakersWerePresent = bothSelectedSpeakersPresent
@@ -248,6 +257,7 @@ final class AppModel {
         if wasQuadActive { stopRouting() }
         store.lastRearLeftUID = left
         store.lastRearRightUID = right
+        refreshCurrentRoom()
         reloadQuadSettings()
         syncVolumeLink()
         if wasQuadActive { Task { await startRouting() } }
@@ -267,6 +277,7 @@ final class AppModel {
         if wasActive { stopRouting() }
         routingMode = mode
         store.routingMode = mode
+        refreshCurrentRoom()
         syncVolumeLink()
         if wasActive { Task { await startRouting() } }
     }

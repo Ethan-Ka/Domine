@@ -13,6 +13,7 @@ final class SettingsStore {
         case volumeKeysEnabled, restorePreviousOutput, closeBehavior, startWhenBothConnect
         case previousOutputUID, outputNeedsRestore, excludedAppsPlayThroughUID, exclusions, appVolumes
         case hasCompletedWelcome, audioCaptureWorking, audioCaptureSignature
+        case rooms, currentRoomID
 
         var name: String { SettingsStore.keyPrefix + rawValue }
     }
@@ -155,6 +156,23 @@ final class SettingsStore {
     var audioCaptureSignature: String? {
         get { string(.audioCaptureSignature) }
         set { set(newValue, .audioCaptureSignature) }
+    }
+
+    /// Saved rooms. Missing or corrupt reads as none.
+    var rooms: [Room] {
+        get {
+            defaults.data(forKey: Key.rooms.name)
+                .flatMap { try? JSONDecoder().decode([Room].self, from: $0) } ?? []
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue) else { return }
+            defaults.set(data, forKey: Key.rooms.name)
+        }
+    }
+
+    var currentRoomID: UUID? {
+        get { string(.currentRoomID).flatMap(UUID.init(uuidString:)) }
+        set { set(newValue?.uuidString, .currentRoomID) }
     }
 
     /// Entries that fail to decode are dropped; the rest are kept.
