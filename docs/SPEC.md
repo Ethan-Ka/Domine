@@ -82,10 +82,34 @@ Domine takes over the routing itself so it can control exactly which samples rea
    - The aggregate can publish its stream layout a moment after `AudioHardwareCreateAggregateDevice` returns. Poll `kAudioDevicePropertyStreamConfiguration` until the output channel count equals the sub-devices' sum and the tap's input stream is present, rather than assuming it is ready.
 4. Start with `AudioDeviceStart`. Tear down in reverse order on stop: stop device, destroy IOProc, destroy aggregate, destroy tap.
 
-Why this approach: no kernel extension or HAL driver install, no admin password, no coreaudiod restart, and the user never has to touch Audio MIDI Setup. The cost is the macOS 14.4 minimum and a one-time audio capture permission prompt.
+Why this approach: the tap needs no kernel extension, no admin password, and no coreaudiod restart, and the user never has to touch Audio MIDI Setup. The cost is the macOS 14.4 minimum and a one-time audio capture permission prompt. The optional virtual output device (section 3.3) adds native volume keys and a stable tap clock on top of this path; it does not replace the tap.
 
-### 3.3 Alternative kept on file: virtual HAL driver
-A user-space `AudioServerPlugIn` driver (the BlackHole pattern) set as the system default output, with Domine reading from it. This works on older macOS but requires installing into `/Library/Audio/Plug-Ins/HAL`, admin rights, and restarting coreaudiod. Only revisit this if process taps prove unreliable.
+### 3.3 Virtual output device
+
+Domine ships an optional user-space `AudioServerPlugIn` driver, `Domine.driver`, installed in `/Library/Audio/Plug-Ins/HAL`. It publishes one output-only device:
+
+| Property | Value |
+|---|---|
+| Name | "Domine" (manufacturer "Domine") |
+| UID | `com.ethankawley.Domine.VirtualOutput` |
+| Transport | Virtual |
+| Streams | One output stream, 2 channels, 32-bit float, interleaved |
+| Sample rates | 44100 and 48000 Hz |
+| Controls | Volume (scalar 0...1 with a dB range of -64 to 0 dB, main element, output scope, settable) and mute |
+| Default device | Can be the default output and the default system output |
+
+The device is a null sink: it discards every sample written to it, but it runs a steady clock from `mach_absolute_time` at its nominal rate. Both 44100 and 48000 Hz are offered because Domine matches the default output's rate to the Grips (section 4a), and Grips run at 44100 Hz when healthy.
+
+While Domine routes and the driver is installed, the system default output is this device:
+- The volume keys and the system volume HUD control it natively. The HUD shows "Domine".
+- Domine reads its volume and mute and applies them to the Grips' linked hardware volume (section 4a). The device itself never changes the audio; it only stores the values.
+- The process tap captures from a stable non-Bluetooth clock, so the tap is not tied to a Bluetooth device that can drop out.
+
+The process tap stays the audio source. The virtual device carries no audio to Domine.
+
+DeviceCatalog hides every device whose UID starts with `com.ethankawley.Domine.` from the speaker list, so the virtual device can never be picked as a speaker. Volume and mute persist across coreaudiod restarts through the host's `WriteToStorage` and `CopyFromStorage`.
+
+The driver is plain C in `Sources/DomineDriver/`, built as the `DomineDriver` bundle target, and follows the structure of Apple's NullAudio sample (plug-in object, one device, one output stream, volume and mute controls). IO callbacks use atomics only. A mutex guards non-IO property state, as in Apple's sample. Without the driver, Domine falls back to the previous behavior: the default output is the device from section 3b and the volume keys go through the event tap in section 4b.
 
 ### 3.4 Prototype shortcut (Milestone 0 only)
 Before building the tap path, validate that two Bluetooth speakers can stay in sync on this Mac at all: build the aggregate device in code, set `kAudioDevicePropertyPreferredChannelsForStereo` to `[1, 3]`, and make it the default output. This sends left to Device A and right to Device B with zero custom DSP. On the Grip each side will play about 6 dB quieter than normal because the speaker averages the silent second channel in; that is expected for the spike and fixed by the real kernel. Throw this code away after the spike.
@@ -97,6 +121,8 @@ Before building the tap path, validate that two Bluetooth speakers can stay in s
 - Each exclusion has a mode: Always, or Only during calls (the app is excluded while it has an active input stream, detected with `kAudioProcessPropertyIsRunningInput`).
 - The exclusion list changes at runtime; rebuild the tap when it changes or when an excluded app launches or quits. A rebuild causes a short gap, so debounce changes by about 500 ms.
 - Default suggestions on first open: FaceTime, zoom.us, Microsoft Teams, Discord. None are excluded until the user adds them.
+
+Open issue: when the virtual output device (section 3.3) is the default output, excluded apps play into a null sink and are silent. Options to decide later: keep the excluded-apps device as the default output whenever exclusions are active (losing native volume keys while they are), route excluded processes to that device with a second, per-process tap and aggregate, or have the driver pass audio through to a real device.
 
 ## 3a. Level meters
 
@@ -113,17 +139,20 @@ Note: at typical listening distances, an offset under about 1 ms is inaudible as
 
 ### 4a. Volume
 
-The process tap captures audio before any device volume is applied, so the Mac's volume keys (which control the default output) will not change what the Grips play. Domine handles volume itself:
+The process tap captures audio before any device volume is applied, so the default output's volume does not change what the Grips play. Domine handles volume itself:
+- With the virtual output device installed (section 3.3), it is the default output while routing. Domine listens to its volume scalar and mute and applies them to both Grips' hardware volume as the master volume. A change Domine makes to the Grips' volume (from the slider or a Grip's buttons) is written back to the virtual device, so the system HUD and the menu bar volume stay in step.
 - A master volume slider in the menu sets `kAudioDevicePropertyVolumeScalar` on both Grips (output scope, main element; fall back to per-channel elements if the main element is not settable). Over AAC/AVRCP this is the speaker's own hardware volume, so there is no loss of resolution.
 - Domine listens for volume changes on both devices. If one changes and Domine did not cause it (someone pressed the + button on a Grip), apply the same value to the other speaker. Use a short suppression window after Domine's own writes so the two listeners do not bounce changes back and forth.
 - Per-side trim (section 1 goals) is applied in the kernel as a gain, separate from hardware volume.
-- Volume keys are handled as described in section 4b.
+- Without the virtual output device, volume keys are handled as described in section 4b.
 
 Report the Core Audio latency values (`kAudioDevicePropertyLatency`, `kAudioStreamPropertyLatency`, `kAudioDevicePropertySafetyOffset`) in a debug panel, and use their difference as the initial default offset. Bluetooth devices often report these inaccurately, so the manual slider always wins.
 
 Sample rate: never set the nominal sample rate (`kAudioDevicePropertyNominalSampleRate`) of a Bluetooth speaker. Each speaker keeps the rate it reports, which follows its Bluetooth codec (a freshly connected JBL Grip reports 44.1 kHz, the only rate it offers). Reason: on hardware, Grips that had been forced to 48 kHz kept reporting 48 kHz while their AAC encoder still ran at 44.1 kHz with no conversion, so everything, even plain macOS playback with no Domine, played about 8% slow and 1.5 semitones low until the speaker was power-cycled. The aggregate runs at the main sub-device's (Device A's) rate, and the kernel, delay, tone, and click use that rate. If Device B reports a different rate, log a warning and let the aggregate's drift compensation convert it. The tap follows the system default output's rate, so when the default output is not Bluetooth (for example the built-in speakers) and supports Device A's rate, Domine sets it to that rate while running and restores its previous rate on stop. Otherwise the tap's drift compensation converts it.
 
 ### 4b. Volume keys
+
+With the virtual output device installed (section 3.3), the volume keys need nothing from Domine: macOS changes the virtual device's volume and shows its own HUD, and Domine follows that volume (section 4a). The event tap below is the fallback when the driver is not installed.
 
 - Off by default until the user enables it in Settings > General (it needs Accessibility permission).
 - Implementation: a `CGEventTap` on `NX_SYSDEFINED` events (subtype 8) catches volume up, down, and mute while Domine is running, applies the change to Domine's master volume, and swallows the event so macOS does not also adjust the muted default device.
@@ -216,6 +245,7 @@ Domine/
                             UID the stored delay and balance are read and written with their sign flipped.
         AppModel.swift      @Observable model the UI binds to
     DomineDSP/              C target: kernel.c, include/DomineDSP.h, module.modulemap
+    DomineDriver/           C AudioServerPlugIn bundle for the virtual output device (section 3.3)
   Tests/
     DomineDSPTests/         kernel tests (mapping, gain, delay, swap, tone)
     DomineTests/            engine state machine tests against a fake HAL
@@ -252,6 +282,13 @@ States: `idle`, `starting`, `running`, `degraded(reason)`, `stopping`, `error(me
 - Hardened runtime on. No sandbox for v1: aggregate device and tap behavior under the App Sandbox has not been verified, and the app is distributed outside the App Store anyway.
 - A tap without capture permission returns silence, and there is no reliable API to detect a denial. Detect it best-effort (all-zero tap input for several seconds while another app is known to be playing) and then show a message with a button that opens the Privacy & Security pane.
 - TCC ties both grants (audio capture, Accessibility) to the app's designated requirement. An ad-hoc build gets a new requirement on every build; a certificate-signed build keeps it. The saved "capture works" flag is stored with that requirement and reset when it changes. Accessibility is read fresh (`AXIsProcessTrusted`) whenever it is shown. System Settings lists every copy under the name "Domine", so a switched-on entry can belong to another build: when trust is still missing after the user returns from System Settings, Setup offers to reveal the running app in Finder so it can be dragged into the list.
+
+### 8a. Virtual output driver: install and signing
+
+- Install: `scripts/install-driver.sh` builds the Debug driver, copies `Domine.driver` to `/Library/Audio/Plug-Ins/HAL` with `sudo`, sets owner `root:wheel`, and restarts coreaudiod with `sudo killall coreaudiod`. All audio drops for a few seconds while coreaudiod restarts. `scripts/uninstall-driver.sh` removes the bundle and restarts coreaudiod the same way. Both take `--dry-run`.
+- coreaudiod loads third-party HAL plug-ins into a sandboxed helper process (`Core Audio Driver Service`). On Apple silicon the bundle must carry a valid code signature. Community drivers built locally (BlackHole from source) load with Apple Development or ad-hoc signatures, so a Developer ID signature is expected to be needed only for distribution and notarization, not for loading. Debug builds sign with Apple Development (team XF5RVRJ6VU). To be confirmed on the first install: if the driver does not appear, check `log show --last 5m --predicate 'process CONTAINS "Core Audio Driver"'` for a signature rejection.
+- Release: `scripts/release.sh` builds the driver with Developer ID and the hardened runtime and includes it in the notarized zip next to the app. The app does not install the driver itself in v1; the user runs the install script, or a later installer package does it.
+- The driver has no entitlements and no network or file access beyond the host's storage callbacks.
 
 ## 9. Known risks
 

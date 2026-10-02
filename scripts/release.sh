@@ -1,5 +1,6 @@
 #!/bin/bash
-# Archive a Release build, sign it with Developer ID, notarize, staple, and verify.
+# Archive a Release build, sign it and the virtual output driver with Developer ID,
+# notarize both, staple the app, and verify.
 # DEVELOPMENT_TEAM=ABCDE12345 NOTARY_PROFILE=domine ./scripts/release.sh [--dry-run]
 # --dry-run prints the commands without running them. Output goes to build/release/.
 source "$(dirname "$0")/_common.sh"
@@ -28,6 +29,10 @@ OUT="$ROOT/build/release"
 ARCHIVE="$OUT/Domine.xcarchive"
 EXPORT="$OUT/export"
 APP_OUT="$EXPORT/Domine.app"
+DRIVER_BUILD="$OUT/driver"
+DIST="$OUT/dist"
+APP_DIST="$DIST/Domine.app"
+DRIVER_DIST="$DIST/Domine.driver"
 ZIP="$OUT/Domine.zip"
 OPTIONS="$OUT/ExportOptions.plist"
 
@@ -87,7 +92,21 @@ run xcodebuild -exportArchive -quiet \
     -exportPath "$EXPORT" \
     -exportOptionsPlist "$OPTIONS"
 
-run ditto -c -k --keepParent "$APP_OUT" "$ZIP"
+# The driver is not part of the app archive. Build it on its own with the same identity.
+run xcodebuild build -quiet \
+    -project Domine.xcodeproj -target DomineDriver -configuration Release \
+    SYMROOT="$DRIVER_BUILD" \
+    CODE_SIGN_IDENTITY="Developer ID Application" \
+    CODE_SIGN_STYLE=Manual \
+    DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
+    ENABLE_HARDENED_RUNTIME=YES \
+    OTHER_CODE_SIGN_FLAGS=--timestamp
+
+# One zip holds the app and the driver, so both are notarized in one submission.
+run mkdir -p "$DIST"
+run ditto "$APP_OUT" "$APP_DIST"
+run ditto "$DRIVER_BUILD/Release/Domine.driver" "$DRIVER_DIST"
+run ditto -c -k "$DIST" "$ZIP"
 if [ "$DRY_RUN" -eq 1 ]; then
     run xcrun notarytool submit "$ZIP" --keychain-profile "$NOTARY_PROFILE" --wait --output-format plist
 else
@@ -101,13 +120,15 @@ else
         exit 1
     fi
 fi
-run xcrun stapler staple "$APP_OUT"
+run xcrun stapler staple "$APP_DIST"
 
-# Re-zip so the distributed archive carries the stapled ticket.
+# Re-zip so the distributed archive carries the stapled ticket. The driver is
+# not stapled; Gatekeeper finds its notarization ticket online.
 run rm -f "$ZIP"
-run ditto -c -k --keepParent "$APP_OUT" "$ZIP"
+run ditto -c -k "$DIST" "$ZIP"
 
-run codesign --verify --deep --strict --verbose=2 "$APP_OUT"
-run spctl -a -vvv -t install "$APP_OUT"
+run codesign --verify --deep --strict --verbose=2 "$APP_DIST"
+run codesign --verify --strict --verbose=2 "$DRIVER_DIST"
+run spctl -a -vvv -t install "$APP_DIST"
 
 [ "$DRY_RUN" -eq 1 ] || echo "Released $ZIP"
