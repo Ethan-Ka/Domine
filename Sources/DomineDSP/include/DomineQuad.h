@@ -74,6 +74,24 @@ void domine_quad_process(DomineQuad *q,
                          uint32_t frames,
                          const uint32_t *out_offsets);
 
+/// Multi-tap input (per-app volume). The aggregate may hold up to 8 taps; this
+/// replaces the single-tap read. tapCount 0 (the default) keeps the single-tap
+/// behaviour; counts above 8 are clamped to 8. Per tap: firstBuffer is the
+/// index of its first buffer in the input list, channels its channel count,
+/// interleaved nonzero for one multichannel buffer (else one buffer per
+/// channel). Each tap becomes stereo exactly as a single tap does (buffer with
+/// 2 or more channels: first two; else a following buffer if channels >= 2 and
+/// not interleaved; else mono feeds both sides). Missing or short buffers read
+/// as silence. The input frame count is that of the longest tap. With
+/// one tap at gain 1 the output is bit-exact to the single-tap path. Layout is
+/// published through a seqlock; safe from any thread.
+void domine_quad_set_tap_layout(DomineQuad *k, uint32_t tapCount, const uint32_t *_Nullable firstBuffer,
+                                  const uint32_t *_Nullable channels, const uint32_t *_Nullable interleaved);
+
+/// Gain of one tap, 0 to 1 (clamped), default 1. A change ramps linearly over
+/// 20 ms (the first process call snaps). Out-of-range tap indexes are ignored.
+void domine_quad_set_tap_gain(DomineQuad *k, uint32_t tap, float gain);
+
 /// IOProc layout (set before the device starts): index of the tap's first
 /// input buffer, the 4 output offsets (DOMINE_NO_DEVICE if absent), and the tap
 /// format (channels per frame, 0 unknown).

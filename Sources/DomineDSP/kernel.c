@@ -15,6 +15,7 @@
 // thread through a seqlock over atomic words, so the writer never waits.
 
 #include "DomineDSP.h"
+#include "TapMix.h"
 
 #include <math.h>
 #include <stdatomic.h>
@@ -45,6 +46,7 @@ struct DomineKernel {
     _Atomic uint32_t layoutOutB;
     _Atomic uint32_t inputChannels; // 0 = unknown
     _Atomic int inputNonInterleaved;
+    TapMixer taps;
     _Atomic uint32_t statsResetRequests;
 
     // Meters: written by the render thread, read by any thread.
@@ -293,6 +295,7 @@ DomineKernel *domine_kernel_create(double sampleRate, uint32_t maxFrames) {
     atomic_init(&k->layoutOutB, 2);
     atomic_init(&k->inputChannels, 0);
     atomic_init(&k->inputNonInterleaved, 0);
+    tapmix_init(&k->taps, sampleRate);
     atomic_init(&k->statsResetRequests, 0);
     atomic_init(&k->peakABits, float_bits(0.0f));
     atomic_init(&k->peakBBits, float_bits(0.0f));
@@ -454,6 +457,17 @@ static inline void click_mix(DomineKernel *k, int on, float *srcA, float *srcB) 
     else if (k->clickLevel > target) k->clickLevel--;
 }
 
+void domine_kernel_set_tap_layout(DomineKernel *k, uint32_t tapCount, const uint32_t *firstBuffer,
+                                  const uint32_t *channels, const uint32_t *interleaved) {
+    if (k == NULL) return;
+    tapmix_set_layout(&k->taps, tapCount, firstBuffer, channels, interleaved);
+}
+
+void domine_kernel_set_tap_gain(DomineKernel *k, uint32_t tap, float gain) {
+    if (k == NULL) return;
+    tapmix_set_gain(&k->taps, tap, gain);
+}
+
 void domine_kernel_set_input_format(DomineKernel *k, uint32_t channelsPerFrame, int nonInterleaved) {
     if (k == NULL) return;
     atomic_store_explicit(&k->inputChannels, channelsPerFrame, memory_order_relaxed);
@@ -510,6 +524,7 @@ static void publish_stats(DomineKernel *k) {
 static RenderResult render(DomineKernel *k,
                            const InChannel *inL,
                            const InChannel *inR,
+                           const TapSet *tapSet,
                            uint32_t inFrames,
                            AudioBufferList *out,
                            uint32_t frames,
@@ -571,8 +586,13 @@ static RenderResult render(DomineKernel *k,
     const uint32_t steps = inFrames > frames ? inFrames : frames;
     for (uint32_t f = 0; f < steps; f++) {
         if (f < inFrames) {
-            const float inLeft = read_in(inL, f);
-            const float inRight = read_in(inR, f);
+            float inLeft, inRight;
+            if (tapSet != NULL) {
+                tapmix_read(&k->taps, tapSet, f, &inLeft, &inRight);
+            } else {
+                inLeft = read_in(inL, f);
+                inRight = read_in(inR, f);
+            }
             if (fabsf(inLeft) > result.inputPeak) result.inputPeak = fabsf(inLeft);
             if (fabsf(inRight) > result.inputPeak) result.inputPeak = fabsf(inRight);
             if (k->fifoWrite - k->fifoRead == fifoCapacity) {
@@ -722,11 +742,18 @@ void domine_kernel_process(DomineKernel *k,
     const AudioBuffer *inBuffers = in != NULL ? in->mBuffers : NULL;
     const uint32_t inCount = in != NULL ? in->mNumberBuffers : 0;
     InChannel inL, inR;
-    (void)resolve_input(inBuffers, inCount,
-                        atomic_load_explicit(&k->inputChannels, memory_order_relaxed),
-                        atomic_load_explicit(&k->inputNonInterleaved, memory_order_relaxed),
-                        &inL, &inR);
-    (void)render(k, &inL, &inR, frames, out, frames, outAChannelOffset, outBChannelOffset);
+    TapSet tapSet;
+    const int useTaps = tapmix_begin(&k->taps);
+    uint32_t inFrames = frames;
+    if (useTaps) {
+        inFrames = tapmix_resolve(&k->taps, in, &tapSet, NULL);
+    } else {
+        (void)resolve_input(inBuffers, inCount,
+                            atomic_load_explicit(&k->inputChannels, memory_order_relaxed),
+                            atomic_load_explicit(&k->inputNonInterleaved, memory_order_relaxed),
+                            &inL, &inR);
+    }
+    (void)render(k, &inL, &inR, useTaps ? &tapSet : NULL, inFrames, out, frames, outAChannelOffset, outBChannelOffset);
 }
 
 OSStatus domine_kernel_ioproc(AudioObjectID inDevice,
@@ -764,9 +791,18 @@ OSStatus domine_kernel_ioproc(AudioObjectID inDevice,
         inCount = inInputData->mNumberBuffers - first;
     }
     InChannel inL, inR;
-    const int formatMismatch = resolve_input(inBuffers, inCount, formatChannels, formatNonInterleaved, &inL, &inR);
-    const uint32_t inFrames = input_frames(&inL, &inR);
-    const int missing = inL.data == NULL;
+    TapSet tapSet;
+    const int useTaps = tapmix_begin(&k->taps);
+    int formatMismatch = 0;
+    int missing;
+    uint32_t inFrames;
+    if (useTaps) {
+        inFrames = tapmix_resolve(&k->taps, inInputData, &tapSet, &missing);
+    } else {
+        formatMismatch = resolve_input(inBuffers, inCount, formatChannels, formatNonInterleaved, &inL, &inR);
+        inFrames = input_frames(&inL, &inR);
+        missing = inL.data == NULL;
+    }
 
     DomineKernelStats *st = &k->stats;
     const uint32_t resetRequests = atomic_load_explicit(&k->statsResetRequests, memory_order_relaxed);
@@ -777,7 +813,7 @@ OSStatus domine_kernel_ioproc(AudioObjectID inDevice,
         st->maximaResets++;
     }
 
-    const RenderResult r = render(k, &inL, &inR, inFrames, outOutputData, frames, outA, outB);
+    const RenderResult r = render(k, &inL, &inR, useTaps ? &tapSet : NULL, inFrames, outOutputData, frames, outA, outB);
 
     st->cycles++;
     st->frames += frames;
