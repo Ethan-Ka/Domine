@@ -90,6 +90,25 @@ final class QuadModelTests {
         #expect(again.mainWindowState.rearMode == .matrix)
     }
 
+    @Test func spatialSettingsReachEngineAndPersist() {
+        assignAll()
+        model.setRoutingMode(.quad)
+        #expect(model.quadSettings.spatialAmount == 0.6)
+        #expect(model.quadSettings.spatialRoomMs == 15)
+        model.setRearMode(.spatial)
+        model.setSpatial(amount: 0.3, roomMs: 22)
+        #expect(model.engine.rearMode == 3)
+        #expect(model.engine.spatialAmount == 0.3)
+        #expect(model.engine.spatialRoomMs == 22)
+        #expect(model.mainWindowState.rearMode == .spatial)
+        #expect(model.mainWindowState.spatialAmount == Double(Float(0.3)))
+        let again = AppModel(hal: FakeHAL(), defaults: defaults, services: FakeSystem().services)
+        again.assign("A", to: .rearRight)
+        #expect(again.quadSettings.spatialRoomMs == 22)
+        let old = try? JSONDecoder().decode(QuadSettings.self, from: Data(#"{"rearMode":1}"#.utf8))
+        #expect(old?.spatialAmount == 0.6)
+    }
+
     @Test func clearingAFourthSpeakerKeepsQuadModeButStereoRouting() {
         assignAll()
         model.setRoutingMode(.quad)

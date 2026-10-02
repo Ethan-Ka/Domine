@@ -304,6 +304,15 @@ final class AppModel {
         applyPairSettingsToEngine()
     }
 
+    func setSpatial(amount: Float? = nil, roomMs: Float? = nil) {
+        if let amount { quadSettings.spatialAmount = min(max(amount.isFinite ? amount : 0.6, 0), 1) }
+        if let roomMs { quadSettings.spatialRoomMs = min(max(roomMs.isFinite ? roomMs : 15, 5), 30) }
+        engine.spatialAmount = quadSettings.spatialAmount
+        engine.spatialRoomMs = quadSettings.spatialRoomMs
+        guard isQuadAvailable else { return }
+        store.setQuadSettings(quadSettings, uids: [leftUID, rightUID, rearLeftUID, rearRightUID].compactMap { $0 })
+    }
+
     func setRearMode(_ mode: RearMode) {
         quadSettings.rearMode = mode.rawValue
         engine.rearMode = Int32(mode.rawValue)
@@ -497,6 +506,8 @@ final class AppModel {
         engine.quadDelaysMs = [max(-delay, 0), max(delay, 0), 0, 0]
         engine.rearMode = Int32(quadSettings.rearMode)
         engine.rearTrim = quadSettings.rearTrim
+        engine.spatialAmount = quadSettings.spatialAmount
+        engine.spatialRoomMs = quadSettings.spatialRoomMs
     }
 
     func setEffects(_ effects: PairSettings.EffectsSettings) {

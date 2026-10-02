@@ -5,6 +5,8 @@ struct MainWindowActions: Sendable {
     var swap: @MainActor @Sendable () -> Void = {}
     var setMasterVolume: @MainActor @Sendable (Double) -> Void = { _ in }
     var setRearMode: @MainActor @Sendable (RearMode) -> Void = { _ in }
+    var setSpatialAmount: @MainActor @Sendable (Double) -> Void = { _ in }
+    var setSpatialRoom: @MainActor @Sendable (Double) -> Void = { _ in }
     var setRearLevel: @MainActor @Sendable (Double) -> Void = { _ in }
     /// Plays one short tone on that side.
     var playTestTone: @MainActor @Sendable (StereoSide) -> Void = { _ in }

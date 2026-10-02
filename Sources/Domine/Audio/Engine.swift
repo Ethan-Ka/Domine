@@ -94,6 +94,9 @@ final class Engine {
     /// DOMINE_REAR_MIRROR, DOMINE_REAR_MATRIX or DOMINE_REAR_DIRECT.
     var rearMode: Int32 = Int32(DOMINE_REAR_MIRROR) { didSet { applyControls() } }
     var rearTrim: Float = 1 { didSet { applyControls() } }
+    /// DOMINE_REAR_SPATIAL parameters: amount 0...1, room 5...30 ms.
+    var spatialAmount: Float = 0.6 { didSet { applyControls() } }
+    var spatialRoomMs: Float = 15 { didSet { applyControls() } }
     /// The four UIDs of a quad routing in position order; nil in stereo.
     @ObservationIgnored fileprivate(set) var quadUIDs: [String]?
 
@@ -1044,6 +1047,8 @@ extension Engine {
         }
         domine_quad_set_rear_mode(quad, rearMode)
         domine_quad_set_rear_trim(quad, rearTrim)
+        var spatial = DomineSpatialParams(amount: spatialAmount, roomMs: spatialRoomMs, highCutHz: 5000)
+        domine_quad_set_spatial(quad, &spatial)
         domine_quad_set_muted(quad, muted || fadingOut ? 1 : 0)
     }
 

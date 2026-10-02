@@ -22,6 +22,9 @@ struct MainWindowState: Equatable, Sendable {
     var rearMode: RearMode
     /// Rear level, 0...1.
     var rearLevel: Double
+    /// Spatial mode: amount 0...1 and room 5...30 ms.
+    var spatialAmount: Double = 0.6
+    var spatialRoomMs: Double = 15
     /// Shown at the bottom of the stage, e.g. while in mono fallback.
     var bannerMessage: String?
     var rooms: [Room] = []
@@ -41,6 +44,8 @@ struct MainWindowState: Equatable, Sendable {
         bannerMessage: String? = nil,
         rearMode: RearMode = .mirror,
         rearLevel: Double = 1,
+        spatialAmount: Double = 0.6,
+        spatialRoomMs: Double = 15,
         rooms: [Room] = [],
         currentRoomID: Room.ID? = nil
     ) {
@@ -48,6 +53,8 @@ struct MainWindowState: Equatable, Sendable {
         self.currentRoomID = currentRoomID
         self.rearMode = rearMode
         self.rearLevel = rearLevel
+        self.spatialAmount = spatialAmount
+        self.spatialRoomMs = spatialRoomMs
         self.statusLine = statusLine
         self.isOn = isOn
         self.mode = mode

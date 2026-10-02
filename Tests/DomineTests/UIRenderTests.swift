@@ -23,6 +23,12 @@ struct UIRenderTests {
         try renderWindow(MainContentView(state: SampleStates.quad), name: "main-quad")
     }
 
+    @Test func mainWindowQuadSpatial() throws {
+        var state = SampleStates.quad
+        state.rearMode = .spatial
+        try renderWindow(MainContentView(state: state), name: "main-quad-spatial")
+    }
+
     @Test func mainWindowMonoFallback() throws {
         try renderWindow(MainContentView(state: SampleStates.monoFallback), name: "main-mono-fallback")
     }

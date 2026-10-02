@@ -31,6 +31,8 @@ extension AppModel {
             bannerMessage: monoFallbackBanner ?? (showsGripPairingHint ? Self.gripPairingHint : nil),
             rearMode: RearMode(rawValue: quadSettings.rearMode) ?? .mirror,
             rearLevel: Double(quadSettings.rearTrim),
+            spatialAmount: Double(quadSettings.spatialAmount),
+            spatialRoomMs: Double(quadSettings.spatialRoomMs),
             rooms: rooms,
             currentRoomID: currentRoomID)
     }
@@ -46,6 +48,8 @@ extension AppModel {
                 self?.setMuted(false)
             },
             setRearMode: { [weak self] in self?.setRearMode($0) },
+            setSpatialAmount: { [weak self] in self?.setSpatial(amount: Float($0)) },
+            setSpatialRoom: { [weak self] in self?.setSpatial(roomMs: Float($0)) },
             setRearLevel: { [weak self] in self?.setRearTrim(Float($0)) },
             playTestTone: { [weak self] in self?.playTestTone($0) },
             selectSpeaker: { [weak self] in self?.openAssign($0) },

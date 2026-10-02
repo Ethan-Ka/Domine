@@ -42,6 +42,35 @@ struct MainBottomBar: View {
                     .frame(width: 34, alignment: .trailing)
                     .accessibilityHidden(true)
             }
+
+            if state.rearMode == .spatial {
+                compactSlider("Spatial", value: state.spatialAmount, range: 0...1,
+                              text: "\(Int((state.spatialAmount * 100).rounded()))%",
+                              set: actions.setSpatialAmount)
+                compactSlider("Room", value: state.spatialRoomMs, range: 5...30,
+                              text: "\(Int(state.spatialRoomMs.rounded())) ms",
+                              set: actions.setSpatialRoom)
+            }
+        }
+    }
+
+    private func compactSlider(_ title: String, value: Double, range: ClosedRange<Double>,
+                               text: String, set: @escaping @MainActor @Sendable (Double) -> Void) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            Slider(value: Binding(get: { value }, set: { set($0) }), in: range)
+                .labelsHidden()
+                .frame(minWidth: 60, maxWidth: 90)
+                .accessibilityLabel(title)
+                .accessibilityValue(text)
+            Text(text)
+                .font(.callout)
+                .monospacedDigit()
+                .frame(width: 40, alignment: .trailing)
+                .accessibilityHidden(true)
         }
     }
 
