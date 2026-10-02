@@ -448,7 +448,7 @@ final class AppModelTests {
 
     @Test func generalSettingsReadAndWriteTheStore() {
         let general = model.generalSettings
-        #expect(!general.startWhenBothConnect)  // the store default wins over the view's
+        #expect(general.startWhenBothConnect)
         #expect(general.restorePreviousOutput)
         #expect(general.closeBehavior == .keepPlaying)
         #expect(!general.accessibilityGranted)

@@ -56,6 +56,10 @@ final class OutputRestorer {
             try setDefault(target, reason: "default output \(current) is a routed speaker")
         } else {
             store.outputNeedsRestore = true
+            // Always take the default output when the virtual output can have it.
+            if !exclusionsActive, isPresent(Self.virtualOutputUID), current != Self.virtualOutputUID {
+                try setDefault(Self.virtualOutputUID, reason: "routing started")
+            }
         }
         startGuarding(pair: pair, playThroughUID: playThroughUID)
     }

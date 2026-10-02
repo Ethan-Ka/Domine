@@ -188,6 +188,8 @@ final class AppModel {
         let grips = catalog.outputs.filter { $0.name == DeviceCatalog.gripName }
         guard grips.count >= 2 else { return }
         setSpeakers(left: grips[0].uid, right: grips[1].uid)
+        // First launch: the pair appearing counts as both speakers connecting.
+        bothSpeakersWerePresent = false
     }
 
     /// Selects a pair, saves it, and loads its tuning. A running engine is

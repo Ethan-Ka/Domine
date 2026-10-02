@@ -155,6 +155,20 @@ final class BackgroundModeTests {
         #expect(model.isInBackground)
     }
 
+    // MARK: Defaults and output switching
+
+    @Test func freshInstallAutoStartsAtLaunchAndSwitchesOutput() async {
+        #expect(model.generalSettings.startWhenBothConnect)
+        hal.add(FakeHAL.Device(uid: OutputRestorer.virtualOutputUID, name: "Domine",
+                               transportType: kAudioDeviceTransportTypeVirtual))
+        startWithGrips()
+        await model.autoStartTask?.value
+        #expect(model.engine.state == .running)
+        #expect(hal.defaultOutputUID == OutputRestorer.virtualOutputUID)
+        model.stopRouting()
+        #expect(hal.defaultOutputUID == Self.speakers.uid)
+    }
+
     // MARK: Menu content
 
     @Test func menuShowsBothSpeakersConnected() async {
