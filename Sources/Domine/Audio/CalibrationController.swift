@@ -39,6 +39,8 @@ final class CalibrationController {
 
     private static let log = Logger(subsystem: "com.ethankawley.Domine", category: "Calibration")
     private let hal: any AudioHAL
+    /// Sheet line for the setup step that is running; read when `record` throws.
+    private var setupFailure = "Could not use the microphone"
 
     init(hal: any AudioHAL) {
         self.hal = hal
@@ -60,8 +62,13 @@ final class CalibrationController {
     /// One run: permission, recording with chirps on, analysis.
     /// `setChirps` turns the kernel's click-test mode 2 on and off.
     func run(kernelRate: Double, setChirps: @MainActor (Bool) -> Void) async -> CalibrationOutcome {
-        guard Self.builtInMicrophone(hal: hal) != nil else { return .failed("No built-in microphone") }
-        guard await requestMicAccess() else { return .microphoneDenied }
+        guard Self.builtInMicrophone(hal: hal) != nil else {
+            Self.log.error("No built-in microphone")
+            return .failed("No built-in microphone")
+        }
+        let granted = await requestMicAccess()
+        Self.log.info("Microphone permission granted: \(granted, privacy: .public)")
+        guard granted else { return .microphoneDenied }
         guard !Task.isCancelled else { return .failed("Cancelled") }
         guard let mic = Self.builtInMicrophone(hal: hal) else { return .failed("No built-in microphone") }
 
@@ -70,11 +77,13 @@ final class CalibrationController {
         do {
             (recording, rate) = try await record(mic: mic, kernelRate: kernelRate, setChirps: setChirps)
         } catch {
-            Self.log.error("Calibration recording failed: \(error.description, privacy: .public)")
-            return .failed("Could not use the microphone")
+            let line = setupFailure
+            Self.log.error("Calibration setup failed: \(line, privacy: .public): \(error.description, privacy: .public)")
+            return .failed(line)
         }
         guard !Task.isCancelled else { return .failed("Cancelled") }
 
+        Self.log.info("Recorded \(recording.count, privacy: .public) frames at \(rate, privacy: .public) Hz")
         let frames = Int((0.001 * (DOMINE_CHIRP_MS + DOMINE_CHIRP_TAIL_MS) * rate).rounded())
         let rising = Self.chirp(frames: frames, rate: rate, rising: true)
         let falling = Self.chirp(frames: frames, rate: rate, rising: false)
@@ -82,6 +91,7 @@ final class CalibrationController {
         let result = await Task.detached(priority: .userInitiated) {
             analyze(recording, rate, rising, falling)
         }.value
+        Self.log.info("Analyzer result: \(String(describing: result), privacy: .public)")
         switch result {
         case .success(let offset, _):
             return .measured(offsetMs: offset)
@@ -104,12 +114,20 @@ final class CalibrationController {
     /// own rate. Returns the samples and the rate they were recorded at.
     private func record(mic: AudioObjectID, kernelRate: Double,
                         setChirps: @MainActor (Bool) -> Void) async throws(EngineError) -> ([Float], Double) {
+        setupFailure = "Could not read the microphone rate"
         let original = try EngineError.hal { () throws(HALError) in try hal.nominalSampleRate(of: mic) }
         var changedRate = false
         if original != kernelRate {
             let ranges = try EngineError.hal { () throws(HALError) in try hal.availableNominalSampleRates(of: mic) }
             if ranges.contains(where: { $0.contains(kernelRate) }) {
-                try EngineError.hal { () throws(HALError) in try hal.setNominalSampleRate(kernelRate, of: mic) }
+                setupFailure = "Could not set the microphone rate"
+                do throws(EngineError) {
+                    try EngineError.hal { () throws(HALError) in try hal.setNominalSampleRate(kernelRate, of: mic) }
+                } catch {
+                    Self.log.error("Mic rate change failed: \(error.description, privacy: .public)")
+                    throw error
+                }
+                Self.log.info("Mic rate changed to \(kernelRate, privacy: .public) Hz")
                 changedRate = true
             }
         }
@@ -119,28 +137,37 @@ final class CalibrationController {
             }
         }
         let rate = changedRate ? kernelRate : original
+        let micUID = (try? hal.uid(of: mic)) ?? "?"
+        Self.log.info("Mic \(micUID, privacy: .public) rate \(rate, privacy: .public) Hz, was \(original, privacy: .public)")
+        setupFailure = "Could not use the microphone"
         guard rate > 0, rate.isFinite else { throw .invalidSampleRate(rate) }
 
         guard let recorder = domine_recorder_create(UInt32(Self.recordSeconds * rate)) else {
+            Self.log.error("Recorder allocation failed")
             throw .kernelUnavailable
         }
         var proc: IOProcHandle?
         var started = false
         var chirpsOn = false
         func teardown() -> Bool {
-            if chirpsOn { setChirps(false); chirpsOn = false }
+            if chirpsOn { setChirps(false); chirpsOn = false; Self.log.info("Chirps off") }
             guard let p = proc else { return true }
             if started { release("stop mic") { () throws(HALError) in try hal.stopDevice(p) } }
             return release("destroy mic IOProc") { () throws(HALError) in try hal.destroyIOProc(p) }
         }
         do throws(EngineError) {
+            setupFailure = "Could not set up the microphone"
             proc = try EngineError.hal { () throws(HALError) in
                 try hal.createIOProc(on: mic, proc: domine_recorder_ioproc, clientData: UnsafeMutableRawPointer(recorder))
             }
+            Self.log.info("Mic IOProc created")
+            setupFailure = "Could not start the microphone"
             try EngineError.hal { () throws(HALError) in try hal.startDevice(proc!) }
             started = true
+            Self.log.info("Mic IOProc started")
             setChirps(true)
             chirpsOn = true
+            Self.log.info("Chirps on")
             await wait()
         } catch {
             if teardown() { domine_recorder_destroy(recorder) }
