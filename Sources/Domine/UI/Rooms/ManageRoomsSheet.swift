@@ -68,6 +68,6 @@ private struct ManageRoomRow: View {
 
 #Preview {
     ManageRoomsSheet(
-        rooms: [Room(name: "Living room", mode: .stereo), Room(name: "Patio", mode: .quad)],
+        rooms: [Room(name: "Living room", mode: .stereo), Room(name: "Patio", mode: .surround)],
         rename: { _, _ in }, delete: { _ in }, done: {})
 }
