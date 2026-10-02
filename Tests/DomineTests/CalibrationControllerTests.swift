@@ -57,6 +57,14 @@ final class CalibrationControllerTests {
         await model.calibrationTask?.value
     }
 
+    @Test func micStartFailureShowsItsOwnLine() async {
+        setUp()
+        let hal = hal
+        model.calibration.requestMicAccess = { hal.failures[.start] = -1; return true }
+        await calibrate()
+        #expect(model.tuningState.calibrationStatus == .failed("Could not start the microphone"))
+    }
+
     @Test func recordsOnlyOnTheBuiltInMic() async {
         setUp()
         await calibrate()
