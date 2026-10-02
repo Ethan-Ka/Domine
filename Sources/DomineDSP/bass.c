@@ -104,4 +104,12 @@ void domine_bass_process(DomineBass *b, float *x, uint32_t frames) {
         const float lim = 0.9f * b->env + 1e-9f;
         x[i] = in + lim * tanhf(boost / lim);
     }
+    // Fully faded out: clear state now, since the kernel skips idle calls.
+    if (target == 0.0f && b->wet == 0.0f) reset(b);
+}
+
+int domine_bass_is_idle(const DomineBass *b) {
+    const DomineBassParams *p = &b->slots[atomic_load_explicit(&((DomineBass *)b)->active, memory_order_acquire)];
+    const int off = !p->enabled || !(p->amount > 0.0f);
+    return off && b->wet == 0.0f;
 }

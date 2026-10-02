@@ -31,6 +31,8 @@ DomineBass *domine_bass_create(double sampleRate);
 void domine_bass_destroy(DomineBass *bass);
 void domine_bass_set_params(DomineBass *bass, const DomineBassParams *params);
 void domine_bass_process(DomineBass *bass, float *samples, uint32_t frames);
+/// Nonzero when disabled (or amount 0) and fully faded out, so the caller may skip process.
+int domine_bass_is_idle(const DomineBass *bass);
 
 #ifdef __cplusplus
 }

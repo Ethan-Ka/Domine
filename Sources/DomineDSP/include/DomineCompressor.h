@@ -28,4 +28,7 @@ void domine_compressor_set_params(DomineCompressor *c, const DomineCompressorPar
 /// Processes mono samples in place.
 void domine_compressor_process(DomineCompressor *c, float *samples, uint32_t frames);
 
+/// Nonzero when the active parameters are disabled, so the caller may skip process.
+int domine_compressor_is_idle(const DomineCompressor *c);
+
 #endif
