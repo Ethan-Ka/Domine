@@ -134,3 +134,51 @@ struct DelayTests {
         #expect(b == Array(right[52..<152]))
     }
 }
+
+/// Trim gain changes ramp over 30 ms (30 samples at 1 kHz).
+struct GainRampTests {
+    static let ones = [Float](repeating: 1, count: 40)
+
+    private func run(_ kernel: Kernel, frames: Int = 40) -> TestBufferList {
+        let out = TestBufferList(channelsPerBuffer: [2, 2], frames: frames)
+        kernel.process(.interleaved(left: [Float](repeating: 1, count: frames),
+                                    right: [Float](repeating: 1, count: frames)), out)
+        return out
+    }
+
+    @Test func changeRampsLinearlyAndLandsExactly() {
+        let kernel = Kernel(sampleRate: 1000)
+        _ = run(kernel, frames: 4)
+        domine_kernel_set_gains(kernel.raw, 0.4, 0.7)
+        let out = run(kernel)
+        let a = out.channel(0)
+        let b = out.channel(2)
+        for i in 0..<29 {
+            let t = Float(i + 1) / 30
+            #expect(abs(a[i] - (1 + (0.4 - 1) * t)) < 1e-5)
+            #expect(abs(b[i] - (1 + (0.7 - 1) * t)) < 1e-5)
+        }
+        #expect(a[29] == 0.4 && b[29] == 0.7)
+        #expect(Array(a[30...]) == [Float](repeating: 0.4, count: 10))
+        #expect(out.channel(1) == a)
+    }
+
+    @Test func unchangedGainDoesNotRamp() {
+        let kernel = Kernel(sampleRate: 1000)
+        domine_kernel_set_gains(kernel.raw, 0.5, 0.5)
+        _ = run(kernel, frames: 4)
+        domine_kernel_set_gains(kernel.raw, 0.5, 0.5)
+        let out = run(kernel)
+        #expect(out.channel(0) == [Float](repeating: 0.5, count: 40))
+    }
+
+    @Test func rampBackToUnityIsBitExact() {
+        let kernel = Kernel(sampleRate: 1000)
+        domine_kernel_set_gains(kernel.raw, 0.5, 0.5)
+        _ = run(kernel, frames: 4)
+        domine_kernel_set_gains(kernel.raw, 1, 1)
+        let out = run(kernel)
+        #expect(out.channel(0)[29] == 1)
+        #expect(Array(out.channel(0)[30...]) == [Float](repeating: 1, count: 10))
+    }
+}

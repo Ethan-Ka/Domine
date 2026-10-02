@@ -18,6 +18,8 @@ final class SpeakerVolumeLink {
     static let suppression: Duration = .milliseconds(400)
     /// Smaller differences count as equal (Bluetooth volume is quantized).
     static let tolerance: Float = 0.01
+    /// Hardware and master closer than this are the same level (no kernel gain).
+    static let exactTolerance: Float = 0.0001
 
     private struct Speaker {
         let uid: String
@@ -100,6 +102,35 @@ final class SpeakerVolumeLink {
         let clamped = min(max(volume, 0), 1)
         write(clamped)
         self.volume = clamped
+    }
+
+    /// Hardware step size learned from read-backs (Bluetooth volume is coarse).
+    private(set) var step: Float?
+
+    /// Sets the speakers to the nearest hardware step at or above `volume`
+    /// and returns the volume they actually took, so the caller can make up
+    /// the difference with kernel gain. Learns the step size from read-backs.
+    @discardableResult
+    func setAtOrAbove(_ volume: Float) -> Float? {
+        let target = min(max(volume, 0), 1)
+        let slack: Float = 0.0001
+        if let current = self.volume, let step,
+           current >= target - slack, current - target < step - slack {
+            return current
+        }
+        var attempt = target
+        if let step { attempt = min(1, (target / step - 0.001).rounded(.up) * step) }
+        var last: Float?
+        for _ in 0..<20 {
+            write(attempt)
+            guard let speaker = speakers.first, let got = read(speaker) else { return self.volume }
+            if let last, got != last { step = min(step ?? .infinity, abs(got - last)) }
+            last = got
+            self.volume = got
+            if got >= target - slack || attempt >= 1 { return got }
+            attempt = min(1, attempt + 1.0 / 64)
+        }
+        return self.volume
     }
 
     func detach() {
