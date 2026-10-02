@@ -1,7 +1,7 @@
 # Builds the DomineDSP C sources on Linux with the Core Audio type shim and
 # runs the plain C tests. Run from this directory: make test
 ROOT := ../..
-CC ?= clang
+CC = clang
 CFLAGS := -std=c11 -D_DEFAULT_SOURCE -O1 -g -Wall -Wextra -Wpedantic -Werror \
   -Wno-nullability-extension -Wno-unknown-pragmas -fsanitize=address,undefined \
   -I$(ROOT)/linux/compat -I$(ROOT)/Sources/DomineDSP/include -I$(ROOT)/Sources/DomineDSP
