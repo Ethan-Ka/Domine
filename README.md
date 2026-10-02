@@ -14,7 +14,29 @@ A macOS app that plays the left channel of system audio on one Bluetooth speaker
 
 macOS can combine devices into a Multi-Output Device, but then every speaker plays both channels. Domine captures system audio with a Core Audio process tap, sends it to a private aggregate device, and writes left to one speaker and right to the other. The aggregate corrects clock drift between the two speakers, and a delay slider (1 ms steps) lines up their Bluetooth latency.
 
-Status: in development. Progress is tracked in [the milestones](docs/SPEC.md#10-milestones).
+## Status: v0.1.0
+
+Tested daily on a MacBook Pro with two JBL Grips.
+
+**Works**
+- Left to one speaker, right to the other, each speaker getting its side on both channels.
+- Starts on launch when both speakers are present and switches the Mac's output for you; turning off or quitting puts it back.
+- The "Domine" virtual output: volume keys and the macOS volume overlay control both speakers, kept at the same hardware volume.
+- Auto-calibrate: the built-in microphone hears both speakers and sets the delay between them. Manual delay and balance in Sync & Balance.
+- One speaker drops out: the other plays both sides until it returns. Sleep and wake are handled.
+- Sound sheet: presets, 5-band EQ, bass enhancer, compressor, per speaker or linked.
+- Quad mode for four speakers, with rear mirror or matrix and rear effects.
+- Menu bar panel, background playback with the window closed, app exclusions for calls.
+- Update check against GitHub Releases.
+
+**In progress**
+- Spatial upmix for quad, per-app volume, saved room setups.
+
+This build is signed for development, not notarized. Other Macs need right-click, Open the first time.
+
+## Install
+
+Download `Domine-0.1.0.pkg` from [Releases](https://github.com/Ethan-Ka/Domine/releases) and run it. It installs the app in Applications and the audio driver, then restarts macOS audio for a few seconds. To update, run the newer installer. To remove everything, run `scripts/uninstall.sh`.
 
 ## Requirements
 
