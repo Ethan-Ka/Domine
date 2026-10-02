@@ -10,6 +10,7 @@ struct DomineApp: App {
 
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = AppModel()
+    @State private var updater = Updater.live()
 
     var body: some Scene {
         Window("Domine", id: "main") {
@@ -25,6 +26,7 @@ struct DomineApp: App {
             .frame(minWidth: 560, idealWidth: 640, minHeight: 420, idealHeight: 480)
         }
         .windowResizability(.contentSize)
+        .commands { UpdateCommands(updater: updater) }
 
         Window("Debug", id: "debug") {
             DebugView()
@@ -36,6 +38,7 @@ struct DomineApp: App {
         Settings {
             AppSettingsView()
                 .environment(model)
+                .environment(updater)
         }
 
         // Only in background mode, and never in the test host (SPEC 6a).

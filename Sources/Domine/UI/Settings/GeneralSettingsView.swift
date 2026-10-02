@@ -6,6 +6,8 @@ struct GeneralSettingsView: View {
     var actions = GeneralSettingsActions()
     var setup = SetupState()
     var setupActions = SetupActions()
+    /// Sparkle's automatic check setting. Nil hides the checkbox.
+    var automaticUpdates: Binding<Bool>?
 
     var body: some View {
         Form {
@@ -52,6 +54,9 @@ struct GeneralSettingsView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Toggle("Start routing when both speakers connect", isOn: $state.startWhenBothConnect)
                     Toggle("Launch at login", isOn: $state.launchAtLogin)
+                    if let automaticUpdates {
+                        Toggle("Check for updates automatically", isOn: automaticUpdates)
+                    }
                 }
             } label: {
                 EmptyView()

@@ -5,16 +5,19 @@ import UniformTypeIdentifiers
 /// The `Settings` scene content, bound to `AppModel`.
 struct AppSettingsView: View {
     @Environment(AppModel.self) private var model
+    @Environment(Updater.self) private var updater
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         @Bindable var model = model
+        @Bindable var updater = updater
         SettingsView(
             general: $model.generalSettings,
             exclusions: $model.exclusionsSettings,
             generalActions: model.generalSettingsActions,
             setup: model.setupState,
             setupActions: model.setupActions(showMainWindow: showMainWindow),
+            automaticUpdates: updater.isEnabled ? $updater.automaticallyChecksForUpdates : nil,
             exclusionsActions: ExclusionsActions(chooseApp: chooseApp))
             .onAppear { model.settingsDidAppear() }
             .onDisappear { model.settingsDidDisappear() }
