@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Domine</title>
-<meta name="description" content="Turn two Bluetooth speakers into one stereo pair for your Mac. One plays left, the other plays right.">
+<meta name="description" content="Turn two or more Bluetooth speakers into one sound system for your Mac. Split audio left and right across two speakers, or surround with four.">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" type="image/png" href="favicon.png">
 <style>
@@ -26,19 +26,19 @@ body{
 }
 .wrap{width:100%; max-width:72rem; margin:0 auto; padding:0 clamp(1rem,5vw,3rem)}
 main{flex:1; display:flex; flex-direction:column; justify-content:center; padding:clamp(2rem,8vh,6rem) 0}
-.art{display:block; width:100%; max-width:56rem; overflow:hidden}
+.art{display:block; width:100%; max-width:56rem; margin:0 auto; overflow:hidden}
 .art img{display:block; width:110%; max-width:none; height:auto; margin-left:-7.86%}
 .body{
   display:grid; gap:2.5rem clamp(2rem,6vw,6rem);
   grid-template-columns:1fr; margin-top:clamp(2rem,6vw,4.5rem);
   padding-top:clamp(1.5rem,3vw,2.5rem); border-top:1px solid var(--rule);
+  max-width:56rem; margin-left:auto; margin-right:auto; text-align:center; justify-items:center;
 }
-@media (min-width:52rem){.body{grid-template-columns:minmax(0,3fr) minmax(0,2fr); align-items:end}}
 .claim{
-  margin:0; max-width:20ch; font-size:clamp(1.5rem,1rem + 2.2vw,2.75rem);
+  margin:0 auto; max-width:20ch; font-size:clamp(1.5rem,1rem + 2.2vw,2.75rem);
   line-height:1.15; letter-spacing:-.022em; font-weight:600; text-wrap:balance;
 }
-.actions{display:flex; flex-direction:column; align-items:flex-start; gap:.75rem}
+.actions{display:flex; flex-direction:column; align-items:center; gap:1.5rem}
 .btn{
   display:inline-block; padding:.8em 1.35em; border-radius:.55rem;
   background:var(--btn); color:var(--btn-ink); font-weight:600; font-size:1.0625rem;
@@ -46,14 +46,14 @@ main{flex:1; display:flex; flex-direction:column; justify-content:center; paddin
 }
 .btn:hover{background:var(--btn-hover)}
 .btn:active{background:var(--btn-active); transform:translateY(1px)}
-.links{display:flex; flex-wrap:wrap; gap:.5rem 1.75rem}
+.links{display:flex; flex-wrap:wrap; justify-content:center; gap:.5rem 1.75rem}
 .links a{color:var(--ink); text-decoration:none; font-weight:500; padding:.2rem 0}
 .links a span{display:inline-block; color:var(--muted); transition:transform .12s ease}
 .links a:hover{text-decoration:underline; text-underline-offset:.25em}
 .links a:hover span{transform:translateX(3px)}
 a:focus-visible{outline:3px solid var(--focus); outline-offset:3px; border-radius:.35rem}
-.sub{margin:1rem 0 0; max-width:38ch; color:var(--muted)}
-.dl{display:flex; flex-wrap:wrap; align-items:center; gap:.5rem 1rem}
+.sub{margin:1rem auto 0; max-width:38ch; color:var(--muted)}
+.dl{display:flex; flex-direction:column; align-items:center; gap:.6rem}
 .note{margin:0; color:var(--muted); font-size:.9rem}
 .sr{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -69,8 +69,8 @@ a:focus-visible{outline:3px solid var(--focus); outline-offset:3px; border-radiu
     </picture>
     <div class="body">
       <div class="pitch">
-        <p class="claim">Two Bluetooth speakers, one stereo pair.</p>
-        <p class="sub">One speaker plays your Mac's left channel and the other plays the right. They stay in sync, and your volume keys control both.</p>
+        <p class="claim">Two+ Bluetooth speakers, one sound system.</p>
+        <p class="sub">Split your Mac's audio left and right across two speakers, or surround with four. They stay in sync, and your volume keys control them all.</p>
       </div>
       <div class="actions">
         <div class="dl">
