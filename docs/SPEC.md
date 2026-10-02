@@ -334,13 +334,43 @@ States: `idle`, `starting`, `running`, `degraded(reason)`, `stopping`, `error(me
 
 ## 11. Quad mode (v2 plan)
 
-The toolbar already has a Stereo / Quad control with Quad disabled in v1. Quad mode adds rear left and rear right speakers.
+Quad mode adds rear left and rear right speakers. Positions are indexed 0 FL, 1 FR, 2 RL, 3 RR. Phase 1 (done) is the aggregate, layout, model and UI. Phase 2 is kernel and engine.
 
-- Four sub-devices in one aggregate: front left is the clock (main sub-device), the other three get drift compensation.
-- Source material is almost always stereo, so the rear pair needs a derived signal. Start with a simple option set: rear mirrors front (same L/R, with a rear level trim), or a basic matrix decode (rear L = L - 0.5R, rear R = R - 0.5L, scaled) for an ambience effect. Real multichannel sources (5.1 from a movie) can map directly once taps deliver more than two channels.
-- The delay model becomes one offset per position relative to the slowest speaker, instead of a single signed value.
-- Four Bluetooth A2DP links at once is a real bandwidth risk; test on hardware before committing. Two Grips plus two different speakers is the likely test setup.
-- Kernel API changes: `set_gains` and `set_delay_ms` take a position index; `process` takes four channel offsets.
+### 11.1 Aggregate
+- Four output sub-devices in position order. Front left is the main sub-device and the clock (no drift compensation). The other three and the tap get drift compensation at max quality.
+- Never force a sample rate. Each Grip stays at its own rate; the aggregate follows the clock device and Core Audio resamples the rest.
+- Layout: output offsets are flat channel indexes in sub-device order, one per position. Stereo layout is unchanged (A, B).
+
+### 11.2 Kernel API
+- `domine_kernel_process` takes `out_offsets[4]` (-1 for an absent position) instead of two offsets. Each present position gets its signal on all of its channels (mono Grips: both channels).
+- `set_gains(pos, gain)`, `set_delay_ms(pos, ms)` take a position index. Delay and gain are atomics per position.
+- `set_rear_mode(mode)` and `set_rear_trim(gain)`; `set_effect(id, value)` for Spatial controls (11.6).
+- Rear derivation, from stereo input L, R:
+  - Mirror: RL = L, RR = R, times rear trim.
+  - Matrix: RL = k(L - 0.5R), RR = k(R - 0.5L) with k = 1 / 1.5 so a full-scale out-of-phase input cannot exceed 1.0; times rear trim.
+  - Direct: with multichannel input (11.5), map channels to positions.
+- Fronts keep their stereo signal in every mode.
+
+### 11.3 Delay model
+- One delay per position, never negative. The reference is the slowest speaker (largest latency plus user offset): its delay is 0 and every other position is delayed by the difference. Calibration (11.7) sets the per-position offsets. The stereo signed value maps to this model as two positions.
+
+### 11.4 Mono fallback, generalised
+- Any position can be missing. The aggregate is rebuilt with the present positions only. Missing front: the remaining front plays the fronts' mono sum. Missing rear: the front pair is unchanged and the remaining rear plays the rear mono sum. Only one speaker left: it plays the full mono sum. All gone: idle and restore output (4c). Returning speakers (matched by UID) rebuild back to quad. 50 ms fades on every rebuild.
+
+### 11.5 Spatial: multichannel input
+- The Domine virtual output driver can advertise a 5.1 or 7.1 layout (`kAudioDevicePropertyPreferredChannelLayout`), so macOS renders spatial content (Apple Music spatial audio, movies) to discrete channels. The process tap then delivers multichannel audio and the kernel maps it: FL, FR direct; SL/BL to RL, SR/BR to RR; center split to both fronts at -3 dB; LFE mixed into the fronts after bass management (low-pass the LFE and the sub-100 Hz content of the others).
+- Verify on hardware: whether the tap delivers more than two channels when the default output is multichannel, and which channel order it uses.
+
+### 11.6 Spatial: stereo upmixer
+- For stereo sources: mid/side split. Direct sound (mid) stays on the fronts; side and decorrelated ambience go to the rears. Controls: "Spatial amount" (0 to 100%, 0 is mirror trim only) and "Room size" (rear delay plus gentle diffusion, all-pass chain, no allocation on the audio thread).
+- UI name is "Spatial". Do not use "Dolby" or "Atmos" anywhere in the app.
+
+### 11.7 Calibration and tuning
+- Per-speaker distance (delay) and level calibration. Auto-calibration (section 12) extends to four positions, one click per speaker. Settings persist per set of four speakers (key: the four UIDs sorted).
+
+### 11.8 UI
+- Stereo / Quad control. Quad enables when four distinct outputs are assigned. Rear cards open the Choose Speaker sheet. Until phase 2, choosing Quad shows "Quad playback is not ready yet" and routing stays stereo. The status shows "Quad" only once the engine supports it.
+- Four A2DP links at once is a real bandwidth risk; test on hardware. Two Grips plus two different speakers is the likely setup.
 
 ## 12. Auto-calibration with clicks and the microphone (planned)
 
