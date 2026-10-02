@@ -408,7 +408,8 @@ final class AppModel {
     /// Selected speakers that are present, with their current device IDs.
     private var presentSpeakers: [(uid: String, id: AudioObjectID)] {
         var seen = Set<String>()
-        let uids: [String?] = surroundRouteSpeakers.map { $0.map(\.uid) } ?? [leftUID, rightUID]
+        var uids: [String?] = [leftUID, rightUID]
+        if let surround = surroundRouteSpeakers { uids = surround.map { $0.uid } }
         return uids.compactMap { uid in
             guard let uid, seen.insert(uid).inserted, let device = catalog.device(uid: uid) else { return nil }
             return (uid, device.id)

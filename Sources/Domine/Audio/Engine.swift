@@ -1304,6 +1304,12 @@ extension Engine {
         return Int32(index)
     }
 
+    /// Returns the orbit phase to 0 at the next process call (the "Reset"
+    /// next to Orbit speed, SPEC 13.3).
+    func resetOrbit() {
+        if let surround = resources.surround { domine_surround_reset_orbit(surround) }
+    }
+
     /// Linear peak per routed surround speaker in list order; 0 for one left
     /// out of this build. Empty when not routing surround.
     func surroundPeaks() -> [Float] {

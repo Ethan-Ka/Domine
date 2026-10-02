@@ -113,7 +113,21 @@ struct AggregateBuilderTests {
     }
 }
 
-struct QuadAggregateTests {
+/// N output sub-devices (SPEC 13.2).
+struct SurroundAggregateTests {
+    @Test(arguments: [3, 5, 16])
+    func subDevicesInListOrderFirstIsClock(count: Int) throws {
+        let uids = (1...count).map { "S\($0)" }
+        let d = AggregateBuilder.description(outputUIDs: uids, tapUID: "TAP", instance: UUID())
+        let subs = try #require(d[kAudioAggregateDeviceSubDeviceListKey] as? [[String: Any]])
+        #expect(subs.compactMap { $0[kAudioSubDeviceUIDKey] as? String } == uids)
+        let drift: [Int] = subs.map { $0[kAudioSubDeviceDriftCompensationKey] as? Int ?? -1 }
+        #expect(drift == [0] + Array(repeating: 1, count: count - 1))
+        #expect(d[kAudioAggregateDeviceClockDeviceKey] as? String == "S1")
+        #expect(d[kAudioAggregateDeviceIsPrivateKey] as? Int == 1)
+    }
+
+
     @Test func fourSubDevicesInOrder() throws {
         let uids = ["FL", "FR", "RL", "RR"]
         let d = AggregateBuilder.description(outputUIDs: uids, tapUID: "TAP", instance: UUID())
