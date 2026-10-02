@@ -122,7 +122,7 @@ Before building the tap path, validate that two Bluetooth speakers can stay in s
 - The exclusion list changes at runtime; rebuild the tap when it changes or when an excluded app launches or quits. A rebuild causes a short gap, so debounce changes by about 500 ms.
 - Default suggestions on first open: FaceTime, zoom.us, Microsoft Teams, Discord. None are excluded until the user adds them.
 
-Open issue: when the virtual output device (section 3.3) is the default output, excluded apps play into a null sink and are silent. Options to decide later: keep the excluded-apps device as the default output whenever exclusions are active (losing native volume keys while they are), route excluded processes to that device with a second, per-process tap and aggregate, or have the driver pass audio through to a real device.
+Decision (virtual output and exclusions): while any exclusion is effectively active (the resolved process set is not empty), the default output is the "Excluded apps play through" device or the saved previous output, never the virtual output and never one of the two speakers, so excluded apps are heard. When no exclusion is active, the virtual output is preferred as in section 3.3. Domine switches when the active state changes, after the 500 ms debounce above. While the virtual output is not the default, the volume keys use the event tap fallback in section 4b.
 
 ## 3a. Level meters
 

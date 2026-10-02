@@ -145,11 +145,10 @@ final class AppModel {
         volumeLink.onExternalChange = { [weak self] volume in self?.adoptHardwareVolume(volume) }
         engine.onRoutingEnded = { [weak self] in self?.engineEndedRouting() }
         let engine = engine
-        exclusionResolver.onChange = { processes in await engine.setExcludedProcesses(processes) }
-        exclusionResolver.defaultOutputIsVirtual = { [weak self] in
-            guard let hal = self?.hal, let current = try? hal.defaultOutputDevice(),
-                  let virtual = try? hal.deviceID(forUID: OutputRestorer.virtualOutputUID) else { return false }
-            return virtual != kAudioObjectUnknown && current == virtual
+        exclusionResolver.onChange = { [weak self] processes in
+            self?.outputRestorer.setExclusionsActive(!processes.isEmpty)
+            self?.syncVirtualOutput()
+            await engine.setExcludedProcesses(processes)
         }
     }
 
@@ -244,7 +243,8 @@ final class AppModel {
            catalog.device(uid: left) != nil, catalog.device(uid: right) != nil {
             do throws(OutputRestorer.Failure) {
                 try outputRestorer.prepareForRouting(
-                    pair: [left, right], playThroughUID: store.excludedAppsPlayThroughUID)
+                    pair: [left, right], playThroughUID: store.excludedAppsPlayThroughUID,
+                    exclusionsActive: !engine.excludedProcesses.isEmpty)
             } catch .noOtherOutput {
                 routingRefusal = Self.noOtherOutputMessage
                 syncWithEngine()
