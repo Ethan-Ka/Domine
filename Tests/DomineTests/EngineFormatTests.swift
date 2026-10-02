@@ -113,7 +113,19 @@ struct EngineFormatTests {
         #expect(!hal.ops.contains(.setSampleRate(uid: headphones.uid)))
     }
 
-    @Test func measuresEachDeviceClock() async throws {
+    @Test func measuresTheAggregateClockOnly() async throws {
+        await start()
+        let diagnostics = try #require(engine.diagnostics)
+        let aggregate = try #require(hal.id(forUID: hal.lastAggregateDescription?[kAudioAggregateDeviceUIDKey] as? String ?? ""))
+        diagnostics.tick()
+        diagnostics.tick()
+        // Sub-devices are not running on their own, so asking them for the
+        // current time only ever fails; only the aggregate is asked.
+        #expect(!hal.currentTimeQueries.isEmpty)
+        #expect(hal.currentTimeQueries.allSatisfy { $0 == aggregate })
+    }
+
+    @Test func measureClockReadsARunningDevice() async throws {
         var a = Self.gripA
         a.clockRate = 44_100
         hal.add(a)
@@ -121,13 +133,113 @@ struct EngineFormatTests {
         await engine.start(left: a.uid, right: Self.gripB.uid)
         let diagnostics = try #require(engine.diagnostics)
         let idA = try #require(hal.id(forUID: a.uid))
-        let idB = try #require(hal.id(forUID: Self.gripB.uid))
         hal.hostTime = 1_000
         #expect(diagnostics.measureClock(idA) == "pending")
         hal.hostTime = 1_000 + UInt64(FakeHAL.ticksPerSecond * 2)
         _ = diagnostics.measureClock(idA)
         #expect(abs((diagnostics.lastMeasuredRates[idA] ?? 0) - 44_100) < 0.5)
-        #expect(diagnostics.measureClock(idB).hasPrefix("error"))
+    }
+
+    // MARK: - Signal chain (SPEC section 4, Signal quality)
+
+    /// The Grips at 44.1 kHz, the built-in output at 48 kHz.
+    private func startAt44k(_ engine: Engine) async {
+        var a = Self.gripA, b = Self.gripB
+        a.sampleRate = 44_100
+        a.availableSampleRates = [44_100...44_100]
+        b.sampleRate = 44_100
+        b.availableSampleRates = [44_100...44_100]
+        var builtIn = Self.speakers
+        builtIn.sampleRate = 48_000
+        hal.add(a)
+        hal.add(b)
+        hal.add(builtIn)
+        hal.setDefault(uid: builtIn.uid)
+        await engine.start(left: a.uid, right: b.uid)
+    }
+
+    private var tapCreates: Int {
+        hal.ops.filter { if case .createTap = $0 { true } else { false } }.count
+    }
+
+    @Test func matchedRatesLogNoConversion() async throws {
+        await startAt44k(engine)
+        let chain = try #require(engine.signalChain)
+        #expect(chain.isConversionFree)
+        #expect(chain.tapRate == 44_100)
+        #expect(chain.aggregateRate == 44_100)
+        #expect(chain.sourceRate == 44_100)
+        #expect(chain.speakers.map(\.rate) == [44_100, 44_100])
+        #expect(chain.summary.hasSuffix(": no sample-rate conversion"))
+    }
+
+    @Test func waitsForTheDefaultOutputRateBeforeCreatingTheTap() async throws {
+        hal.rateSettleReads = 3
+        await startAt44k(engine)
+        #expect(engine.state == .running)
+        #expect(tapCreates == 1)
+        #expect(engine.inputFormat?.sampleRate == 44_100)
+        #expect(try #require(engine.signalChain).isConversionFree)
+    }
+
+    @Test func staleTapIsRebuiltOnceAtTheNewRate() async throws {
+        hal.staleTaps = 1
+        await startAt44k(engine)
+        #expect(engine.state == .running)
+        #expect(tapCreates == 2)
+        #expect(hal.liveTapCount == 1)
+        let creates = hal.ops.enumerated().filter { if case .createTap = $0.element { true } else { false } }.map(\.offset)
+        #expect(hal.ops[creates[0] + 1] == .destroyTap)
+        #expect(engine.inputFormat?.sampleRate == 44_100)
+        #expect(try #require(engine.signalChain).isConversionFree)
+    }
+
+    @Test func tapIsRebuiltOnlyOnce() async throws {
+        hal.staleTaps = 2
+        await startAt44k(engine)
+        #expect(engine.state == .running)
+        #expect(tapCreates == 2)
+        let chain = try #require(engine.signalChain)
+        #expect(chain.tapRate == 48_000)
+        #expect(chain.conversions == [
+            "tap capture (default output 44100 Hz, tap 48000 Hz)",
+            "aggregate input (tap 48000 Hz to 44100 Hz)",
+        ])
+    }
+
+    @Test func rateThatNeverSettlesStillStartsAndReportsTheConversion() async throws {
+        let engine = Engine(hal: hal, layoutAttempts: 3, layoutRetryDelay: .zero,
+                            diagnosticsInterval: .seconds(3600), formatCheckDelay: .seconds(3600),
+                            rateSettleAttempts: 5, rateSettlePoll: .zero)
+        hal.rateSettleReads = 1_000
+        await startAt44k(engine)
+        #expect(engine.state == .running)
+        let chain = try #require(engine.signalChain)
+        #expect(chain.tapRate == 48_000)
+        #expect(chain.summary.contains("SRC at aggregate input (tap 48000 Hz to 44100 Hz)"))
+        engine.stop()
+    }
+
+    @Test func unsupportedDefaultRateIsNotRebuilt() async throws {
+        var odd = Self.speakers
+        odd.availableSampleRates = [44_100...44_100]
+        await start(defaultOutput: odd)
+        #expect(engine.state == .running)
+        #expect(tapCreates == 1)
+        let chain = try #require(engine.signalChain)
+        #expect(chain.conversions == ["aggregate input (tap 44100 Hz to 48000 Hz)"])
+    }
+
+    @Test func mixedSpeakerRatesReportTheConvertedSpeaker() async throws {
+        var b = Self.gripB
+        b.sampleRate = 44_100
+        hal.add(Self.gripA)
+        hal.add(b)
+        hal.add(Self.speakers)
+        hal.setDefault(uid: Self.speakers.uid)
+        await engine.start(left: Self.gripA.uid, right: b.uid)
+        let chain = try #require(engine.signalChain)
+        #expect(chain.conversions == ["Device B (48000 Hz to 44100 Hz)"])
     }
 
     @Test func formatChangeWhileRunningRebuilds() async {

@@ -95,6 +95,20 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
     var tapSampleRate: Double = 48_000
     /// Makes the tap's (and the aggregate's tap streams') format non-interleaved.
     var tapNonInterleaved = false
+    /// After a nominal rate write, this many reads of that device's rate
+    /// still return the old rate, like the real HAL applying it a moment
+    /// later. Until then taps also follow the old rate.
+    var rateSettleReads = 0
+    /// This many taps created next keep the default output's rate from
+    /// before its last rate write, for their whole life, as if created
+    /// before the change reached them.
+    var staleTaps = 0
+    private var pendingRates: [AudioObjectID: (rate: Double, readsLeft: Int)] = [:]
+    private var previousRates: [AudioObjectID: Double] = [:]
+    private var staleTapRates: [AudioObjectID: Double] = [:]
+    private var _currentTimeQueries: [AudioObjectID] = []
+    /// Every device `currentTime` was asked about, in order.
+    var currentTimeQueries: [AudioObjectID] { lock.withLock { _currentTimeQueries } }
 
     // MARK: - Test controls
 
@@ -272,7 +286,18 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
     }
 
     func nominalSampleRate(of device: AudioObjectID) throws(HALError) -> Double {
-        try self.device(device, kAudioDevicePropertyNominalSampleRate).sampleRate
+        _ = try self.device(device, kAudioDevicePropertyNominalSampleRate)
+        return lock.withLock {
+            if let pending = pendingRates[device] {
+                if pending.readsLeft > 0 {
+                    pendingRates[device] = (pending.rate, pending.readsLeft - 1)
+                } else {
+                    pendingRates[device] = nil
+                    devices[device]?.sampleRate = pending.rate
+                }
+            }
+            return devices[device]?.sampleRate ?? 0
+        }
     }
 
     func outputLatency(of device: AudioObjectID) throws(HALError) -> DeviceLatency {
@@ -300,6 +325,7 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
     /// not running when the device has no `clockRate`.
     func currentTime(of device: AudioObjectID) throws(HALError) -> AudioTimeStamp {
         let d = try self.device(device, 0)
+        lock.withLock { _currentTimeQueries.append(device) }
         guard let rate = d.clockRate else {
             throw HALError(kAudioHardwareNotRunningError, "AudioDeviceGetCurrentTime")
         }
@@ -325,13 +351,24 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
         let channels = try streamChannels(of: device, scope: scope)
         let d = try self.device(device, kAudioStreamPropertyVirtualFormat)
         let tapStreams = scope == .input && lock.withLock { aggregates[device] != nil }
-        let rate = tapStreams ? currentTapRate : d.sampleRate
+        let rate = tapStreams ? lock.withLock { aggregateTapRate(device) } : d.sampleRate
         return channels.map { Self.format(rate: rate, channels: $0, nonInterleaved: tapStreams && tapNonInterleaved) }
     }
 
-    /// The tap follows the default output's nominal rate.
-    var currentTapRate: Double {
-        lock.withLock { devices[defaultOutput]?.sampleRate ?? tapSampleRate }
+    /// The rate of a tap: stale if it was created stale, else the default
+    /// output's. Call with the lock held.
+    private func tapRate(_ tap: AudioObjectID) -> Double {
+        staleTapRates[tap] ?? devices[defaultOutput]?.sampleRate ?? tapSampleRate
+    }
+
+    /// The rate of the first tap in an aggregate. Call with the lock held.
+    private func aggregateTapRate(_ aggregate: AudioObjectID) -> Double {
+        let uid = (aggregates[aggregate]?[kAudioAggregateDeviceTapListKey] as? [[String: Any]])?
+            .first?[kAudioSubTapUIDKey] as? String
+        guard let tap = taps.first(where: { $0.value == uid })?.key else {
+            return devices[defaultOutput]?.sampleRate ?? tapSampleRate
+        }
+        return tapRate(tap)
     }
 
     static func format(rate: Double, channels: Int, nonInterleaved: Bool) -> AudioStreamBasicDescription {
@@ -349,7 +386,12 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
         try locked { () throws(HALError) in
             _ops.append(.setSampleRate(uid: d.uid))
             try fail(.setSampleRate, "AudioObjectSetPropertyData", selector: kAudioDevicePropertyNominalSampleRate)
-            devices[device]?.sampleRate = rate
+            previousRates[device] = d.sampleRate
+            if rateSettleReads > 0 {
+                pendingRates[device] = (rate, rateSettleReads)
+            } else {
+                devices[device]?.sampleRate = rate
+            }
         }
     }
 
@@ -419,6 +461,10 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
             nextID += 1
             let uid = "tap-\(id)"
             taps[id] = uid
+            if staleTaps > 0 {
+                staleTaps -= 1
+                staleTapRates[id] = previousRates[defaultOutput] ?? tapRate(id)
+            }
             return ProcessTap(id: id, uid: uid)
         }
     }
@@ -435,8 +481,7 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
     func tapFormat(of tap: AudioObjectID) throws(HALError) -> AudioStreamBasicDescription {
         try locked { () throws(HALError) -> AudioStreamBasicDescription in
             try fail(.tapFormat, "AudioObjectGetPropertyData", selector: kAudioTapPropertyFormat)
-            let rate = devices[defaultOutput]?.sampleRate ?? tapSampleRate
-            return Self.format(rate: rate, channels: 2, nonInterleaved: tapNonInterleaved)
+            return Self.format(rate: tapRate(tap), channels: 2, nonInterleaved: tapNonInterleaved)
         }
     }
 

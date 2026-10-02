@@ -6,10 +6,13 @@ import os
 /// Owns the tap, the private aggregate, the IOProc, and the render kernel
 /// (SPEC sections 3.2 and 7).
 ///
-/// Start: validate devices, match rates (speakers keep their own; see matchSpeakerRates), create the tap, create
-/// the aggregate, read its stream layout, create the kernel and store the
-/// layout in it, create the IOProc, start the device. Any failure unwinds
-/// what was created, in reverse, and ends in `.error`.
+/// Start: validate devices, match rates (speakers keep their own; see
+/// matchSpeakerRates), set the default output to Device A's rate and wait for
+/// it to take effect, create the tap (rebuilt once if it still came up at the
+/// old rate), create the aggregate, read its stream layout, create the kernel
+/// and store the layout in it, create the IOProc, start the device, log the
+/// signal chain. Any failure unwinds what was created, in reverse, and ends
+/// in `.error`.
 /// Stop: stop the device, destroy the IOProc, the aggregate, the tap, and
 /// last the kernel, once no IOProc can call into it.
 @MainActor
@@ -80,6 +83,9 @@ final class Engine {
 
     /// The tap stream format the kernel was told about at the last start.
     private(set) var inputFormat: InputFormat?
+    /// The sample rates along the path at the last start (SPEC section 4,
+    /// Signal quality).
+    private(set) var signalChain: SignalChain?
     /// The running diagnostics, for tests.
     var diagnostics: EngineDiagnostics? { resources.diagnostics }
 
@@ -102,6 +108,8 @@ final class Engine {
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private let diagnosticsInterval: Duration
     @ObservationIgnored private let formatCheckDelay: Duration
+    @ObservationIgnored private let rateSettleAttempts: Int
+    @ObservationIgnored private let rateSettlePoll: Duration
     @ObservationIgnored private var speakers: (left: String, right: String)?
     @ObservationIgnored private var formatCheck: Task<Void, Never>?
     /// Rebuilds in a row caused by format changes; capped so a flapping
@@ -110,15 +118,20 @@ final class Engine {
     static let maxFormatRebuilds = 3
 
     /// The aggregate may publish its streams a moment after creation, so the
-    /// layout read is retried up to `layoutAttempts` times.
+    /// layout read is retried up to `layoutAttempts` times. A new default
+    /// output rate is polled for up to `rateSettleAttempts` times,
+    /// `rateSettlePoll` apart (1 s in all by default).
     init(hal: any AudioHAL, layoutAttempts: Int = 10, layoutRetryDelay: Duration = .milliseconds(50),
-         diagnosticsInterval: Duration = .seconds(2), formatCheckDelay: Duration = .milliseconds(300)) {
+         diagnosticsInterval: Duration = .seconds(2), formatCheckDelay: Duration = .milliseconds(300),
+         rateSettleAttempts: Int = 100, rateSettlePoll: Duration = .milliseconds(10)) {
         self.hal = hal
         self.taps = TapController(hal: hal)
         self.layoutAttempts = max(1, layoutAttempts)
         self.layoutRetryDelay = layoutRetryDelay
         self.diagnosticsInterval = diagnosticsInterval
         self.formatCheckDelay = formatCheckDelay
+        self.rateSettleAttempts = max(1, rateSettleAttempts)
+        self.rateSettlePoll = rateSettlePoll
     }
 
     // MARK: - Start and stop
@@ -151,8 +164,17 @@ final class Engine {
             let a = try inspect(uid: uidA, id: idA)
             let b = try inspect(uid: uidB, id: idB)
             matchSpeakerRates(a: a, b: b)
-            matchDefaultOutputRate(a: a, b: b)
-            try createTapAndAggregate(a: a, b: b)
+            let targetRate = try? hal.nominalSampleRate(of: a.id)
+            if let targetRate, matchDefaultOutputRate(a: a, b: b, target: targetRate) {
+                // The tap takes the default output's rate when it is created,
+                // so wait for the new rate before creating it.
+                if !(await waitForDefaultOutputRate(targetRate)) {
+                    Self.log.warning("Default output did not report \(targetRate, privacy: .public) Hz within the wait; creating the tap anyway")
+                }
+                guard current == generation else { return }
+            }
+            guard try await createTap(expectedRate: targetRate, generation: current) else { return }
+            try createAggregate(a: a, b: b)
             guard let layout = try await readLayout(a: a, b: b, generation: current),
                   current == generation else { return }
             try startIO(layout: layout)
@@ -160,6 +182,7 @@ final class Engine {
             speakers = (uidA, uidB)
             state = .running
             Self.log.info("Running: A \(a.uid, privacy: .public), B \(b.uid, privacy: .public), layout \(String(describing: layout), privacy: .public)")
+            logSignalChain(a: a, b: b)
             startDiagnostics(a: a, b: b)
             watchFormat()
         } catch {
@@ -230,12 +253,38 @@ final class Engine {
         }
     }
 
-    private func createTapAndAggregate(a: SubDevice, b: SubDevice) throws(EngineError) {
-        let tap = try taps.create(alsoExcluding: excludedProcesses)
+    /// Creates the tap and checks it delivers `expectedRate` (the aggregate's
+    /// rate). If not, and the default output is at (or was set to) that
+    /// rate, waits for the rate to settle and rebuilds the tap once, so the
+    /// aggregate does not have to convert it. Returns false if a stop
+    /// arrived while waiting.
+    private func createTap(expectedRate: Double?, generation current: Int) async throws(EngineError) -> Bool {
+        var tap = try taps.create(alsoExcluding: excludedProcesses)
         resources.tap = tap
-        let format = try EngineError.hal { () throws(HALError) in try hal.tapFormat(of: tap.id) }
+        var format = try EngineError.hal { () throws(HALError) in try hal.tapFormat(of: tap.id) }
         Self.log.info("Tap \(tap.uid, privacy: .public): \(format.mChannelsPerFrame) ch at \(format.mSampleRate) Hz")
+        if let expectedRate, format.mSampleRate != expectedRate,
+           resources.defaultRateRestore != nil || defaultOutputRate() == expectedRate {
+            Self.log.info("Tap came up at \(format.mSampleRate, privacy: .public) Hz, not \(expectedRate, privacy: .public) Hz; rebuilding it once the default output settles")
+            _ = await waitForDefaultOutputRate(expectedRate)
+            guard current == generation else { return false }
+            format = try EngineError.hal { () throws(HALError) in try hal.tapFormat(of: tap.id) }
+            if format.mSampleRate != expectedRate {
+                let old = tap
+                resources.tap = nil
+                try EngineError.hal { () throws(HALError) in try taps.destroy(old) }
+                tap = try taps.create(alsoExcluding: excludedProcesses)
+                resources.tap = tap
+                format = try EngineError.hal { () throws(HALError) in try hal.tapFormat(of: tap.id) }
+                Self.log.info("Rebuilt tap \(tap.uid, privacy: .public): \(format.mChannelsPerFrame) ch at \(format.mSampleRate) Hz")
+            }
+        }
         resources.tapFormat = format
+        return true
+    }
+
+    private func createAggregate(a: SubDevice, b: SubDevice) throws(EngineError) {
+        guard let tap = resources.tap else { throw .kernelUnavailable }
         let description = AggregateBuilder.description(uidA: a.uid, uidB: b.uid, tapUID: tap.uid)
         EngineDiagnostics.logAggregateDescription(description)
         resources.aggregate = try EngineError.hal { () throws(HALError) in
@@ -281,9 +330,6 @@ final class Engine {
         let format = tapStreamFormat(aggregate: aggregate, layout: layout)
         domine_kernel_set_input_format(kernel, format.channels, format.nonInterleaved ? 1 : 0)
         inputFormat = format
-        if format.sampleRate != rate {
-            Self.log.warning("Tap delivers \(format.sampleRate, privacy: .public) Hz but the aggregate runs at \(rate, privacy: .public) Hz; relying on tap drift compensation")
-        }
         applyControls()
 
         let proc = try EngineError.hal { () throws(HALError) in
@@ -328,28 +374,78 @@ final class Engine {
     }
 
     /// The tap follows the system default output's rate. If that device is
-    /// not one of the speakers and runs at another rate than Device A, set it
-    /// to Device A's rate when it supports it, and remember the old rate.
-    private func matchDefaultOutputRate(a: SubDevice, b: SubDevice) {
+    /// not one of the speakers and runs at another rate than Device A
+    /// (`target`), set it to `target` when it supports it, and remember the
+    /// old rate. Returns whether it set the rate.
+    private func matchDefaultOutputRate(a: SubDevice, b: SubDevice, target: Double) -> Bool {
         do throws(HALError) {
-            let target = try hal.nominalSampleRate(of: a.id)
             let device = try hal.defaultOutputDevice()
-            guard device != kAudioObjectUnknown, device != a.id, device != b.id else { return }
+            guard device != kAudioObjectUnknown, device != a.id, device != b.id else { return false }
             // Never set a Bluetooth device's rate (see matchSpeakerRates).
-            guard !OutputDevice.isBluetooth(transportType: try hal.transportType(of: device)) else { return }
+            guard !OutputDevice.isBluetooth(transportType: try hal.transportType(of: device)) else { return false }
             let uid = try hal.uid(of: device)
             let current = try hal.nominalSampleRate(of: device)
-            guard current != target else { return }
+            guard current != target else { return false }
             let available = try hal.availableNominalSampleRates(of: device)
             guard available.contains(where: { $0.contains(target) }) else {
                 Self.log.warning("Default output \(uid, privacy: .public) runs at \(current, privacy: .public) Hz and does not support \(target, privacy: .public) Hz; relying on tap drift compensation")
-                return
+                return false
             }
             try hal.setNominalSampleRate(target, of: device)
             resources.defaultRateRestore = (uid, current)
             Self.log.info("Default output \(uid, privacy: .public) set from \(current, privacy: .public) Hz to \(target, privacy: .public) Hz to match the speakers")
+            return true
         } catch {
             Self.log.warning("Could not match the default output's rate: \(error.description, privacy: .public)")
+            return false
+        }
+    }
+
+    /// The default output's nominal rate, or nil if there is none or the
+    /// read failed.
+    private func defaultOutputRate() -> Double? {
+        do throws(HALError) {
+            let device = try hal.defaultOutputDevice()
+            guard device != kAudioObjectUnknown else { return nil }
+            return try hal.nominalSampleRate(of: device)
+        } catch {
+            Self.log.warning("Could not read the default output's rate: \(error.description, privacy: .public)")
+            return nil
+        }
+    }
+
+    /// Polls the default output's nominal rate until it reads `rate`, up to
+    /// `rateSettleAttempts` reads `rateSettlePoll` apart. Returns whether it
+    /// did. A rate change takes effect in the HAL a few ms after the write.
+    private func waitForDefaultOutputRate(_ rate: Double) async -> Bool {
+        for attempt in 1...rateSettleAttempts {
+            if defaultOutputRate() == rate {
+                if attempt > 1 {
+                    Self.log.info("Default output reports \(rate, privacy: .public) Hz after \(attempt, privacy: .public) reads")
+                }
+                return true
+            }
+            if attempt < rateSettleAttempts { try? await Task.sleep(for: rateSettlePoll) }
+        }
+        return false
+    }
+
+    /// Logs the rate at every stage and whether any of them converts.
+    private func logSignalChain(a: SubDevice, b: SubDevice) {
+        guard let rate = kernelSampleRate, let tapRate = resources.tapFormat?.mSampleRate else { return }
+        let chain = SignalChain(
+            sourceUID: currentDefaultOutputUID(),
+            sourceRate: defaultOutputRate(),
+            tapRate: tapRate,
+            aggregateRate: rate,
+            speakers: [("A", a), ("B", b)].map { label, device in
+                SignalChain.Speaker(label: label, uid: device.uid, rate: try? hal.nominalSampleRate(of: device.id))
+            })
+        signalChain = chain
+        if chain.isConversionFree {
+            Self.log.info("Signal chain: \(chain.summary, privacy: .public)")
+        } else {
+            Self.log.warning("Signal chain: \(chain.summary, privacy: .public)")
         }
     }
 

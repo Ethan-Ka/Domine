@@ -79,6 +79,35 @@ struct AggregateBuilderTests {
         #expect(kAudioAggregateDriftCompensationMaxQuality == 0x7F)
     }
 
+    /// Every member that is drift compensated, under every clock choice,
+    /// resamples at the highest quality, and the clock device is never
+    /// resampled at all (SPEC section 4, Signal quality).
+    @Test(arguments: [
+        AggregateClock.leftSpeaker, .device(uid: "B:output"), .device(uid: "com.ethankawley.Domine.VirtualOutput"),
+    ])
+    func driftCompensationIsAlwaysMaxQuality(clock: AggregateClock) {
+        #expect(AggregateBuilder.driftQuality == Int(kAudioAggregateDriftCompensationMaxQuality))
+        let description = AggregateBuilder.description(uidA: "A:output", uidB: "B:output", tapUID: "TAP", clock: clock)
+        let clockUID = description[kAudioAggregateDeviceClockDeviceKey] as? String
+        let subs = description[kAudioAggregateDeviceSubDeviceListKey] as? [[String: Any]] ?? []
+        let taps = description[kAudioAggregateDeviceTapListKey] as? [[String: Any]] ?? []
+        #expect(subs.count == 2)
+        #expect(taps.count == 1)
+        for sub in subs {
+            let drift = sub[kAudioSubDeviceDriftCompensationKey] as? Int
+            if sub[kAudioSubDeviceUIDKey] as? String == clockUID {
+                #expect(drift == 0)
+            } else {
+                #expect(drift == 1)
+                #expect(sub[kAudioSubDeviceDriftCompensationQualityKey] as? Int == 0x7F)
+            }
+        }
+        for tap in taps {
+            #expect(tap[kAudioSubTapDriftCompensationKey] as? Int == 1)
+            #expect(tap[kAudioSubTapDriftCompensationQualityKey] as? Int == 0x7F)
+        }
+    }
+
     @Test func uidUsesDominePrefix() {
         #expect(AggregateBuilder.uid(instance: Self.instance).hasPrefix(DeviceCatalog.domineUIDPrefix))
     }

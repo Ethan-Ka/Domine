@@ -68,7 +68,9 @@ void domine_kernel_destroy(DomineKernel *_Nullable k);
 
 /// Per-position trim gains, linear. leftGain scales position A, rightGain
 /// scales position B, after any swap. Default 1.0 each. Non-finite or
-/// negative values are stored as 0.
+/// negative values are stored as 0, and values above 1.0 as 1.0: the kernel
+/// never adds gain. At exactly 1.0 the sample is copied, not multiplied, so
+/// program audio passes bit for bit (see domine_kernel_process).
 void domine_kernel_set_gains(DomineKernel *k, float leftGain, float rightGain);
 
 /// Signed delay offset in milliseconds, clamped to +-300 ms.
@@ -157,6 +159,13 @@ void domine_kernel_set_muted(DomineKernel *k, int muted);
 ///     Exactly `frames` input frames pass through the same input FIFO the
 ///     IOProc uses, so with an empty FIFO the output lines up with the input.
 ///     Does not record stats.
+///
+/// Transparency: with gains 1.0, delay 0, swapSides 0, monoFallback 0, the
+/// tone and click test off and their fades finished, and the mute fade at
+/// full gain, every output sample on each of a position's channels is
+/// bit-identical to its input sample (L on A, R on B). Samples above 1.0 in
+/// magnitude pass unchanged: there is no clipper on program audio, and no
+/// dither (float32 throughout).
 void domine_kernel_process(DomineKernel *k,
                            const AudioBufferList *_Nullable in,
                            AudioBufferList *_Nullable out,
