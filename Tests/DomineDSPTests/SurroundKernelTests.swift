@@ -10,7 +10,7 @@ struct SurroundKernelTests {
     static let right: [Float] = [-0.5, 0.25, -1.0, 0.5, 1.0, -0.75, 0.5, 0.125]
     static let frames = left.count
 
-    static func make(_ sampleRate: Double = 48000, _ azimuths: [Float]) -> OpaquePointer {
+    static func make(_ azimuths: [Float], sampleRate: Double = 48000) -> OpaquePointer {
         let s = domine_surround_create(sampleRate, 512)!
         azimuths.withUnsafeBufferPointer { domine_surround_set_speakers(s, UInt32(azimuths.count), $0.baseAddress) }
         return s
@@ -145,7 +145,7 @@ struct SurroundKernelTests {
     // MARK: Gain, mute, orbit, headroom
 
     @Test func gainRampsOverThirtyMilliseconds() {
-        let s = Self.make(1000, [-30, 30])
+        let s = Self.make([-30, 30], sampleRate: 1000)
         defer { domine_surround_destroy(s) }
         let ones = [Float](repeating: 1, count: 60)
         _ = Self.run(s, offsets: [0, 2], left: ones, right: ones, buffers: [4])
@@ -159,7 +159,7 @@ struct SurroundKernelTests {
     }
 
     @Test func muteFadesOverFiftyMilliseconds() {
-        let s = Self.make(1000, [-30, 30])
+        let s = Self.make([-30, 30], sampleRate: 1000)
         defer { domine_surround_destroy(s) }
         let ones = [Float](repeating: 1, count: 100)
         domine_surround_set_muted(s, 1)
@@ -169,7 +169,7 @@ struct SurroundKernelTests {
     }
 
     @Test func orbitMovesTheSource() {
-        let s = Self.make(1000, [0, 90, 180, -90])
+        let s = Self.make([0, 90, 180, -90], sampleRate: 1000)
         defer { domine_surround_destroy(s) }
         domine_surround_set_surround_level(s, 0)
         domine_surround_set_width(s, 90)
@@ -198,7 +198,7 @@ struct SurroundKernelTests {
     // MARK: Demo, test tone, click test
 
     @Test func demoStartsReportsAndStops() {
-        let s = Self.make(8000, [-45, 45, -135, 135])
+        let s = Self.make([-45, 45, -135, 135], sampleRate: 8000)
         defer { domine_surround_destroy(s) }
         domine_surround_set_surround_level(s, 0)
         let quarter = [Float](repeating: 0.25, count: 500)
@@ -221,7 +221,7 @@ struct SurroundKernelTests {
     }
 
     @Test func testToneReplacesProgramOnOneSpeaker() {
-        let s = Self.make(1000, [-30, 30])
+        let s = Self.make([-30, 30], sampleRate: 1000)
         defer { domine_surround_destroy(s) }
         domine_surround_set_gain(s, 1, 0.5) // ignored by the tone
         let ones = [Float](repeating: 1, count: 100)
@@ -242,7 +242,7 @@ struct SurroundKernelTests {
 
     @Test func clickTestUsesGainAndDelay() {
         let sr = 8000.0
-        let s = Self.make(sr, [-30, 30])
+        let s = Self.make([-30, 30], sampleRate: sr)
         defer { domine_surround_destroy(s) }
         domine_surround_set_gain(s, 0, 0.5)
         domine_surround_set_delay_ms(s, 1, 1) // 8 samples
