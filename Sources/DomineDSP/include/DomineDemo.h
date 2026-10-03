@@ -14,12 +14,14 @@
 //   g_k = (1 - omni) * vbap_k + omni / sqrt(N)
 //
 // Grid: 120 BPM (beat 0.5 s, bar 2 s). Every section starts on a downbeat.
+// Key: D natural minor (D E F G A Bb C), equal temperament from A4 = 440 Hz,
+// tonic D2 = 73.42 Hz. Every pitched sound uses only scale tones.
 // Roll-call order: speakers sorted clockwise starting from the one nearest
 // hard left, by key fmod(az + 90 + 360, 360) ascending (ties keep input order).
 //
 // Timeline (seconds; R is the Calibration length; total R + 41):
-//   0-R       Calibration (section ROLL_CALL). Soft 3.5 kHz ticks on every
-//             beat, centred, and a dark drone fading in. From 2 s, the roll
+//   0-R       Calibration (section ROLL_CALL). Soft A6 ticks on every beat,
+//             centred, and a dark Dm drone fading in. From 2 s, the roll
 //             call: exactly one hit per speaker per round, in roll-call order,
 //             each kick exactly on its speaker's azimuth:
 //               N <= 2: a double hit per speaker ("da-dum", second hit 0.25 s
@@ -31,43 +33,50 @@
 //             N <= 4 and N > 8, 8 s for N = 5 and 6, 10 s for N = 7 and 8.
 //   R+0-6     Left and right (PING_PONG): kicks alternate -90 and +90, first
 //             on the left: quarter notes for a bar, eighths for a bar, then
-//             sixteenths for 3 beats (getting louder), over a sub pulse on
+//             sixteenths for 3 beats (getting louder), over a D2 sub pulse on
 //             every beat (omni). The sweep tone fades in at -90 on the last
 //             beat.
-//   R+6-12    Sweep: a tone (220 Hz rising a whole tone per pass) plus
-//             band-passed noise flies across the room 6 times, clockwise
-//             from -90 (front, then back, ...), each pass faster: 2, 1.5, 1,
-//             0.75, 0.5, 0.25 s. Doppler-like bend in each pass: pitch above
-//             the base while approaching, falling through it as it passes the
-//             middle, below it while receding (sin(2 pi u), depth grows with
-//             speed). It ends at +90 and decays there.
-//   R+12-22   Orbit: a smooth bass (polyBLEP saws at 55 and 110.5 Hz plus a
-//             55 Hz sine, resonant low-pass wobbling 250-700 Hz at 1 Hz,
-//             tanh) fades in at +90 where the sweep ended and circles
-//             clockwise; speed rises 0.25 to 0.6 turns per second. A kick
-//             every 2 beats on the bass's azimuth; off-beat hats on the
+//   R+6-12    Sweep: a tone plus band-passed noise flies across the room 6
+//             times, clockwise from -90 (front, then back, ...), each pass
+//             faster: 2, 1.5, 1, 0.75, 0.5, 0.25 s. Each pass glides one scale
+//             step up through D3 F3 G3 A3 C4 D4 F4, starting and ending on a
+//             scale tone, with a Doppler-like bend on top (sin(2 pi u), above
+//             pitch approaching, below receding, depth grows with speed). It
+//             ends at +90.
+//   R+12-22   Orbit: a smooth bass (polyBLEP saws at the root and an octave up
+//             plus a sine at the root, resonant low-pass wobbling 250-700 Hz
+//             at 1 Hz, tanh) fades in at +90 and circles clockwise; speed rises
+//             0.25 to 0.6 turns per second. Progression, one chord per bar:
+//             Dm Bb F C Dm (bass roots D2 Bb1 F2 C2 D2; the drone follows). A
+//             kick every 2 beats on the bass's azimuth; off-beat hats on the
 //             mirror path (-bass azimuth) from R+14.
-//   R+22-32   Swell: the drone becomes a wide chord of 12 detuned partials
-//             (A, E, C#, B across 110 to 660 Hz) split between two voices
-//             that spread from the centre to -90 and +90 and toward every
-//             speaker (omni to 0.5), rising a fifth in pitch, getting
-//             brighter and louder, with a deep sub (55 Hz and harmonics)
-//             growing under it. The bass fades out over the first 6 s.
-//             Bright pings (1.7 to 4.4 kHz) sweep back and forth across the
-//             top from R+24. Everything cuts with a 30 ms fade at R+32.
+//   R+22-32   Swell: the drone opens into a brass-like chord: 12 detuned
+//             polyBLEP saws voiced over three octaves (root, fifth, octave,
+//             third, fifth, two octaves, third, fifth, three octaves; D2 to D5
+//             for Dm) through a low-pass opening 280 Hz to 4.5 kHz, split
+//             between two voices that spread from the centre to -90 and +90
+//             and toward every speaker (omni to 0.5). One chord per bar: Dm,
+//             Bb, Gm, Asus4, A. A slow crescendo (mostly in the last bars), a
+//             deep sub on the chord root growing under it, and a timpani-like
+//             tom on every chord change (a fifth falling to the root, omni
+//             0.6). The bass follows the chords and fades out over 6 s. Bright
+//             pings on chord tones sweep across the top from R+24, and a noise
+//             riser climbs through the last 2 bars. Everything cuts with a
+//             30 ms fade at R+32.
 //   R+32-33   Silence: every voice exactly 0.
-//   R+33-41   Impact (DROP): a clean kick (200 to 65 Hz) and a sub boom (50
-//             to 41 Hz, saturated) on every speaker, a wide noise burst whose
-//             low-pass falls from 10 kHz to 200 Hz, and the chord back on its
-//             root, all decaying to exactly 0 by R+41. Then FINISHED.
+//   R+33-41   Impact (DROP): a clean kick (A3 to D2), a sub boom (A1 to D1,
+//             saturated) on every speaker, a wide noise burst whose low-pass
+//             falls from 10 kHz to 200 Hz, and a big D minor chord (same
+//             voicing, filter closing slowly) sustaining with a slow fade, all
+//             decaying to exactly 0 by R+41. Then FINISHED.
 //
-// Kick: saturated sine (tanh) with pitch falling 240 to 80 Hz (tau 30 ms),
+// Kick: saturated sine (tanh) with pitch falling A3 to D2 (tau 30 ms),
 // amplitude exp(-t / 90 ms), 1 ms attack, 20 ms cosine fade to 0 at 220 ms,
-// plus a beater layer (3.2 kHz sine, tau 6 ms, 0.22, and a noise tick, tau
+// plus a beater layer (D7 sine, tau 6 ms, 0.22, and a noise tick, tau
 // 2.5 ms, 0.12) so it reads clearly on small speakers. Kicks duck the drone
 // and the bass (sidechain, recovers with tau 160 ms). On small speakers
 // (Grips roll off below about 70 Hz) the weight comes from 80 to 300 Hz
-// harmonics; the 41 to 55 Hz parts are for larger speakers.
+// harmonics; the parts below 70 Hz are for larger speakers.
 //
 // Voices: 0 and 1 kicks (alternating so a tail is never cut), 2 bass, 3 sub
 // (pulses, swell sub, boom), 4 and 5 chord (drone, swell, impact), 6 ticks,
@@ -128,7 +137,8 @@ typedef struct {
     float kickOmni[2];
     float kickGain[2];
     int kickActive[2];
-    int kickImpact[2];
+    int kickImpact[2];      // 1 impact, 2 tom
+    float kickTomHz[2];
     int nextKick;
     int lastKick;
     uint64_t nextHit;
@@ -148,6 +158,7 @@ typedef struct {
     int pulseActive;
     // Chord.
     double chordPhase[DOMINE_DEMO_CHORD_PARTIALS];
+    float chordLp[2][2];
     // Sweep.
     double sweepPhase;
     float sweepAz;

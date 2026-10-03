@@ -208,12 +208,13 @@ static void test_sweep(void) {
         }
         prevAz = v[7].azimuth;
         CHECK(domine_demo_focus_azimuth(&d) == v[7].azimuth);
-        // Doppler in the first pass (12 to 14 s, base 220 Hz rising): above
+        // Doppler in the first pass (12 to 14 s, D3 gliding to F3): above
         // the base at a quarter of the pass, below it at three quarters.
         double inc = d.sweepPhase - prevPhase;
         if (inc < 0.0) inc += 1.0;
         const double hz = inc * SR;
-        const double base = 220.0 * pow(2.0, ((double)f / SR - 12.0) / 2.0 / 6.0);
+        const double u = ((double)f / SR - 12.0) / 2.0, sm = u * u * (3.0 - 2.0 * u);
+        const double base = 146.832 * pow(2.0, 3.0 * sm / 12.0); // D3 gliding to F3
         if (f == at(12.5)) bendUp = hz > base * 1.04;
         if (f == at(13.5)) bendDown = hz < base * 0.96;
         prevPhase = d.sweepPhase;
@@ -266,13 +267,18 @@ static void test_swell_silence_impact(void) {
     float az[2] = { -30.0f, 30.0f };
     domine_demo_reset(&d, SR, 2, az);
     DomineDemoVoice v[DOMINE_DEMO_VOICES];
-    int impactHits = 0, silentOk = 1, finishedOk = 1;
+    int impactHits = 0, silentOk = 1, finishedOk = 1, toms = 0;
     float subEarly = 0.0f, subLate = 0.0f, chordEarly = 0.0f, chordLate = 0.0f;
     for (uint64_t f = 0; f < at(47.0) + 1000; f++) {
         int sec = domine_demo_tick(&d, v);
         const double t = (double)f / SR;
         if (sec == DOMINE_DEMO_SECTION_SWELL) {
-            CHECK(v[0].sample == 0.0f && v[1].sample == 0.0f);
+            // Toms on each chord change (every bar), omni 0.6.
+            if (onset(&d, f)) {
+                CHECK(f == at(28.0 + 2.0 * toms));
+                CHECK(d.kickImpact[d.lastKick] == 2 && d.kickOmni[d.lastKick] == 0.6f);
+                toms++;
+            }
             if (t < 30.0) { subEarly = fmaxf(subEarly, fabsf(v[3].sample)); chordEarly = fmaxf(chordEarly, fabsf(v[4].sample)); }
             if (t > 36.5 && t < 37.9) { subLate = fmaxf(subLate, fabsf(v[3].sample)); chordLate = fmaxf(chordLate, fabsf(v[4].sample)); }
             if (f == at(28.0)) CHECK(v[4].azimuth == 0.0f && v[5].azimuth == 0.0f);
@@ -300,6 +306,7 @@ static void test_swell_silence_impact(void) {
     CHECK(silentOk);
     CHECK(finishedOk);
     CHECK(impactHits == 1);
+    CHECK(toms == 5);
     CHECK(subLate > 4.0f * subEarly && subLate > 0.15f);
     CHECK(chordLate > 2.0f * chordEarly && chordLate > 0.2f);
     CHECK_NEAR(domine_demo_seconds(&d), 47.0, 1e-9);

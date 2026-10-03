@@ -23,21 +23,21 @@
 #define X_END 41.0
 
 // Kick.
-#define KICK_F_HI 240.0
-#define KICK_F_LO 80.0
+#define KICK_F_HI 220.0      // A3
+#define KICK_F_LO 73.416     // D2
 #define KICK_PITCH_TAU 0.030
 #define KICK_ATTACK 0.001
 #define KICK_TAU 0.090
 #define KICK_LEN 0.220
 #define KICK_FADE 0.020
 #define KICK_DRIVE 1.6
-#define BEATER_HZ 3200.0
+#define BEATER_HZ 2349.32    // D7
 #define BEATER_TAU 0.006
 #define BEATER_LEVEL 0.22
 #define TICK_TAU 0.0025
 #define TICK_LEVEL 0.12
-#define IMPACT_F_HI 200.0
-#define IMPACT_F_LO 65.0
+#define IMPACT_F_HI 220.0    // A3
+#define IMPACT_F_LO 73.416   // D2
 #define IMPACT_PITCH_TAU 0.080
 #define IMPACT_TAU 0.500
 #define IMPACT_LEN 2.000
@@ -48,7 +48,6 @@
 #define DUCK_SMOOTH 0.002
 
 // Bass. |bass| <= level because the output goes through tanh.
-#define BASS_HZ 55.0
 #define BASS_DETUNE 2.009
 #define ORBIT_START_TURNS 0.25  // +90, where the sweep ends
 #define ORBIT_SPEED_START 0.25  // turns per second
@@ -63,24 +62,22 @@
 #define BASS_RELEASE 6.0        // fade out over the first 6 s of the swell
 
 // Sub.
-#define SUB_HZ 55.0
+#define SUB_HZ 73.416         // D2
 #define PULSE_TAU 0.15
 #define PULSE_LEN 0.45
 #define SWELL_SUB_LEVEL 0.26
-#define BOOM_F_HI 50.0
-#define BOOM_F_LO 41.0
+#define BOOM_F_HI 55.0        // A1
+#define BOOM_F_LO 36.708      // D1
 #define BOOM_GAIN 0.20
 #define BOOM_TAU 1.8
 
 // Chord.
 #define DRONE_LEVEL 0.08
 #define SWELL_LEVEL 0.40
-#define IMPACT_CHORD_LEVEL 0.18
-#define CHORD_RISE 1.5          // a fifth over the swell
+#define IMPACT_CHORD_LEVEL 0.24
 
 // Sweep.
 #define SWEEP_LEVEL 0.50
-#define SWEEP_HZ 220.0
 
 // Pings.
 #define HAT_HP_HZ 6000.0
@@ -128,6 +125,17 @@ static double decay_to_zero(double t, double tau, double len) {
     const double e = exp(-len / tau);
     return (exp(-t / tau) - e) / (1.0 - e);
 }
+
+// MARK: - Key: D natural minor, equal temperament from A4 = 440 Hz
+
+// Semitones from D2 (MIDI 38) to Hz.
+static double note_hz(double semis) { return 440.0 * pow(2.0, (semis + 38.0 - 69.0) / 12.0); }
+
+typedef struct { int root; int third; } Chord; // root in semitones from D2; third 3, 4 or 5 (sus4)
+static const Chord kDm = { 0, 3 }, kBb = { -4, 4 }, kF = { 3, 4 }, kC = { -2, 4 }, kGm = { -7, 3 },
+                   kAsus = { -5, 5 }, kA = { -5, 4 };
+
+static double bass_hz(double x);
 
 static double attack(double t, double len) { return t <= 0.0 ? 0.0 : (t < len ? t / len : 1.0); }
 
@@ -208,7 +216,7 @@ float domine_demo_focus_azimuth(const DomineDemo *d) {
 
 // MARK: - Hit list
 
-typedef struct { double t; int section; float az, omni, gain; int impact; } HitInfo;
+typedef struct { double t; int section; float az, omni, gain, tomHz; int impact; } HitInfo; // impact 1 impact, 2 tom
 
 // Global hit g: time (s) and parameters. Returns 0 when there is none.
 static int hit_info(const DomineDemo *d, uint32_t g, HitInfo *h) {
@@ -216,6 +224,7 @@ static int hit_info(const DomineDemo *d, uint32_t g, HitInfo *h) {
     const uint32_t n = d->speakerCount;
     h->omni = 0.0f;
     h->impact = 0;
+    h->tomHz = 0.0f;
     if (g < d->rollCallHits) {
         h->section = DOMINE_DEMO_SECTION_ROLL_CALL;
         if (n <= 2) {
@@ -248,6 +257,20 @@ static int hit_info(const DomineDemo *d, uint32_t g, HitInfo *h) {
         return 1;
     }
     g -= 10;
+    if (g < 5) {
+        static const int toms[5] = { 0, -4, -7, -5, -5 }; // swell chord roots
+        int lo = toms[g];
+        while (lo < 0) lo += 12;
+        h->section = DOMINE_DEMO_SECTION_SWELL;
+        h->t = r + X_SWELL + g * BAR;
+        h->az = 0.0f;
+        h->omni = 0.6f;
+        h->gain = 0.28f + 0.03f * (float)g;
+        h->impact = 2;
+        h->tomHz = (float)note_hz(lo);
+        return 1;
+    }
+    g -= 5;
     if (g == 0) {
         h->section = DOMINE_DEMO_SECTION_DROP;
         h->t = r + X_IMPACT;
@@ -273,6 +296,7 @@ static void start_kick(DomineDemo *d, const HitInfo *h) {
     d->kickOmni[k] = h->omni;
     d->kickGain[k] = h->gain;
     d->kickImpact[k] = h->impact;
+    d->kickTomHz[k] = h->tomHz;
     d->kickActive[k] = 1;
     d->lastKick = k;
     d->nextKick = k ^ 1;
@@ -286,16 +310,17 @@ static float render_kick(DomineDemo *d, int k, float tick) {
     if (!d->kickActive[k]) return 0.0f;
     const double sr = d->sampleRate;
     const double t = (double)(d->frame - d->kickStart[k]) / sr;
-    const int imp = d->kickImpact[k];
+    const int imp = d->kickImpact[k] != 0, tom = d->kickImpact[k] == 2;
     const double len = imp ? IMPACT_LEN : KICK_LEN;
     if (t >= len) { d->kickActive[k] = 0; return 0.0f; }
     const double fade = imp ? IMPACT_FADE : KICK_FADE;
     double env = t < KICK_ATTACK ? t / KICK_ATTACK : 1.0;
     if (t > len - fade) env *= 0.5 * (1.0 + cos(M_PI * (t - (len - fade)) / fade));
     const double body = sat(sin(2.0 * M_PI * d->kickPhase[k]), KICK_DRIVE) * exp(-t / (imp ? IMPACT_TAU : KICK_TAU));
-    const double beater = BEATER_LEVEL * exp(-t / BEATER_TAU) * sin(2.0 * M_PI * BEATER_HZ * t)
+    const double beater = (tom ? 0.3 : 1.0) * BEATER_LEVEL * exp(-t / BEATER_TAU) * sin(2.0 * M_PI * BEATER_HZ * t)
                         + TICK_LEVEL * exp(-t / TICK_TAU) * (double)tick;
-    const double lo = imp ? IMPACT_F_LO : KICK_F_LO, hi = imp ? IMPACT_F_HI : KICK_F_HI;
+    double lo = imp ? IMPACT_F_LO : KICK_F_LO, hi = imp ? IMPACT_F_HI : KICK_F_HI;
+    if (tom) { lo = (double)d->kickTomHz[k]; hi = lo * 1.4983; } // a fifth above, falling to the root
     const double hz = lo + (hi - lo) * exp(-t / (imp ? IMPACT_PITCH_TAU : KICK_PITCH_TAU));
     d->kickPhase[k] = advance(d->kickPhase[k], hz / sr);
     return (float)((double)d->kickGain[k] * env * (body + beater));
@@ -319,7 +344,7 @@ static float render_bass(DomineDemo *d, double x) {
     double env = smooth01((x - X_ORBIT) / BASS_ATTACK);
     if (x > X_SWELL) env *= 1.0 - smooth01((x - X_SWELL) / BASS_RELEASE);
 
-    const double hz = BASS_HZ;
+    const double hz = bass_hz(x);
     const double dt = hz / sr, dt2 = hz * BASS_DETUNE / sr;
     const double saw = 2.0 * d->bassPhase - 1.0 - polyblep(d->bassPhase, dt);
     const double saw2 = 2.0 * d->bassPhase2 - 1.0 - polyblep(d->bassPhase2, dt2);
@@ -351,9 +376,28 @@ static float render_bass(DomineDemo *d, double x) {
 // MARK: - Sub (pulses, swell sub, boom)
 
 static double swell_progress(double x) { return clamp01((x - X_SWELL) / (X_SILENCE - X_SWELL)); }
-static double chord_ratio(double x) {
-    if (x >= X_SILENCE) return 1.0; // the impact resolves to the root
-    return 1.0 + (CHORD_RISE - 1.0) * smooth01((x - X_SWELL) / (X_SILENCE - X_SWELL));
+// Harmony at time x after R: Dm until the Orbit; Orbit Dm Bb F C Dm, a
+// chord per bar; Swell Dm Bb Gm Asus4 A; Impact Dm.
+static Chord chord_at(double x) {
+    if (x >= X_SILENCE) return kDm;
+    if (x >= X_SWELL) {
+        static const Chord *sw[5] = { &kDm, &kBb, &kGm, &kAsus, &kA };
+        int b = (int)floor((x - X_SWELL) / BAR);
+        return *sw[b < 0 ? 0 : (b > 4 ? 4 : b)];
+    }
+    if (x >= X_ORBIT) {
+        static const Chord *orb[5] = { &kDm, &kBb, &kF, &kC, &kDm };
+        int b = (int)floor((x - X_ORBIT) / BAR);
+        return *orb[b < 0 ? 0 : (b > 4 ? 4 : b)];
+    }
+    return kDm;
+}
+
+// Bass root: roots below Bb1 move up an octave.
+static double bass_hz(double x) {
+    int r = chord_at(x).root;
+    if (r < -4) r += 12;
+    return note_hz(r);
 }
 
 static float render_sub(DomineDemo *d, double x) {
@@ -367,8 +411,8 @@ static float render_sub(DomineDemo *d, double x) {
     }
     if (x >= X_SWELL && x < X_SILENCE) {
         const double s = swell_progress(x);
-        out += SWELL_SUB_LEVEL * s * s * cut_gain(x) * sat(sin(2.0 * M_PI * d->lowPhase), 1.8);
-        d->lowPhase = advance(d->lowPhase, SUB_HZ * chord_ratio(x) / sr);
+        out += SWELL_SUB_LEVEL * s * s * s * cut_gain(x) * sat(sin(2.0 * M_PI * d->lowPhase), 1.8);
+        d->lowPhase = advance(d->lowPhase, bass_hz(x) / sr);
     }
     if (x >= X_IMPACT) {
         const double t = x - X_IMPACT;
@@ -382,43 +426,62 @@ static float render_sub(DomineDemo *d, double x) {
 
 // MARK: - Chord
 
-static const double kChordHz[DOMINE_DEMO_CHORD_PARTIALS] = {
-    110.0, 110.33, 164.81, 164.32, 220.0, 220.88, 277.18, 329.63, 330.62, 440.0, 493.88, 659.26,
-};
+// Voicing in semitones above the chord root (T = the third); 9 pitches from
+// the root to three octaves up, the lowest three doubled and detuned.
+#define T_ (-100)
+static const int kVoicing[DOMINE_DEMO_CHORD_PARTIALS] = { 0, 0, 7, 12, 12, 12 + T_, 19, 19, 24, 24 + T_, 31, 36 };
+static const double kDetune[DOMINE_DEMO_CHORD_PARTIALS] = { 0, 0.08, 0, -0.06, 0.07, 0, 0, -0.05, 0, 0.04, 0, 0 };
 static const double kChordW[DOMINE_DEMO_CHORD_PARTIALS] = {
-    1.0, 1.0, 0.8, 0.8, 0.7, 0.7, 0.5, 0.5, 0.5, 0.35, 0.3, 0.25,
+    1.0, 1.0, 0.9, 0.8, 0.8, 0.7, 0.6, 0.6, 0.5, 0.45, 0.35, 0.3,
 };
 
-// Renders both chord voices (side 0 even partials, side 1 odd partials).
+static double svf_lp(float *s1, float *s2, double in, double fc, double q, double sr) {
+    if (fc > 0.45 * sr) fc = 0.45 * sr;
+    const double kq = 1.0 / q, g = tan(M_PI * fc / sr);
+    const double a1 = 1.0 / (1.0 + g * (g + kq)), a2 = g * a1, a3 = g * a2;
+    const double v3 = in - (double)*s2;
+    const double v1 = a1 * (double)*s1 + a2 * v3;
+    const double v2 = (double)*s2 + a2 * (double)*s1 + a3 * v3;
+    *s1 = (float)(2.0 * v1 - (double)*s1);
+    *s2 = (float)(2.0 * v2 - (double)*s2);
+    return v2;
+}
+
+// Renders both chord voices (side 0 even partials, side 1 odd partials):
+// detuned polyBLEP saws through a low-pass that opens with the Swell.
 static void render_chord(DomineDemo *d, double t, double x, DomineDemoVoice *v) {
-    double level, bright, spread, omni;
+    double level, fc, spread, omni;
     if (x < X_SWELL) {
         level = DRONE_LEVEL * smooth01(t / 4.0);
-        bright = 0.25; spread = 0.0; omni = 0.25;
+        fc = 280.0; spread = 0.0; omni = 0.25;
     } else if (x < X_SILENCE) {
         const double s = swell_progress(x);
-        level = (DRONE_LEVEL + (SWELL_LEVEL - DRONE_LEVEL) * (0.6 * s + 0.4 * s * s)) * cut_gain(x);
-        bright = 0.25 + 0.75 * s;
+        level = (DRONE_LEVEL + (SWELL_LEVEL - DRONE_LEVEL) * (0.3 * s + 0.7 * s * s * s)) * cut_gain(x);
+        fc = 280.0 * pow(4500.0 / 280.0, pow(s, 1.5));
         spread = 90.0 * smooth01(s);
         omni = 0.25 + 0.25 * s;
     } else {
         const double u = x - X_IMPACT;
-        level = IMPACT_CHORD_LEVEL * attack(u, 0.02) * decay_to_zero(u, 2.2, X_END - X_IMPACT);
-        bright = 0.4 + 0.6 * decay_to_zero(u, 1.5, X_END - X_IMPACT);
+        level = IMPACT_CHORD_LEVEL * attack(u, 0.02) * decay_to_zero(u, 6.0, X_END - X_IMPACT);
+        fc = 600.0 + 4400.0 * decay_to_zero(u, 2.5, X_END - X_IMPACT);
         spread = 90.0; omni = 0.5;
     }
     if (x < X_SWELL) level *= (double)d->duck;
-    const double ratio = chord_ratio(x);
+    const Chord c = chord_at(x);
     double sum[2] = { 0.0, 0.0 }, wsum[2] = { 0.0, 0.0 };
     for (int i = 0; i < DOMINE_DEMO_CHORD_PARTIALS; i++) {
-        const double w = kChordW[i] * (i < 6 ? 1.0 : bright);
-        const double shimmer = 0.85 + 0.15 * sin(2.0 * M_PI * (0.11 + 0.037 * i) * t);
-        sum[i & 1] += w * shimmer * sin(2.0 * M_PI * d->chordPhase[i]);
+        int iv = kVoicing[i];
+        if (iv < 0) iv = iv - T_ + c.third;
+        const double dt = note_hz((double)(c.root + iv) + kDetune[i]) / d->sampleRate;
+        const double p = d->chordPhase[i];
+        const double saw = 2.0 * p - 1.0 - polyblep(p, dt);
+        sum[i & 1] += kChordW[i] * saw;
         wsum[i & 1] += kChordW[i];
-        d->chordPhase[i] = advance(d->chordPhase[i], kChordHz[i] * ratio / d->sampleRate);
+        d->chordPhase[i] = advance(p, dt);
     }
     for (int s = 0; s < 2; s++) {
-        v[s].sample = level > 0.0 ? (float)(level * sum[s] / wsum[s]) : 0.0f;
+        const double y = svf_lp(&d->chordLp[s][0], &d->chordLp[s][1], 1.6 * sum[s] / wsum[s], fc, 0.8, d->sampleRate);
+        v[s].sample = level > 0.0 ? (float)(level * tanh(y)) : 0.0f;
         v[s].azimuth = (float)(s == 0 ? -spread : spread);
         v[s].omni = (float)omni;
     }
@@ -440,7 +503,7 @@ static void grid_step(DomineDemo *d, uint32_t k) {
     const double t = k * STEP16, x = t - d->rollEnd;
     if (x < 0.0) {
         // Calibration ticks on every beat.
-        if (k % 4 == 0) start_ping(d, 0.06f, 0.008f, 3520.0f, 0.0f, 0);
+        if (k % 4 == 0) start_ping(d, 0.06f, 0.008f, (float)note_hz(55.0), 0.0f, 0); // A6
     } else if (x < X_SWEEP) {
         // Sub pulse on every beat.
         if (k % 4 == 0) {
@@ -451,14 +514,15 @@ static void grid_step(DomineDemo *d, uint32_t k) {
     } else if (x >= X_ORBIT + 2.0 && x < X_SWELL) {
         if (k % 4 == 2) start_ping(d, 0.07f, 0.03f, 0.0f, wrap180(-(double)d->bassAz), 1);
     } else if (x >= X_SWELL + 2.0 && x < X_SILENCE - 0.1) {
-        static const float hz[6] = { 1760.0f, 2217.5f, 2637.0f, 3322.4f, 3520.0f, 4434.9f };
+        const Chord c = chord_at(x);
+        const int tones[6] = { 36, 36 + c.third, 43, 48, 48 + c.third, 55 };
         const uint32_t h = (k * 2654435761u) >> 24;
         if (h % 3 == 0) return;
         const uint32_t pos = k % 8;
         const double f = pos / 7.0;
         const double az = ((k / 8) & 1u) ? 90.0 - 180.0 * f : -90.0 + 180.0 * f;
         const double s = swell_progress(x);
-        start_ping(d, (float)(0.04 + 0.06 * s), 0.02f, hz[h % 6] * (float)chord_ratio(x), (float)az, 0);
+        start_ping(d, (float)(0.04 + 0.06 * s), 0.02f, (float)note_hz(c.root + tones[h % 6]), (float)az, 0);
     }
 }
 
@@ -520,7 +584,9 @@ static float render_fx(DomineDemo *d, double x, float n, DomineDemoVoice *v) {
         } else {
             env = 0.6 * decay_to_zero(x - X_ORBIT, 0.15, 0.6);
         }
-        const double hz = SWEEP_HZ * pow(2.0, pos / 6.0) * (1.0 + bend);
+        static const double steps[7] = { 12, 15, 17, 19, 22, 24, 27 };
+        const int k0 = (int)fmin(pos, 6.0), k1 = k0 < 6 ? k0 + 1 : 6;
+        const double hz = note_hz(steps[k0] + (steps[k1] - steps[k0]) * smooth01(pos - k0)) * (1.0 + bend);
         const double ph = 2.0 * M_PI * d->sweepPhase;
         const double tone = (sin(ph) + 0.3 * sin(2.0 * ph) + 0.15 * sin(3.0 * ph)) / 1.45;
         d->sweepPhase = advance(d->sweepPhase, hz / sr);
@@ -529,6 +595,13 @@ static float render_fx(DomineDemo *d, double x, float n, DomineDemoVoice *v) {
         v->azimuth = d->sweepAz;
         v->omni = 0.0f;
         return (float)(SWEEP_LEVEL * env * (0.65 * tone + 0.35 * noise));
+    }
+    if (x >= X_SILENCE - 2.0 * BAR && x < X_SILENCE) {
+        const double u = (x - (X_SILENCE - 2.0 * BAR)) / (2.0 * BAR);
+        const double y = svf_noise(d, 400.0 * pow(9000.0 / 400.0, u), 2.5, n, 0);
+        v->azimuth = 0.0f;
+        v->omni = (float)(0.3 + 0.7 * u);
+        return (float)(0.22 * u * u * cut_gain(x) * y);
     }
     if (x >= X_IMPACT) {
         const double t = x - X_IMPACT;
