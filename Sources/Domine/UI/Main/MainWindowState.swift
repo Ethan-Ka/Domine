@@ -6,9 +6,10 @@ struct MainWindowState: Equatable, Sendable {
     var statusLine: String
     var isOn: Bool
     var mode: RoutingMode
-    var isQuadAvailable: Bool
+    var isSurroundAvailable: Bool
     var canSwap: Bool
-    /// Cards by position. Positions missing here are drawn as placeholders.
+    /// Stereo: cards by position; positions missing here are drawn as
+    /// placeholders. Surround: one card per speaker, each with `surround` set.
     var speakers: [SpeakerCardState]
     /// Master volume, 0...1.
     var masterVolume: Double
@@ -18,13 +19,12 @@ struct MainWindowState: Equatable, Sendable {
     var testToneSide: StereoSide?
     /// Tones need the engine running; Test L and Test R are disabled otherwise.
     var canPlayTestTones: Bool
-    /// Rear pair controls, shown in Quad mode only.
-    var rearMode: RearMode
-    /// Rear level, 0...1.
-    var rearLevel: Double
-    /// Spatial mode: amount 0...1 and room 5...30 ms.
-    var spatialAmount: Double = 0.6
-    var spatialRoomMs: Double = 15
+    /// Surround controls, shown in Surround mode only.
+    var surround: SurroundControls
+    /// "Add Speaker…" is enabled while fewer than the maximum are placed.
+    var canAddSurroundSpeaker: Bool
+    /// The showcase demo (SPEC section 14).
+    var demo: DemoState
     /// Shown at the bottom of the stage, e.g. while in mono fallback.
     var bannerMessage: String?
     var rooms: [Room] = []
@@ -34,7 +34,7 @@ struct MainWindowState: Equatable, Sendable {
         statusLine: String,
         isOn: Bool,
         mode: RoutingMode = .stereo,
-        isQuadAvailable: Bool = false,
+        isSurroundAvailable: Bool = false,
         canSwap: Bool = true,
         speakers: [SpeakerCardState],
         masterVolume: Double,
@@ -42,23 +42,21 @@ struct MainWindowState: Equatable, Sendable {
         testToneSide: StereoSide? = nil,
         canPlayTestTones: Bool = true,
         bannerMessage: String? = nil,
-        rearMode: RearMode = .mirror,
-        rearLevel: Double = 1,
-        spatialAmount: Double = 0.6,
-        spatialRoomMs: Double = 15,
+        surround: SurroundControls = SurroundControls(),
+        canAddSurroundSpeaker: Bool = true,
+        demo: DemoState = DemoState(),
         rooms: [Room] = [],
         currentRoomID: Room.ID? = nil
     ) {
         self.rooms = rooms
         self.currentRoomID = currentRoomID
-        self.rearMode = rearMode
-        self.rearLevel = rearLevel
-        self.spatialAmount = spatialAmount
-        self.spatialRoomMs = spatialRoomMs
+        self.surround = surround
+        self.canAddSurroundSpeaker = canAddSurroundSpeaker
+        self.demo = demo
         self.statusLine = statusLine
         self.isOn = isOn
         self.mode = mode
-        self.isQuadAvailable = isQuadAvailable
+        self.isSurroundAvailable = isSurroundAvailable
         self.canSwap = canSwap
         self.speakers = speakers
         self.masterVolume = masterVolume
@@ -69,7 +67,12 @@ struct MainWindowState: Equatable, Sendable {
     }
 
     func speaker(at position: SpeakerPosition) -> SpeakerCardState {
-        speakers.first { $0.position == position } ?? .placeholder(position)
+        speakers.first { $0.surround == nil && $0.position == position } ?? .placeholder(position)
+    }
+
+    /// The Surround cards, in the model's order.
+    var surroundCards: [SpeakerCardState] {
+        speakers.filter { $0.surround != nil }
     }
 
     var masterVolumePercent: Int {

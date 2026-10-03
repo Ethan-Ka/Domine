@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Trailing toolbar items: Stereo / Quad, swap, and the on/off switch.
+/// Trailing toolbar items: Stereo / Surround, swap, and the on/off switch.
 struct MainToolbarControls: View {
     var state: MainWindowState
     var actions: MainWindowActions
@@ -8,7 +8,7 @@ struct MainToolbarControls: View {
     var body: some View {
         ModePicker(
             selection: state.mode,
-            isQuadEnabled: state.isQuadAvailable,
+            isSurroundEnabled: state.isSurroundAvailable,
             onChange: actions.setMode)
             .accessibilityLabel("Mode")
 

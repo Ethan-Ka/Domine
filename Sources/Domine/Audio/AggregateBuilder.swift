@@ -29,7 +29,7 @@ enum AggregateBuilder {
             tapUID: tapUID, clock: clock, instance: instance)
     }
 
-    /// N output sub-devices in position order (SPEC 11.1). The first is the
+    /// N output sub-devices in position order (SPEC 13.2). The first is the
     /// main sub-device. With `.leftSpeaker` it is also the clock; the rest,
     /// and the tap, are drift compensated. No sample rate is ever set.
     static func description(

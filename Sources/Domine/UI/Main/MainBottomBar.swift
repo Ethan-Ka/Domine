@@ -1,57 +1,63 @@
 import SwiftUI
 
-/// Master volume, test tones, and "Sync & Balance…" under the stage.
+/// Master volume, test tones, and "Sync & Balance…" under the
+/// stage. Surround adds its sliders, "Add Speaker…" and Presets above.
 struct MainBottomBar: View {
     var state: MainWindowState
     var actions: MainWindowActions
 
     var body: some View {
         VStack(spacing: 10) {
-            if state.mode == .quad { rearRow }
+            if state.mode == .surround { surroundControls }
             mainRow
         }
         .padding(.horizontal, 20)
-        .frame(height: state.mode == .quad ? 120 : 84)
+        .padding(.vertical, state.mode == .surround ? 12 : 0)
+        .frame(height: state.mode == .surround ? nil : 84)
     }
 
-    private var rearRow: some View {
-        HStack(spacing: 16) {
-            Picker("Rear", selection: Binding(
-                get: { state.rearMode },
-                set: { actions.setRearMode($0) })) {
-                ForEach(RearMode.allCases) { Text($0.title).tag($0) }
+    private var surroundControls: some View {
+        let controls = state.surround
+        return VStack(alignment: .leading, spacing: 6) {
+            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
+                GridRow {
+                    compactSlider("Width", value: controls.width, range: SurroundControls.widthRange,
+                                  text: controls.widthText, set: actions.setSurroundWidth)
+                    compactSlider("Surround", value: controls.level, range: 0...1,
+                                  text: controls.levelText, set: actions.setSurroundLevel)
+                    Button("Add Speaker…", action: actions.addSurroundSpeaker)
+                        .disabled(!state.canAddSurroundSpeaker)
+                }
+                GridRow {
+                    HStack(spacing: 4) {
+                        compactSlider("Orbit", value: controls.orbitRate, range: SurroundControls.orbitRange,
+                                      text: controls.orbitText, set: actions.setOrbitRate)
+                        Button(action: actions.resetSurroundOrbit) {
+                            Image(systemName: "arrow.counterclockwise")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Turn the orbit back to the front")
+                        .accessibilityLabel("Reset orbit")
+                    }
+                    compactSlider("Rotation", value: controls.rotation, range: SurroundControls.rotationRange,
+                                  text: controls.rotationText, set: actions.setSurroundRotation)
+                    Menu("Presets") {
+                        ForEach(SurroundPreset.allCases, id: \.self) { preset in
+                            Button(preset.title) { actions.applySurroundPreset(preset) }
+                                .disabled(!preset.isEnabled(speakerCount: state.surroundCards.count))
+                        }
+                    }
+                    .fixedSize()
+                }
             }
-            .pickerStyle(.segmented)
-            .frame(width: 200)
-            .accessibilityLabel("Rear")
-
-            HStack(spacing: 8) {
-                Text("Rear level")
-                    .font(.callout)
+            if controls.showsBluetoothWarning {
+                Label(SurroundControls.bluetoothWarning, systemImage: "exclamationmark.triangle.fill")
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
-                Slider(value: Binding(
-                    get: { state.rearLevel },
-                    set: { actions.setRearLevel($0) }), in: 0...1)
-                    .labelsHidden()
-                    .accessibilityLabel("Rear level")
-                    .accessibilityValue("\(Int((state.rearLevel * 100).rounded())) percent")
-                Text("\(Int((state.rearLevel * 100).rounded()))%")
-                    .font(.callout)
-                    .monospacedDigit()
-                    .frame(width: 34, alignment: .trailing)
-                    .accessibilityHidden(true)
-            }
-
-            if state.rearMode == .spatial {
-                compactSlider("Spatial", value: state.spatialAmount, range: 0...1,
-                              text: "\(Int((state.spatialAmount * 100).rounded()))%",
-                              set: actions.setSpatialAmount)
-                compactSlider("Room", value: state.spatialRoomMs, range: 5...30,
-                              text: "\(Int(state.spatialRoomMs.rounded())) ms",
-                              set: actions.setSpatialRoom)
+                    .symbolRenderingMode(.multicolor)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func compactSlider(_ title: String, value: Double, range: ClosedRange<Double>,
@@ -60,16 +66,17 @@ struct MainBottomBar: View {
             Text(title)
                 .font(.callout)
                 .foregroundStyle(.secondary)
+                .frame(width: 62, alignment: .leading)
                 .accessibilityHidden(true)
             Slider(value: Binding(get: { value }, set: { set($0) }), in: range)
                 .labelsHidden()
-                .frame(minWidth: 60, maxWidth: 90)
+                .frame(minWidth: 60, maxWidth: 160)
                 .accessibilityLabel(title)
                 .accessibilityValue(text)
             Text(text)
                 .font(.callout)
                 .monospacedDigit()
-                .frame(width: 40, alignment: .trailing)
+                .frame(width: 46, alignment: .trailing)
                 .accessibilityHidden(true)
         }
     }
@@ -118,7 +125,12 @@ struct MainBottomBar: View {
     }
 }
 
-#Preview {
+#Preview("Stereo") {
     MainBottomBar(state: SampleStates.playing, actions: .none)
+        .frame(width: 640)
+}
+
+#Preview("Surround") {
+    MainBottomBar(state: SampleStates.surround, actions: .none)
         .frame(width: 640)
 }

@@ -10,6 +10,11 @@ struct TuningActions: Sendable {
     var openMicrophoneSettings: @MainActor @Sendable () -> Void = {}
     var reset: @MainActor @Sendable () -> Void = {}
     var done: @MainActor @Sendable () -> Void = {}
+    /// "Play Demo" / "Stop Demo".
+    var toggleDemo: @MainActor @Sendable () -> Void = {}
+    /// Surround: one speaker's level trim (0...1) and delay (0...300 ms).
+    var setSurroundTrim: @MainActor @Sendable (_ uid: String, _ trim: Double) -> Void = { _, _ in }
+    var setSurroundOffset: @MainActor @Sendable (_ uid: String, _ ms: Double) -> Void = { _, _ in }
 
     static let none = TuningActions()
 }

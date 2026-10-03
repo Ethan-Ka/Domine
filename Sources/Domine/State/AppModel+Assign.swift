@@ -3,7 +3,8 @@ extension AppModel {
     static let assignToneDuration: Duration = .milliseconds(1500)
 
     func openAssign(_ position: SpeakerPosition) {
-        guard position.isFront || routingMode == .quad else { return }
+        // Surround speakers use their own sheet (AppModel+MainWindow).
+        guard position.isFront else { return }
         assignSelection = uid(at: position)
         assignPosition = position
     }

@@ -20,7 +20,7 @@ struct AssignSheet: View {
                 Spacer()
                 Button("Cancel", action: actions.cancel)
                     .keyboardShortcut(.cancelAction)
-                Button("Use This Speaker") {
+                Button(state.confirmTitle) {
                     if let uid = state.selectedUID { actions.confirm(uid) }
                 }
                 .keyboardShortcut(.defaultAction)
@@ -86,6 +86,10 @@ private struct AssignRowView: View {
 
 #Preview("Selected") {
     AssignSheet(state: SampleStates.assign)
+}
+
+#Preview("Surround, add") {
+    AssignSheet(state: SampleStates.assignSurroundAdd)
 }
 
 #Preview("No selection") {

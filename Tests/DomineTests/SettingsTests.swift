@@ -212,4 +212,40 @@ final class SettingsTests {
             AppExclusion(bundleID: "us.zoom.xos", mode: .onlyDuringCalls),
         ])
     }
+
+    // MARK: Surround (SPEC 13.1, 13.7)
+
+    @Test func routingModeQuadReadsAsSurround() {
+        #expect(store.routingMode == .stereo)
+        defaults.set("quad", forKey: "Domine.routingMode")
+        #expect(store.routingMode == .surround)
+        store.routingMode = .surround
+        #expect(defaults.string(forKey: "Domine.routingMode") == "surround")
+        defaults.set("bogus", forKey: "Domine.routingMode")
+        #expect(store.routingMode == .stereo)
+    }
+
+    @Test func surroundRecordAndLastSetPersist() {
+        #expect(store.lastSurroundUIDs == nil)
+        #expect(store.surroundSettings(uids: ["A", "B", "C"]) == nil)
+        var s = SurroundSettings(uids: ["C", "A", "B"])
+        s.width = 50
+        store.setSurroundSettings(s)
+        store.lastSurroundUIDs = s.uids
+        #expect(defaults.data(forKey: "Domine.surround.A|B|C") != nil)
+        #expect(store.surroundSettings(uids: ["B", "C", "A"]) == s)
+        #expect(defaults.stringArray(forKey: "Domine.lastSurroundUIDs") == ["C", "A", "B"])
+        defaults.set(Data("junk".utf8), forKey: "Domine.surround.A|B|C")
+        #expect(store.surroundSettings(uids: ["A", "B", "C"]) == nil)
+        store.setSurroundSettings(SurroundSettings())
+        #expect(defaults.data(forKey: "Domine.surround.") == nil)
+    }
+
+    @Test func roomQuadSetsMigrateToo() {
+        let room = Room(name: "Patio", mode: .surround, leftUID: "A", rightUID: "B", rearLeftUID: "C", rearRightUID: "D")
+        store.migrateQuadSets(rooms: [room])
+        #expect(store.surroundSettings(uids: ["A", "B", "C", "D"])?.speakers.map(\.azimuth) == [-30, 30, -110, 110])
+        #expect(store.lastSurroundUIDs == nil)
+        #expect(SettingsStore.quadSet(["A", "B", "C", "C"]) == nil)
+    }
 }

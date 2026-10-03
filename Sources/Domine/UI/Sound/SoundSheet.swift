@@ -1,11 +1,12 @@
 import SwiftUI
 
-/// EQ, bass, and compressor for the pair.
+/// EQ, bass, and compressor for the pair, or in Surround for the speakers.
 struct SoundSheet: View {
     var state: SoundState
     var actions: SoundActions = .none
     @State private var side: StereoSide = .left
-    @State private var rear = false
+    /// Surround: the speaker picked while effects are unlinked.
+    @State private var surroundSelection: String?
 
     static let width: CGFloat = 420
     private static let customTag = "Custom"
@@ -16,7 +17,7 @@ struct SoundSheet: View {
                 .font(.headline)
             HStack {
                 Picker("Preset", selection: presetBinding) {
-                    if state.preset == nil { Text(Self.customTag).tag(Self.customTag) }
+                    if preset == nil { Text(Self.customTag).tag(Self.customTag) }
                     ForEach(PairSettings.Preset.allCases, id: \.self) {
                         Text($0.rawValue).tag($0.rawValue)
                     }
@@ -24,12 +25,16 @@ struct SoundSheet: View {
                 .fixedSize()
                 Spacer()
             }
-            linkRow
+            if let surround = state.surround {
+                surroundLinkRow(surround)
+            } else {
+                speakerLinkRow
+            }
             GroupBox { eq.padding(2) }
             GroupBox { bass.padding(2) }
             GroupBox { compressor.padding(2) }
             HStack {
-                Button("Reset", action: actions.reset)
+                Button("Reset", action: reset)
                 Spacer()
                 Button("Done", action: actions.done)
                     .keyboardShortcut(.defaultAction)
@@ -43,53 +48,77 @@ struct SoundSheet: View {
     }
 
     private var editedSide: StereoSide { state.effects.linkSpeakers ? .left : side }
-    private var current: PairSettings.SideEffects { state.side(editedSide, rear: rear) }
+
+    /// The Surround speaker being edited; nil in Stereo.
+    private var surroundUID: String? {
+        state.surround?.editedUID(selection: surroundSelection)
+    }
+
+    private var current: PairSettings.SideEffects {
+        if let surround = state.surround, let uid = surroundUID { return surround.effects(for: uid) }
+        return state.side(editedSide)
+    }
+
+    /// The preset the edited settings match, or nil when edited.
+    private var preset: PairSettings.Preset? {
+        guard state.surround != nil else { return state.preset }
+        let shown = current
+        return PairSettings.Preset.allCases.first { $0.settings.left == shown }
+    }
 
     private var presetBinding: Binding<String> {
         Binding(
-            get: { state.preset?.rawValue ?? Self.customTag },
+            get: { preset?.rawValue ?? Self.customTag },
             set: { name in
-                if let p = PairSettings.Preset(rawValue: name) {
-                    if var q = state.quad, !q.linkRears {
-                        q.rearLeft = p.settings.left
-                        q.rearRight = p.settings.left
-                        actions.setQuad(q)
-                    }
+                guard let p = PairSettings.Preset(rawValue: name) else { return }
+                if state.surround != nil {
+                    if let uid = surroundUID { actions.setSurroundEffects(uid, p.settings.left) }
+                } else {
                     actions.setEffects(state.applying(preset: p))
                 }
             })
     }
 
     private func edit(_ change: (inout PairSettings.SideEffects) -> Void) {
-        if state.editsRears(rear) {
-            actions.setQuad(state.applyingRear(to: editedSide, change))
+        if state.surround != nil {
+            guard let uid = surroundUID else { return }
+            var effects = current
+            change(&effects)
+            actions.setSurroundEffects(uid, effects)
         } else {
             actions.setEffects(state.applying(to: editedSide, change))
         }
     }
 
-    private var linkRow: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            speakerLinkRow
-            if let quad = state.quad {
-                HStack(spacing: 12) {
-                    Toggle("Rears follow fronts", isOn: Binding(
-                        get: { quad.linkRears },
-                        set: { v in var q = quad; q.linkRears = v; actions.setQuad(q) }))
-                        .toggleStyle(.checkbox)
-                        .fixedSize()
-                    if !quad.linkRears {
-                        Picker("Position", selection: $rear) {
-                            Text("Front").tag(false)
-                            Text("Rear").tag(true)
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .frame(width: 140)
+    /// Surround with unlinked effects resets only the picked speaker.
+    private func reset() {
+        if let surround = state.surround, !surround.isLinked, let uid = surroundUID {
+            actions.setSurroundEffects(uid, PairSettings.SideEffects())
+        } else {
+            actions.reset()
+        }
+    }
+
+    private func surroundLinkRow(_ surround: SurroundSound) -> some View {
+        HStack(spacing: 12) {
+            Toggle("Link speakers", isOn: Binding(
+                get: { surround.isLinked },
+                set: { actions.setSurroundLinked($0) }))
+                .toggleStyle(.checkbox)
+                .fixedSize()
+            if !surround.isLinked {
+                Picker("Speaker", selection: Binding(
+                    get: { surroundUID ?? "" },
+                    set: { surroundSelection = $0 })) {
+                    ForEach(surround.speakers) { speaker in
+                        Text(speaker.label).tag(speaker.uid)
                     }
-                    Spacer()
                 }
+                .labelsHidden()
+                .fixedSize()
+                .accessibilityLabel("Speaker")
             }
+            Spacer()
         }
     }
 
@@ -174,4 +203,8 @@ struct SoundSheet: View {
 
 #Preview("Night") {
     SoundSheet(state: SoundState(effects: PairSettings.Preset.night.settings))
+}
+
+#Preview("Surround, unlinked") {
+    SoundSheet(state: SampleStates.soundSurround)
 }

@@ -9,12 +9,12 @@ struct MainContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            StageView(state: state, onSelect: actions.selectSpeaker)
+            StageView(state: state, actions: actions)
                 .padding([.horizontal, .top], 12)
             MainBottomBar(state: state, actions: actions)
         }
         .navigationTitle("Domine")
-        .navigationSubtitle(state.statusLine)
+        .navigationSubtitle(state.demo.statusLine ?? state.statusLine)
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 RoomMenu(
@@ -31,6 +31,16 @@ struct MainContentView: View {
 #Preview("Playing") {
     MainContentView(state: SampleStates.playing)
         .frame(width: 640, height: 428)
+}
+
+#Preview("Surround") {
+    MainContentView(state: SampleStates.surround)
+        .frame(width: 640, height: 480)
+}
+
+#Preview("Surround, demo") {
+    MainContentView(state: SampleStates.surroundDemo)
+        .frame(width: 640, height: 480)
 }
 
 #Preview("Mono fallback") {

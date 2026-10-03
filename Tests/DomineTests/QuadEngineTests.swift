@@ -85,7 +85,7 @@ final class QuadEngineTests {
         await engine.start(quad: [Self.uids[0], Self.uids[1], Self.uids[2], Self.uids[2]])
         #expect(engine.state == .idle)
         #expect(engine.idleReason == .sameSpeaker)
-        await engine.start(quad: [Self.uids[0], Self.uids[1], Self.uids[2], nil])
+        await engine.start(quad: [Self.uids[0] as String?, Self.uids[1], Self.uids[2], nil])
         #expect(engine.state == .idle)
         #expect(hal.liveAggregateCount == 0)
     }
@@ -94,7 +94,7 @@ final class QuadEngineTests {
         await engine.start(quad: Self.uids)
         hal.remove(uid: Self.uids[3])
         await engine.speakerCheck?.value
-        #expect(engine.state == .degraded(.quadFallback(missing: [3])))
+        #expect(engine.state == .degraded(.quadFallback(missing: [Self.uids[3]])))
         #expect(subDevices.compactMap { $0[kAudioSubDeviceUIDKey] as? String } == Array(Self.uids.prefix(3)))
         #expect(engine.layout?.outOffsets == [0, 2, 4, nil])
         #expect(hal.liveAggregateCount == 1)
