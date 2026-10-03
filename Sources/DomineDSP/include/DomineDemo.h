@@ -50,9 +50,9 @@
 //   R+22-32   Swell: the drone becomes a wide chord of 12 detuned partials
 //             (A, E, C#, B across 110 to 660 Hz) split between two voices
 //             that spread from the centre to -90 and +90 and toward every
-//             speaker (omni to 0.7), rising a fifth in pitch, getting
+//             speaker (omni to 0.5), rising a fifth in pitch, getting
 //             brighter and louder, with a deep sub (55 Hz and harmonics)
-//             growing under it. The bass fades out over the first 4 s.
+//             growing under it. The bass fades out over the first 6 s.
 //             Bright pings (1.7 to 4.4 kHz) sweep back and forth across the
 //             top from R+24. Everything cuts with a 30 ms fade at R+32.
 //   R+32-33   Silence: every voice exactly 0.

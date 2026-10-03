@@ -562,10 +562,10 @@ static void test_demo(void) {
         for (uint32_t k = 0; k < 4; k++) ok &= *buf_at(&out, 2 * k, f) == prog[k];
     CHECK(ok);
 
-    // Run to the end: finishes by itself after 32 s, then program returns.
+    // Run to the end: finishes by itself, then program returns.
     domine_surround_set_demo(s, 1);
     int sawOrbit = 0;
-    const uint32_t calls = (uint32_t)(32.0 * sr / BLOCK) + 2;
+    const uint32_t calls = (uint32_t)(DOMINE_DEMO_LENGTH_S * sr / BLOCK) + 2;
     for (uint32_t c = 0; c < calls; c++) {
         run(s, l, r, BLOCK, &out, off);
         domine_surround_demo_status(s, NULL, NULL, &section);
