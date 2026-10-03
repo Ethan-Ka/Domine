@@ -5,7 +5,7 @@ struct SurroundControls: Equatable, Sendable {
     /// Front image width in degrees, 10...90.
     var width: Double = 30
     /// How much goes to the speakers behind the listener, 0...1.
-    var level: Double = 1
+    var level: Double = 0.7
     /// Turns per second, 0 (off) ... 2. The model stores degrees per second.
     var orbitRate: Double = 0
     /// Rotation of the whole sound field in degrees, -180...180.

@@ -41,7 +41,7 @@ struct UIStateTests {
     @Test func missingPositionsArePlaceholders() {
         let card = SampleStates.off.speaker(at: .rearLeft)
         #expect(card.connection == .placeholder)
-        #expect(card.statusText == "Planned for quad mode")
+        #expect(card.statusText == "Not assigned")
     }
 
     @Test func cardsHaveNoSecondLineByDefault() {

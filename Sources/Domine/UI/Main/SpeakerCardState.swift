@@ -70,7 +70,7 @@ struct SpeakerCardState: Identifiable, Equatable, Sendable {
         SpeakerCardState(
             position: position,
             sideTag: "",
-            statusText: "Planned for quad mode",
+            statusText: "Not assigned",
             connection: .placeholder)
     }
 }
