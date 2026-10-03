@@ -4,20 +4,27 @@ import SwiftUI
 struct MainView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
+    @State private var surroundAssign = SurroundAssignPresenter()
 
     var body: some View {
         @Bindable var model = model
-        MainContentView(state: model.mainWindowState, actions: model.mainWindowActions)
+        @Bindable var surroundAssign = surroundAssign
+        MainContentView(state: model.mainWindowState, actions: actions)
             .sheet(item: $model.assignPosition) { position in
                 AssignSheet(
                     state: model.assignSheetState(for: position),
                     actions: model.assignSheetActions(for: position))
             }
+            .sheet(item: $surroundAssign.target) { target in
+                AssignSheet(
+                    state: model.surroundAssignSheetState(for: target, selection: surroundAssign.selection),
+                    actions: surroundAssignActions(for: target))
+            }
             .sheet(isPresented: $model.showsTuning) {
-                TuningSheet(state: model.tuningState, actions: model.tuningActions)
+                TuningSheet(state: model.tuningSheetState, actions: model.tuningSheetActions)
             }
             .sheet(isPresented: $model.showsSound) {
-                SoundSheet(state: model.soundState, actions: model.soundActions)
+                SoundSheet(state: model.soundSheetState, actions: model.soundSheetActions)
             }
             .sheet(isPresented: $model.showsSaveRoom) {
                 SaveRoomSheet(
@@ -41,5 +48,28 @@ struct MainView: View {
                 model.leaveBackground()
             }
             .onDisappear { model.mainWindowDidClose() }
+    }
+
+    /// The model's actions plus the two that present the Surround sheet,
+    /// whose state lives here.
+    private var actions: MainWindowActions {
+        var actions = model.mainWindowActions
+        let presenter = surroundAssign
+        actions.addSurroundSpeaker = { presenter.present(.add) }
+        actions.chooseSurroundSpeaker = { presenter.present(.replace(uid: $0)) }
+        return actions
+    }
+
+    private func surroundAssignActions(for target: SurroundAssignTarget) -> AssignSheetActions {
+        let presenter = surroundAssign
+        let appModel = model
+        return AssignSheetActions(
+            select: { presenter.selection = $0 },
+            playTone: { appModel.playTestTone(surroundUID: $0) },
+            cancel: { presenter.dismiss() },
+            confirm: { uid in
+                appModel.confirmSurroundAssign(uid, target: target)
+                presenter.dismiss()
+            })
     }
 }

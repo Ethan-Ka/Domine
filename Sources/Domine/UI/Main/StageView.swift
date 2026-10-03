@@ -1,10 +1,25 @@
+import AppKit
 import SwiftUI
 
-/// The Mac in the center with one card per position and a line to each
-/// (docs/mockups/Main.dc.html). Scales with the window.
+/// The Mac in the center with one card per speaker and a line to each
+/// (docs/mockups/Main.dc.html). Scales with the window. In Surround mode
+/// it is a top-down room: the listener sits at the Mac, "FRONT" is up, and
+/// each card is dragged to where that speaker stands.
 struct StageView: View {
     var state: MainWindowState
-    var onSelect: @MainActor (SpeakerPosition) -> Void = { _ in }
+    var actions: MainWindowActions = .none
+
+    /// The card being dragged and where its speaker was when the drag began.
+    @State private var drag: DragAnchor?
+
+    private struct DragAnchor: Equatable {
+        var uid: String
+        var start: CGPoint
+    }
+
+    private static let space = NamedCoordinateSpace.named("stage")
+    /// Drags snap to this many degrees unless Option is held.
+    static let snapDegrees: Double = 5
 
     var body: some View {
         GeometryReader { proxy in
@@ -15,30 +30,18 @@ struct StageView: View {
                     .frame(width: layout.guideRadius * 2, height: layout.guideRadius * 2)
                     .position(layout.macCenter)
 
-                ForEach(SpeakerPosition.positions(in: state.mode)) { position in
-                    connector(for: state.speaker(at: position), layout: layout)
+                switch state.mode {
+                case .stereo:
+                    stereoStage(layout: layout)
+                case .surround:
+                    surroundStage(layout: layout)
                 }
 
-                if state.mode == .quad {
-                    Text("FRONT")
-                        .font(.caption.weight(.semibold))
-                        .tracking(1.2)
-                        .foregroundStyle(.tertiary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 10)
-                }
-
-                thisMac
-                    .position(x: layout.macCenter.x, y: layout.macCenter.y + 8)
-
-                ForEach(SpeakerPosition.positions(in: state.mode)) { position in
-                    SpeakerCard(state: state.speaker(at: position)) { onSelect(position) }
-                        .position(layout.cardCenter(position))
+                if state.demo.isPlaying {
+                    demoMarker(layout: layout)
                 }
 
                 if let banner = state.bannerMessage {
-                    // Between the rear cards and level with their bottom, so
-                    // the rear placeholder text stays readable.
                     StageBanner(message: banner)
                         .frame(width: layout.bannerWidth)
                         .frame(
@@ -47,6 +50,7 @@ struct StageView: View {
                             alignment: .bottom)
                 }
             }
+            .coordinateSpace(Self.space)
         }
         .background {
             let shape = RoundedRectangle(cornerRadius: 10)
@@ -54,6 +58,131 @@ struct StageView: View {
                 .overlay(shape.strokeBorder(Color(nsColor: .separatorColor)))
         }
         .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    // MARK: - Stereo
+
+    @ViewBuilder
+    private func stereoStage(layout: StageLayout) -> some View {
+        ForEach(SpeakerPosition.positions(in: .stereo)) { position in
+            connector(
+                from: layout.connectorStart(position), to: layout.connectorEnd(position),
+                connection: state.speaker(at: position).connection)
+        }
+
+        thisMac
+            .position(x: layout.macCenter.x, y: layout.macCenter.y + 8)
+
+        ForEach(SpeakerPosition.positions(in: .stereo)) { position in
+            SpeakerCard(state: state.speaker(at: position)) { actions.selectSpeaker(position) }
+                .position(layout.cardCenter(position))
+        }
+    }
+
+    // MARK: - Surround
+
+    @ViewBuilder
+    private func surroundStage(layout: StageLayout) -> some View {
+        let cards = state.surroundCards
+
+        ForEach(cards) { card in
+            if let info = card.surround {
+                let end = layout.surroundConnectorEnd(
+                    cardCenter: layout.surroundCardCenter(azimuth: info.azimuth, distance: info.distance))
+                connector(from: layout.connectorStart(toward: end), to: end, connection: card.connection)
+            }
+        }
+
+        Text("FRONT")
+            .font(.caption.weight(.semibold))
+            .tracking(1.2)
+            .foregroundStyle(.tertiary)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 10)
+
+        thisMac
+            .position(x: layout.macCenter.x, y: layout.macCenter.y + 8)
+
+        if cards.isEmpty {
+            Text("Add speakers with Add Speaker… or Presets.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .position(x: layout.macCenter.x, y: layout.macCenter.y + 70)
+        }
+
+        ForEach(cards) { card in
+            if let info = card.surround {
+                surroundCard(card, info: info, layout: layout)
+            }
+        }
+    }
+
+    private func surroundCard(_ card: SpeakerCardState, info: SurroundCardInfo, layout: StageLayout) -> some View {
+        SpeakerCard(state: card) { actions.chooseSurroundSpeaker(info.uid) }
+            .onTapGesture { actions.chooseSurroundSpeaker(info.uid) }
+            .gesture(dragGesture(info: info, layout: layout))
+            .contextMenu {
+                Button("Play Test Tone") { actions.playSurroundTestTone(info.uid) }
+                    .disabled(card.connection != .connected)
+                Divider()
+                Button("Choose Speaker…") { actions.chooseSurroundSpeaker(info.uid) }
+                Button("Remove Speaker") { actions.removeSurroundSpeaker(info.uid) }
+            }
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment:
+                    move(info, azimuth: info.azimuth + Self.snapDegrees, distance: info.distance)
+                case .decrement:
+                    move(info, azimuth: info.azimuth - Self.snapDegrees, distance: info.distance)
+                @unknown default:
+                    break
+                }
+            }
+            .position(layout.surroundCardCenter(azimuth: info.azimuth, distance: info.distance))
+    }
+
+    /// Moves the speaker with the pointer. The anchor is the speaker's own
+    /// point (not the clamped card center), so dragging toward an edge keeps
+    /// adding distance while the card stays inside the stage.
+    private func dragGesture(info: SurroundCardInfo, layout: StageLayout) -> some Gesture {
+        DragGesture(minimumDistance: 3, coordinateSpace: Self.space)
+            .onChanged { value in
+                if drag?.uid != info.uid {
+                    drag = DragAnchor(
+                        uid: info.uid,
+                        start: layout.surroundPoint(azimuth: info.azimuth, distance: info.distance))
+                }
+                guard let anchor = drag else { return }
+                let target = CGPoint(
+                    x: anchor.start.x + value.translation.width,
+                    y: anchor.start.y + value.translation.height)
+                let placement = layout.surroundPlacement(at: target)
+                let fine = NSEvent.modifierFlags.contains(.option)
+                move(
+                    info,
+                    azimuth: fine ? placement.azimuth : SurroundCardInfo.snapped(placement.azimuth, step: Self.snapDegrees),
+                    distance: fine ? placement.distance : (placement.distance * 10).rounded() / 10)
+            }
+            .onEnded { _ in drag = nil }
+    }
+
+    private func move(_ info: SurroundCardInfo, azimuth: Double, distance: Double) {
+        let wrapped = Double(SurroundSpeaker.wrap(Float(azimuth)))
+        let range = SurroundSpeaker.distanceRange
+        let clamped = min(max(distance, Double(range.lowerBound)), Double(range.upperBound))
+        actions.moveSurroundSpeaker(info.uid, wrapped, clamped)
+    }
+
+    // MARK: - Shared
+
+    private func demoMarker(layout: StageLayout) -> some View {
+        Circle()
+            .fill(Color.accentColor)
+            .frame(width: 14, height: 14)
+            .shadow(color: Color.accentColor.opacity(0.6), radius: 6)
+            .position(layout.demoMarker(azimuth: state.demo.azimuth))
+            .animation(.linear(duration: 0.12), value: state.demo.azimuth)
+            .accessibilityHidden(true)
     }
 
     private var thisMac: some View {
@@ -68,12 +197,12 @@ struct StageView: View {
     }
 
     @ViewBuilder
-    private func connector(for card: SpeakerCardState, layout: StageLayout) -> some View {
+    private func connector(from start: CGPoint, to end: CGPoint, connection: SpeakerConnection) -> some View {
         let path = Path { path in
-            path.move(to: layout.connectorStart(card.position))
-            path.addLine(to: layout.connectorEnd(card.position))
+            path.move(to: start)
+            path.addLine(to: end)
         }
-        switch card.connection {
+        switch connection {
         case .connected:
             path.stroke(Color.accentColor.opacity(0.55), lineWidth: 2)
         case .disconnected:
@@ -90,8 +219,14 @@ struct StageView: View {
         .padding()
 }
 
-#Preview("Quad") {
-    StageView(state: SampleStates.quad)
+#Preview("Surround, 5 speakers") {
+    StageView(state: SampleStates.surround)
+        .frame(width: 616, height: 320)
+        .padding()
+}
+
+#Preview("Surround, demo") {
+    StageView(state: SampleStates.surroundDemo)
         .frame(width: 616, height: 320)
         .padding()
 }

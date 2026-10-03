@@ -1,11 +1,11 @@
 import AppKit
 import SwiftUI
 
-/// Stereo / Quad segmented control. Wraps `NSSegmentedControl` because a
+/// Stereo / Surround segmented control. Wraps `NSSegmentedControl` because a
 /// SwiftUI segmented `Picker` cannot disable a single segment.
 struct ModePicker: NSViewRepresentable {
     var selection: RoutingMode
-    var isQuadEnabled: Bool
+    var isSurroundEnabled: Bool
     var onChange: @MainActor (RoutingMode) -> Void
 
     func makeNSView(context: Context) -> NSSegmentedControl {
@@ -22,7 +22,7 @@ struct ModePicker: NSViewRepresentable {
     func updateNSView(_ control: NSSegmentedControl, context: Context) {
         context.coordinator.onChange = onChange
         for (index, mode) in RoutingMode.allCases.enumerated() {
-            control.setEnabled(mode != .quad || isQuadEnabled, forSegment: index)
+            control.setEnabled(mode != .surround || isSurroundEnabled, forSegment: index)
         }
         control.selectedSegment = RoutingMode.allCases.firstIndex(of: selection) ?? 0
     }
@@ -48,7 +48,7 @@ struct ModePicker: NSViewRepresentable {
 }
 
 #Preview {
-    ModePicker(selection: .stereo, isQuadEnabled: false, onChange: { _ in })
+    ModePicker(selection: .stereo, isSurroundEnabled: false, onChange: { _ in })
         .fixedSize()
         .padding()
 }

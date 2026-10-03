@@ -41,7 +41,7 @@ struct UIStateTests {
     @Test func missingPositionsArePlaceholders() {
         let card = SampleStates.off.speaker(at: .rearLeft)
         #expect(card.connection == .placeholder)
-        #expect(card.statusText == "Planned for quad mode")
+        #expect(card.statusText == "Not assigned")
     }
 
     @Test func cardsHaveNoSecondLineByDefault() {
@@ -54,38 +54,20 @@ struct UIStateTests {
         #expect(SampleStates.assign.title == "Choose the Front Left speaker")
     }
 
-    @Test func stageConnectorsMeetInnerCardEdges() {
-        let layout = StageLayout(size: StageLayout.designSize, mode: .quad)
-        #expect(layout.macCenter == CGPoint(x: 308, y: 150))
-        #expect(layout.connectorEnd(.frontLeft) == CGPoint(x: 196, y: 66))
-        #expect(layout.connectorEnd(.frontRight) == CGPoint(x: 420, y: 66))
-        #expect(layout.connectorEnd(.rearLeft) == CGPoint(x: 196, y: 254))
-        #expect(layout.connectorEnd(.rearRight) == CGPoint(x: 420, y: 254))
-    }
-
-    /// The banner stays between the rear cards so their text is not covered.
+    /// The banner fits inside the stage on every size.
     @Test(arguments: [StageLayout.designSize, CGSize(width: 900, height: 640), CGSize(width: 1400, height: 700)])
-    func bannerClearsTheRearCards(size: CGSize) {
-        let layout = StageLayout(size: size, mode: .quad)
-        let bannerMinX = (size.width - layout.bannerWidth) / 2
-        let bannerMaxX = bannerMinX + layout.bannerWidth
-        let rearLeftMaxX = layout.cardCenter(.rearLeft).x + StageLayout.cardSize.width / 2
-        let rearRightMinX = layout.cardCenter(.rearRight).x - StageLayout.cardSize.width / 2
-        #expect(layout.bannerWidth > 150)
-        #expect(layout.bannerWidth <= StageLayout.bannerMaxWidth)
-        #expect(bannerMinX >= rearLeftMaxX + StageLayout.bannerGap)
-        #expect(bannerMaxX <= rearRightMinX - StageLayout.bannerGap)
-    }
-
-    @Test func bannerIsLevelWithTheRearCards() {
-        let layout = StageLayout(size: StageLayout.designSize, mode: .quad)
-        let rearBottom = layout.cardCenter(.rearLeft).y + StageLayout.cardSize.height / 2
-        #expect(layout.size.height - layout.bannerBottomInset == rearBottom)
+    func bannerFitsTheStage(size: CGSize) {
+        for mode in RoutingMode.allCases {
+            let layout = StageLayout(size: size, mode: mode)
+            #expect(layout.bannerWidth > 150)
+            #expect(layout.bannerWidth <= StageLayout.bannerMaxWidth)
+            #expect(layout.bannerWidth <= size.width - 2 * StageLayout.cardInset.width)
+        }
     }
 
     @Test func stereoStageHasOnlyFrontCards() {
         #expect(SpeakerPosition.positions(in: .stereo) == [.frontLeft, .frontRight])
-        #expect(SpeakerPosition.positions(in: .quad).count == 4)
+        #expect(SpeakerPosition.positions(in: .surround).isEmpty)
     }
 
     @Test func stereoStageCentersTheFrontCards() {

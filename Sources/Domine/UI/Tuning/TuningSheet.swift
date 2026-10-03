@@ -13,10 +13,16 @@ struct TuningSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Sync & Balance")
                 .font(.headline)
-            GroupBox { timing.padding(2) }
-            GroupBox { level.padding(2) }
+            if let rows = state.surroundRows {
+                GroupBox { surroundTiming(rows).padding(2) }
+                GroupBox { surroundLevel(rows).padding(2) }
+            } else {
+                GroupBox { timing.padding(2) }
+                GroupBox { level.padding(2) }
+            }
+            demo
             HStack {
-                Button("Reset", action: actions.reset)
+                Button("Reset", action: reset)
                 Spacer()
                 Button("Done", action: actions.done)
                     .keyboardShortcut(.defaultAction)
@@ -27,6 +33,15 @@ struct TuningSheet: View {
         .padding(.horizontal, 20)
         .frame(width: Self.width)
         .onExitCommand(perform: actions.done)
+    }
+
+    /// Surround resets every speaker's trim and delay; Stereo the pair.
+    private func reset() {
+        guard let rows = state.surroundRows else { return actions.reset() }
+        for row in rows {
+            actions.setSurroundTrim(row.uid, 1)
+            actions.setSurroundOffset(row.uid, 0)
+        }
     }
 
     private var timing: some View {
@@ -53,27 +68,102 @@ struct TuningSheet: View {
                     .toggleStyle(.checkbox)
                     .fixedSize()
                 Spacer(minLength: 8)
-                Button(state.isClickTestPlaying ? "Stop Click Test" : "Play Click Test",
-                       action: actions.playClickTest)
-                    .disabled(!state.isClickTestAvailable)
+                clickTestButton
                 Button("Auto-calibrate") { actions.autoCalibrate?() }
                     .disabled(actions.autoCalibrate == nil || state.calibrationStatus == .listening)
                     .help(actions.autoCalibrate == nil ? "Needs the Mac's built-in microphone" : "")
             }
             calibrationLine
-            if let message = state.clickTestMessage {
-                Text(message)
-                    .font(.subheadline)
-                    .foregroundStyle(.red)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .help(message)
-            }
+            clickTestMessageLine
             if let latencies = state.reportedLatencies {
                 Text(latencies)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var clickTestMessageLine: some View {
+        if let message = state.clickTestMessage {
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.red)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .help(message)
+        }
+    }
+
+    private var clickTestButton: some View {
+        Button(state.isClickTestPlaying ? "Stop Click Test" : "Play Click Test",
+               action: actions.playClickTest)
+            .disabled(!state.isClickTestAvailable)
+    }
+
+    // MARK: - Surround
+
+    /// Tallest the per-speaker lists get before they scroll.
+    private static let surroundListMaxHeight: CGFloat = 220
+    private static let surroundRowHeight: CGFloat = 44
+
+    private func surroundList<Row: View>(_ rows: [SurroundTuningRow],
+                                         @ViewBuilder row: @escaping (SurroundTuningRow) -> Row) -> some View {
+        ScrollView {
+            VStack(spacing: 8) {
+                ForEach(rows) { item in
+                    row(item)
+                }
+            }
+            .padding(.trailing, 4)
+        }
+        .frame(height: min(CGFloat(rows.count) * Self.surroundRowHeight, Self.surroundListMaxHeight))
+    }
+
+    /// Per-speaker delay, then the click test (SPEC section 13).
+    private func surroundTiming(_ rows: [SurroundTuningRow]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("TIMING")
+            surroundList(rows) { row in
+                VStack(spacing: 4) {
+                    readoutRow(row.label, value: row.offsetReadout)
+                    Slider(
+                        value: Binding(
+                            get: { row.offsetMs },
+                            set: { actions.setSurroundOffset(row.uid, $0.rounded()) }),
+                        in: SurroundTuningRow.offsetRange)
+                        .labelsHidden()
+                        .accessibilityLabel("\(row.label) delay")
+                        .accessibilityValue(row.offsetReadout)
+                }
+            }
+            HStack(spacing: 8) {
+                Text("Delay the speakers that play early.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                clickTestButton
+            }
+            clickTestMessageLine
+        }
+    }
+
+    private func surroundLevel(_ rows: [SurroundTuningRow]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("LEVEL")
+            surroundList(rows) { row in
+                VStack(spacing: 4) {
+                    readoutRow(row.label, value: row.trimReadout)
+                    Slider(
+                        value: Binding(
+                            get: { row.trim },
+                            set: { actions.setSurroundTrim(row.uid, $0) }),
+                        in: 0...1)
+                        .labelsHidden()
+                        .accessibilityLabel("\(row.label) level")
+                        .accessibilityValue(row.trimReadout)
+                }
             }
         }
     }
@@ -129,6 +219,26 @@ struct TuningSheet: View {
         }
     }
 
+    /// Plays the showcase demo so the result can be heard straight away.
+    private var demo: some View {
+        HStack(spacing: 8) {
+            Button(state.demoButtonTitle, action: actions.toggleDemo)
+                .disabled(!state.isDemoButtonEnabled)
+            if let caption = state.demoCaption {
+                Text(caption)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            } else {
+                Text("Bass hits and a growl that move around the speakers.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
     private func sectionTitle(_ title: String) -> some View {
         Text(title)
             .font(.subheadline.weight(.semibold))
@@ -162,6 +272,14 @@ struct TuningSheet: View {
 
 #Preview("Right +4 ms") {
     TuningSheet(state: SampleStates.tuning)
+}
+
+#Preview("Demo playing") {
+    TuningSheet(state: SampleStates.tuningDemo)
+}
+
+#Preview("Surround") {
+    TuningSheet(state: SampleStates.tuningSurround)
 }
 
 #Preview("Extended, left") {

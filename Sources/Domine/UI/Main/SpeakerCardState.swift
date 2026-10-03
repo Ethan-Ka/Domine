@@ -3,7 +3,7 @@
 /// nothing here is a preformatted joined string.
 struct SpeakerCardState: Identifiable, Equatable, Sendable {
     var position: SpeakerPosition
-    /// "L", "R", "L+R" in mono fallback, "RL" / "RR" in quad.
+    /// "L", "R", "L+R" in mono fallback, an angle like "-30°" in Surround.
     var sideTag: String
     var deviceName: String?
     /// Four characters from the device UID that tell two "JBL Grip"s apart.
@@ -16,8 +16,14 @@ struct SpeakerCardState: Identifiable, Equatable, Sendable {
     /// Post-kernel peak, 0...1 (SPEC section 3a).
     var level: Double
     var isMonoFallback: Bool
+    /// Set for Surround cards: the output and where it sits. `position` is
+    /// not used for these.
+    var surround: SurroundCardInfo?
 
-    var id: SpeakerPosition { position }
+    var id: String { surround.map { "surround:" + $0.uid } ?? position.rawValue }
+
+    /// "Front Left" for a Stereo card; for a Surround card, its direction.
+    var title: String { surround?.title ?? position.title }
 
     init(
         position: SpeakerPosition,
@@ -28,7 +34,8 @@ struct SpeakerCardState: Identifiable, Equatable, Sendable {
         statusDetail: String? = nil,
         connection: SpeakerConnection,
         level: Double = 0,
-        isMonoFallback: Bool = false
+        isMonoFallback: Bool = false,
+        surround: SurroundCardInfo? = nil
     ) {
         self.position = position
         self.sideTag = sideTag
@@ -39,6 +46,23 @@ struct SpeakerCardState: Identifiable, Equatable, Sendable {
         self.connection = connection
         self.level = level
         self.isMonoFallback = isMonoFallback
+        self.surround = surround
+    }
+
+    /// A Surround card. The side tag is the speaker's angle.
+    static func surroundCard(
+        _ info: SurroundCardInfo,
+        deviceName: String?,
+        uidSuffix: String?,
+        statusText: String,
+        connection: SpeakerConnection,
+        level: Double = 0
+    ) -> SpeakerCardState {
+        SpeakerCardState(
+            position: .frontLeft, sideTag: info.angleTag,
+            deviceName: deviceName, uidSuffix: uidSuffix,
+            statusText: statusText, connection: connection, level: level,
+            surround: info)
     }
 
     /// A rear position in stereo mode.
@@ -46,7 +70,7 @@ struct SpeakerCardState: Identifiable, Equatable, Sendable {
         SpeakerCardState(
             position: position,
             sideTag: "",
-            statusText: "Planned for quad mode",
+            statusText: "Not assigned",
             connection: .placeholder)
     }
 }

@@ -21,9 +21,14 @@ Domine is a small macOS windowed app that splits system stereo audio across two 
 - Keep playing in the background with a menu bar item when the window is closed (section 6a).
 - App exclusions: chosen apps skip the speaker pair and play through another output (section 3b).
 
+### Goals (v2)
+- Surround mode: 3 to 16 speakers placed anywhere around the listener, positions dragged on a top-down stage, sound panned between them like a surround system (section 13). Stereo mode stays as it is.
+- A built-in showcase demo, "Play Demo", that moves bass and kicks around the room so the user hears and feels each speaker, the left/right split, and a full orbit (section 14).
+- A Linux port on PipeWire with the same routing idea, the same render kernel, and the same stage (section 15).
+
 ### Non-goals (v1)
 - Per-app routing (only system-wide audio).
-- More than two outputs. Four-speaker quad mode is planned for v2 (section 11); the v1 UI already shows the rear positions as placeholders.
+- More than two outputs in v1. Surround mode (section 13) adds 3 to 16 speakers in v2 and replaces the earlier four-speaker quad plan (section 11).
 - Automatic latency calibration with the Mac microphone (planned for v2, see section 10).
 - Mac App Store distribution (see section 8).
 
@@ -260,7 +265,7 @@ Domine/
     Domine/                 app target
       DomineApp.swift       Window scene entry point
       UI/
-        MainView.swift      toolbar (Stereo/Quad, swap, on/off), stage, master volume, test tones
+        MainView.swift      toolbar (Stereo/Surround, swap, on/off), stage, master volume, test tones
         StageView.swift     Mac in the center, one SpeakerCard per position, connector lines
         SpeakerCard.swift   role, device name + UID suffix, volume, status, level meter
         AssignSheet.swift   choose the device for a position, with Play tone per row
@@ -353,6 +358,7 @@ States: `idle`, `starting`, `running`, `degraded(reason)`, `stopping`, `error(me
 - **Grip stereo pairing left on.** If the Grips are still stereo-paired in the JBL app, only one appears as a Mac output. Detect "only one device named JBL Grip is present" and show a hint to unpair them in the JBL Portable app.
 - **Multipoint steal.** A phone connected to one Grip can interrupt it. The Mac sees this as the device going silent or dropping; show the side that stopped.
 - **Inactivity power-off.** A Grip that powers down mid-session disappears from Core Audio. Handled by the rebuild logic; the menu shows "Left speaker off" rather than a generic error.
+- **More than two Bluetooth links.** Surround mode can hold up to 16 outputs, but every extra A2DP link shares the same radio. Past four Bluetooth speakers dropouts are likely on most Macs; the UI warns (section 13.6) but does not block. Wired, USB and HDMI outputs do not count toward this.
 - **Tap edge cases.** Some apps with exclusive or hog-mode output may bypass the tap. Log and document rather than work around.
 
 ## 10. Milestones
@@ -364,9 +370,16 @@ States: `idle`, `starting`, `running`, `degraded(reason)`, `stopping`, `error(me
 - **M4, resilience:** state machine, disconnect/reconnect, sleep/wake, stale aggregate cleanup.
 - **M4b, background features:** mono fallback, restore previous output, background mode with menu bar item, volume keys, app exclusions.
 - **M5, polish:** per-pair settings, debug panel, launch at login, permission flow, signing and notarization script.
+- **M6, Surround kernel:** `surround.c` behind `DomineSurround.h`: VBAP with the gap and coincident rules, virtual sources, headroom normalisation, width, surround level, rotation, orbit, distance compensation helper, per-speaker effects, gain, delay, mute. Unit tests from section 13.8. The quad kernel stays until M7 is done.
+- **M7, Surround engine and UI:** N-speaker aggregate, fallback, settings and migration from quad, Stereo / Surround control, the stage with draggable cards, presets, Add Speaker, controls, the Bluetooth warning. Engine tests against the fake HAL. Ends with the listening test in 13.8.
+- **M8, Showcase demo:** `demo.c` behind `DomineDemo.h`, the kernel hook, Play Demo in both modes (Stereo via the temporary surround rebuild), stage dot and status line. Ends with the listening test in 14.7.
+- **M9, Linux port:** `linux/` engine on PipeWire behind `linux/src/engine.h`, GTK4 UI with the stage and demo, `make check` self-test (section 15).
 - **v2 ideas:** mic-based auto-calibration of the latency offset (play a click on each side, cross-correlate), per-app routing using per-process taps, a true stereo mode where each speaker gets full stereo with a crossfeed amount.
 
-## 11. Quad mode (v2 plan)
+## 11. Quad mode (v2 plan, superseded by section 13)
+
+Superseded by Surround mode (section 13). Kept for history; where the two disagree, section 13 wins.
+
 
 Quad mode adds rear left and rear right speakers. Positions are indexed 0 FL, 1 FR, 2 RL, 3 RR. Phase 1 (done) is the aggregate, layout, model and UI. Phase 2 is kernel and engine.
 
@@ -422,4 +435,173 @@ Requested by the owner; replaces hand-tuning the delay slider as the normal path
 - The Mac's position matters: it measures arrival time at the Mac, not at the listener. The Tuning sheet says to put the Mac where the listener sits.
 - The "Play Click Test" button in the Tuning sheet mockup is the entry point. Add an "Auto-calibrate" button next to it.
 - Kernel support needed: a one-shot click/chirp generator per side with a sample-accurate start time reported back through an atomic, so the recording can be aligned to the emission.
-- Milestone: after M5, before quad mode. Quad mode reuses it to measure all four positions.
+- Milestone: after M5, before quad mode. Quad mode reuses it to measure all four positions. With Surround mode (section 13) it measures every speaker in the set, one click per speaker, and writes the per-speaker calibration offsets of section 13.4.
+
+## 13. Surround mode (N speakers)
+
+Replaces quad mode (section 11) as the multi-speaker plan. The owner asked for "three or more speakers, unlimited, set up like a surround system no matter the number, and you can move them around". Surround mode takes 3 to 16 speakers (`DOMINE_SURROUND_MAX_SPEAKERS`, `SurroundSpeaker.maxCount`), places each at an angle and distance around the listener, and pans the stereo tap across them. Stereo mode (two speakers, `domine_kernel_*`) is unchanged.
+
+Naming: the owner called it "Dolby Atmos 8D". Section 11.6 forbids "Dolby" and "Atmos" anywhere in the app, and "8D" is not used either. The mode is "Surround", the rotating effect is "Orbit".
+
+Kernel contract: `Sources/DomineDSP/include/DomineSurround.h`. Model: `Sources/Domine/State/SurroundSpeaker.swift`.
+
+### 13.1 Model
+- A speaker is a `SurroundSpeaker`: device UID (never an `AudioObjectID`), azimuth, distance. Azimuth in degrees, 0 straight ahead of the listener, positive clockwise seen from above (to the right), wrapped to (-180, 180]. Distance in metres, 0.5 to 10, default 2.
+- The set is an ordered list. List order is speaker index everywhere: kernel index, aggregate sub-device order, card order in the Sync & Balance sheet. New speakers append; the nth speaker added gets `SurroundSpeaker.defaultAzimuth(forIndex:)` (-30, 30, -110, 110, 0, 180, -70, 70, ...).
+- Settings key: `Domine.surround.<UIDs sorted, joined by |>`. Any order of the same speakers finds the same record. The record holds each speaker's azimuth, distance, trim, calibration offset (ms) and effects (EQ, bass, compressor, as `PairSettings.SideEffects`), plus width, surround level, orbit speed, rotation, spatial amount and room size. The last used set is stored as `Domine.lastSurroundUIDs`. Adding or removing a speaker changes the key: the new record starts from the old one (speakers that stay keep everything) and the new speaker gets its default azimuth and 2 m.
+- Same name rule as stereo: two "JBL Grip" entries are told apart by the UID suffix, never by name.
+- Presets (Presets menu, 13.6). A preset assigns azimuths only; distances, trims and effects stay. Speakers keep their clockwise order: the current azimuths are sorted and mapped onto the preset's azimuths, sorted the same way.
+
+| Preset | Speakers | Azimuths |
+|---|---|---|
+| Quad | 4 | -30, 30, -110, 110 |
+| 5 speaker | 5 | -30, 0, 30, -110, 110 |
+| 7 speaker | 7 | -30, 0, 30, -90, 90, -150, 150 |
+| Ring | any N | evenly spaced: -180 + 360 (i + 0.5) / N, so 4 gives -135, -45, 45, 135 |
+
+  Quad, 5 speaker and 7 speaker are enabled only when the set has exactly that many speakers. Ring is always enabled.
+
+### 13.2 Aggregate
+- Same rules as 11.1 with N sub-devices in list order. The first present speaker is the main sub-device and the clock (no drift compensation). Every other speaker and every tap gets drift compensation at max quality.
+- Never force a sample rate (section 4a). The aggregate runs at the clock device's rate.
+- Private, rebuilt from scratch on every change of the set, of a speaker's presence, or of the clock's rate. Never mutated while running (section 7).
+- Output offsets: one flat channel index per speaker in list order, read from `kAudioDevicePropertyStreamConfiguration` after polling until the output channel count equals the sum of the present sub-devices. A speaker that is absent from this build gets `DOMINE_NO_DEVICE`. Passed with `domine_surround_set_layout` before `AudioDeviceStart`; the IOProc is `domine_surround_ioproc`.
+- The kernel writes each speaker's signal on offset and offset + 1 (mono Grips need both). An output with fewer than two output channels is not offered in Surround mode, since offset + 1 would land on the next speaker.
+- Never open a Bluetooth speaker for input; the input rules of section 5 apply unchanged.
+- Volume (4a) generalises: every speaker in the set that has a settable hardware volume is linked. A change on any one (from its buttons) is applied to all others, with the same suppression window. With the virtual output installed its volume is the master, as in stereo.
+
+### 13.3 Rendering
+The kernel turns the stereo tap into a few virtual sources and pans each one over the speakers.
+
+- Sources: 0 is L at -width, 1 is R at +width, 2 and 3 are the ambience pair from the spatial upmixer (`DomineSpatial.h`, 11.6a) at -110 and +110 (`DOMINE_SURROUND_REAR_AZ`) times surround level, 4 and up are demo voices (section 14). Ambience sources are used only when 3 or more speakers are present.
+- Every source azimuth is offset by rotation plus the orbit phase before panning.
+- Panning: 2D pairwise VBAP (`domine_surround_vbap`). A source pans between the two adjacent present speakers that enclose it. If their arc is under 180 degrees the gains solve the 2D VBAP equation and are normalised to unit power. One speaker gets gain 1.
+- Gap rule: if the enclosing arc is 180 degrees or wider (behind a front-only pair, or one side of a lopsided layout) VBAP would flip sign, so the gains are constant-power by angle fraction across the arc: cos(f pi/2) and sin(f pi/2), where f is the source's fraction of the arc.
+- Coincident rule: speakers within 0.5 degrees (`DOMINE_SURROUND_COINCIDENT_DEG`) count as one position and share its gain equally by power (1/sqrt(k) each for k speakers). A source exactly on a speaker gives that speaker (or its group) the whole source.
+- Headroom normalisation: each source is unit power, but two sources can land on the same speaker (L and R both near one speaker in a 3-speaker layout, or ambience on a front speaker). For each speaker the kernel sums the absolute gains of all program sources (ambience counted at its surround level); if the largest sum exceeds 1, every program gain is scaled by 1 / that sum. Since L, R and ambience are each within +-1, no speaker exceeds the larger input peak. This keeps the 4d rule that the kernel never adds gain, and it gives the two exact cases: 2 speakers at -width and +width play L and R bit for bit; 1 speaker plays (L + R) / 2 bit for bit. Demo voices are not part of this sum (section 14.3).
+- Width: azimuth of the L and R sources, 10 to 90 degrees, default 30. Narrow puts the stereo image in front, wide wraps it toward the sides.
+- Surround level: 0 to 1, default 0.7. Scales the ambience sources. 0 means only L and R play, panned over the speakers that enclose them.
+- Rotation: static offset of the whole field, -180 to 180, default 0. Lets the user face another way without dragging every speaker.
+- Orbit: continuous rotation in degrees per second, clamped to +-720 in the kernel (the UI offers -90 to 90). 0 stops the field where it is; "Reset" returns the phase to 0. Orbit is a listening effect, not a correction, and is off by default.
+- Pan gains ramp from the old values over one process call when the layout, width, rotation or orbit changes (no zipper, no click). Dragging a card updates the kernel live.
+- After panning, each speaker runs its own chain from section 5a: EQ, bass, compressor, then trim gain, then delay. Then mute (50 ms fade) and the peak meter (`domine_surround_peak`).
+- Multi-tap input (per-app volume, section 5a) works as in the quad kernel through `domine_surround_set_tap_layout` and `_tap_gain`.
+
+### 13.4 Distance compensation
+- `domine_surround_distance_comp` turns distances into delay and gain so every speaker's sound arrives at the listener at the same time and level. The farthest speaker is the reference (delay 0, gain 1). Speaker i gets delay (dmax - d_i) / 343 m/s and gain d_i / dmax (inverse distance law). Example: speakers at 2 m and 3 m, the 2 m one gets 2.915 ms and 0.667.
+- Combined with calibration (11.3, section 12): total delay_i = distance delay_i + calibration offset_i, then the smallest total over the present speakers is subtracted so it is 0 and none is negative, clamped to `DOMINE_MAX_DELAY_MS` (300). Total gain_i = trim_i times distance gain_i, set with `domine_surround_set_gain` (never above 1).
+- The calibration offset is the per-speaker Bluetooth latency correction (manual in the Sync & Balance sheet, or measured by section 12). Distance is geometry only. They stay separate in settings so moving a card does not lose a measured latency.
+- Recomputed on the main actor whenever a distance, trim, offset or speaker presence changes.
+
+### 13.5 Fallback
+- Any speaker missing (device gone or `kAudioDevicePropertyDeviceIsAlive` 0): state `degraded(.surroundMissing(uids))`. Rebuild the aggregate with the present speakers only. The kernel keeps the full layout (indexes, effects and settings stay put) and the missing speaker gets `DOMINE_NO_DEVICE`, so VBAP re-pans its share to its neighbours. If the clock speaker went, the next present speaker in list order is the clock.
+- Two present: the surround kernel continues with two speakers (gap rule covers the open side). Ambience is off below 3 present speakers.
+- One present: it plays the mono sum (L + R) / 2 on both channels (13.3 headroom rule gives this exactly). Status "Mono fallback".
+- None present: `idle`, restore the previous output (4c).
+- A returning speaker (matched by UID) rebuilds back into the set at its saved position. 50 ms fades out and in across every rebuild.
+- Banner: "<name> <UID suffix> disconnected. The other speakers cover its position until it reconnects." With several missing, "2 speakers disconnected. ..." Missing cards stay on the stage in the error state.
+
+### 13.6 UI
+- The toolbar's Stereo / Quad control becomes **Stereo / Surround**. Surround is enabled once at least three distinct outputs are available (connected, not hidden by DeviceCatalog). First switch: the set starts with the current stereo pair at -30 and +30 (swap applied) plus the next available output at its default azimuth; later switches restore `Domine.lastSurroundUIDs`.
+- Stage: a top-down room with the listener in the centre (person symbol, not the Mac icon), "FRONT" at the top, faint rings every metre. Scale: the farthest speaker sits at about 85% of the stage radius, never less than a 4 m radius. Each speaker is a card drawn at its azimuth and distance, with a line from the listener.
+- Drag a card to move it: azimuth and distance follow the pointer, azimuth snaps to 5 degrees and distance to 0.1 m; holding Option disables snapping. Distance clamps to 0.5 to 10 m. The kernel follows live; settings save on drag end. A click without movement opens the Choose Speaker sheet for that card.
+- Card contents as in stereo (device name, UID suffix, status line, 16-segment meter), but the side tag (L, R, L+R) is replaced by an angle label like "-30°" (with "2.0 m" beside it while dragging). Fallback cards show "L+R" as in stereo.
+- "Add Speaker..." (bottom bar) opens the Choose Speaker sheet filtered to outputs not in the set. Disabled at 16 speakers. Card context menu: "Choose Speaker...", "Remove Speaker" (disabled at 3 speakers; going below 3 means switching to Stereo).
+- Presets menu (13.1): Quad, 5 speaker, 7 speaker, Ring.
+- Controls in a row under the stage: Width (slider, 10° to 90°), Surround level (slider, 0 to 100%), Orbit speed (slider, -90 to 90°/s, centre is "Off", readout like "20°/s clockwise"), Rotation (slider, -180° to 180°, with Reset). Master volume, Play Demo (section 14) and "Sync & Balance..." stay in the bottom bar; Test L / Test R are hidden in Surround (the demo roll call identifies speakers).
+- Sync & Balance in Surround: one row per speaker with calibration offset (ms) and trim, plus effects per speaker. Distance comes from the stage, not from this sheet.
+- Warning: with more than 4 Bluetooth speakers in the set (transport type `kAudioDeviceTransportTypeBluetooth`, read through `AudioHAL`), a line under the toolbar: "More than 4 Bluetooth speakers can drop out. Wired outputs are not affected." It does not block (sections 9, 11.8).
+- Status line: "Surround, 5 speakers", or "Surround, 4 of 5 speakers" when degraded.
+
+### 13.7 Migration from quad settings
+- Runs once at launch when a quad set is saved (`lastLeftUID`, `lastRightUID`, `lastRearLeftUID`, `lastRearRightUID` all set) and no surround record exists for those four UIDs.
+- Map positions to azimuths: FL -30, FR 30, RL -110, RR 110, distance 2 m. Use the speaker that actually played left (swap applied) as FL.
+- Keep effects: fronts take their effects from the pair settings, rears from `QuadSettings.rearEffects(...)` (so linked rears get the fronts' effects). Trims and delay offsets carry over as per-speaker trim and calibration offset; the stereo signed delay becomes two non-negative offsets (11.3).
+- Rear trim becomes surround level. Spatial amount and room size carry over; rear mode Mirror becomes spatial amount 0 (11.6a: amount 0 is exact mirror); Matrix has no equivalent and becomes the default amount 0.6.
+- `routingMode` quad becomes surround. Rooms that hold rear UIDs migrate the same way.
+- Old `Domine.quad.*` keys stay in place for one release so a downgrade still works. Migration is idempotent.
+
+### 13.8 Tests and listening test
+Kernel tests (exact expected values, known input buffers):
+- VBAP: speakers at -30 and 30, source at 0 gives 1/sqrt(2) each; source on a speaker gives 1 there and 0 elsewhere; front pair with source at 180 uses the gap rule (cos(pi/4) each); two coincident speakers get 1/sqrt(2) each; sum of squares 1 in every case; an absent speaker gets 0.
+- Bit exactness: 2 speakers at -30 and 30 with width 30 output L and R bit for bit; 1 speaker outputs (L + R) / 2 bit for bit.
+- Headroom: random full-scale input on 3, 5 and 16 speaker layouts never exceeds the larger input peak.
+- Rotation by 360 equals no rotation. Orbit phase after a known number of frames matches rate times time. A layout change ramps with no step larger than the ramp allows.
+- Distance helper: 2 m and 3 m give 2.915 ms and 0.667; non-positive distances count as 1 m.
+- Absent speaker: its share moves to its neighbours and its channels are zeroed.
+Engine tests against the fake HAL: N sub-devices in list order, first present is clock, drift keys on the rest; removal rebuilds without the speaker and with `DOMINE_NO_DEVICE` in the layout; one left gives mono; none gives idle and restore; the settings key string; migration output for a saved quad set.
+
+Listening test (after M7; Claude stops and asks the user): with four speakers on the Quad preset, play a stereo track with a clear left/right mix. Expected: the front pair sounds like normal stereo, the rears add room sound but no lead vocal. Drag the front left card to -90: the left part of the mix moves to the side. Set Orbit speed to 30°/s: the whole mix turns slowly around the room, one revolution every 12 s, with no clicks or level jumps. Switch off one rear speaker: a short gap, then its ambience comes from the neighbours; switch it back on and it rejoins.
+
+## 14. Showcase demo
+
+### 14.1 Purpose
+A built-in piece (47 s for two speakers, 47 to 51 s in general) the user plays to hear and feel what Domine does: where each speaker is, the left/right split, and sound moving around the room. It is an original piece in the spirit of a giant-screen theatre sound-system preshow, without a narrator: a dark, quiet room, precise sounds that place each speaker, sounds that travel and accelerate, a huge slowly building chord, a moment of silence, and one massive clean impact with a long tail. Precision and scale, not dance music. It imitates no existing preshow audio. Generated live in the kernel for the current speaker set (`Sources/DomineDSP/include/DomineDemo.h`), no audio files.
+
+### 14.2 Timeline
+Exactly as `DomineDemo.h`. Grid: 120 BPM (beat 0.5 s, bar 2 s); every section starts on a downbeat and a drone carries across the sections. Key: D natural minor, equal temperament from A4 = 440 Hz, tonic D2 = 73.42 Hz (where Grips start to work); every pitched sound uses only scale tones. R is the Calibration length: 2 s of ticks plus the roll call rounded up to whole bars (6 s for N <= 4 and N > 8, 8 s for N = 5 and 6, 10 s for N = 7 and 8). Total length R + 41 s, reported by `domine_demo_length`. `DOMINE_DEMO_LENGTH_S` (51) is the longest.
+
+| Time (s) | Section (value, UI title) | What plays |
+|---|---|---|
+| 0 to R | ROLL_CALL (1, "Calibration") | Soft A6 ticks on every beat, a dark D minor drone fading in. From 2 s the roll call, clockwise from the speaker nearest hard left, each kick exactly on its speaker's azimuth, exactly one hit per speaker per round: N <= 2 a double hit per speaker ("da-dum", 0.25 s apart, second louder) every 2 beats, 4 slots; 3 to 8 speakers one hit per beat, two rounds; more than 8 one hit per half beat, one round. |
+| R to R+6 | PING_PONG (2, "Left and right") | Kicks alternate -90 and +90, first on the left: quarters for a bar, eighths for a bar, sixteenths for 3 beats, over a D2 sub pulse on every beat. |
+| R+6 to R+12 | SWEEP (7, "Sweep") | A tone plus band-passed noise flies across the room 6 times clockwise from -90 (front, back, front...), each pass faster (2, 1.5, 1, 0.75, 0.5, 0.25 s) and gliding one scale step up (D3 F3 G3 A3 C4 D4 F4, starting and ending on scale tones), with a Doppler-like bend in each pass (above pitch approaching, falling through it at the middle, below it receding). Ends at +90. |
+| R+12 to R+22 | ORBIT (3, "Orbit") | A smooth bass (saws at the root and an octave up plus a root sine, low-pass wobbling 250 to 700 Hz at 1 Hz) playing Dm, Bb, F, C, Dm, one chord per bar (roots D2, Bb1, F2, C2, D2, the drone follows), enters at +90 where the sweep ended and circles clockwise, 0.25 to 0.6 turns per second. A kick every 2 beats on its azimuth; off-beat hats on the mirror path. |
+| R+22 to R+32 | SWELL (4, "Swell") | The drone opens into a brass-like chord: 12 detuned saws voiced over three octaves (D2 to D5 for Dm) through a slowly opening low-pass (280 Hz to 4.5 kHz), split across two voices that spread from the centre to -90 and +90 and toward every speaker. One chord per bar: Dm, Bb, Gm, Asus4, A. A slow crescendo, a deep sub on the chord root, and a timpani-like tom on each chord change. The bass follows and fades out over 6 s. Bright pings on chord tones sweep across the top; a noise riser climbs through the last 2 bars. Everything cuts with a 30 ms fade at R+32. |
+| R+32 to R+33 | SILENCE (8, "Silence") | Every voice exactly 0. |
+| R+33 to R+41 | DROP (5, "Impact") | A clean kick (A3 to D2) and a saturated sub boom (A1 to D1) on every speaker, a wide noise burst whose low-pass falls from 10 kHz to 200 Hz, and a big D minor chord (root, fifth, octave, minor third on top) sustaining with a slow fade, all decaying to exactly 0. Then FINISHED (6). |
+
+Kick: saturated sine falling A3 to D2 (220 to 73.4 Hz) (tau 30 ms), amplitude exp(-t / 90 ms), 1 ms attack, 20 ms cosine fade to 0 at 220 ms, plus a beater layer (D7 sine and a noise tick) so it reads clearly on small speakers. Kicks duck the drone and the bass. Two kick voices alternate so a tail is never cut. Deterministic: the same speakers and sample rate give the same samples.
+
+### 14.3 Rendering
+- The demo produces up to `DOMINE_DEMO_VOICES` (8) voices per frame, each a mono sample with an azimuth and an omni amount. The surround kernel adds them as sources 4 and up, panned with the same `domine_surround_vbap` over the present speakers, then blended toward equal power on every speaker: g_k = (1 - omni) vbap_k + omni / sqrt(N).
+- Each voice peaks within 0.8 and the absolute values of all voices together within 1.0 (a safety limiter on the voice sum enforces it), so no headroom scaling is needed; demo voices are left out of the 13.3 sum.
+- The demo goes through each speaker's effects, trim, distance delay and gain, calibration delay and mute, like program audio, so it shows the user's real setup.
+- Program audio crossfades out over 50 ms when the demo starts and back in over 50 ms when it stops or finishes (`domine_surround_set_demo`).
+- While the demo plays the engine sets rotation 0 and resets and stops the orbit, so each roll-call kick lands on its speaker; the user's rotation and orbit return when the demo ends. Width and surround level do not affect the demo.
+
+### 14.4 Behaviour
+- "Play Demo" button in the bottom bar, in Stereo and Surround modes. Enabled while routing with at least 2 speakers present. While playing it reads "Stop Demo". The demo stops on its own at `domine_demo_length` (47 s for two speakers).
+- A second "Play Demo" / "Stop Demo" button sits in the Sync & Balance sheet, on its own row below the sync and balance controls, near Play Click Test. While the demo plays, a caption beside it shows the current section ("Calibration", "Left and right", "Sweep", "Orbit", "Swell", "Silence", "Impact"). Both buttons drive the same demo and show the same state. This lets the user tune delay and balance while hearing the roll call and ping-pong.
+- Surround mode: `domine_surround_set_demo(s, 1)`. No rebuild.
+- Stereo mode: the stereo kernel (`domine_kernel_*`) keeps normal playback and has no demo hook. Play Demo rebuilds the engine once with the surround kernel and two speakers, Device A at -30 and Device B at +30 (swap applied, so the speaker playing left sits at -30), with the pair's effects, trims and delay. The stereo kernel fades out over 50 ms, the rebuild happens, and the surround kernel starts faded out (`domine_surround_start_faded_out`), fades in over 50 ms, then the demo starts. When the demo finishes or is stopped, the same in reverse back to the stereo kernel. With 2 speakers and no demo the surround kernel plays L and R bit for bit, so program audio during the switch is unchanged apart from the rebuild gap. Decision: the surround path is used instead of adding a demo hook to the stereo kernel, so there is one demo implementation.
+- A device change, sleep, or routing stop during the demo stops it; Stereo mode then rebuilds with the stereo kernel as usual.
+- Master volume is not changed by the demo. It plays at the user's volume.
+
+### 14.5 UI
+- A dot moves on the stage at the demo azimuth from `domine_surround_demo_status`, polled at 30 Hz with the meters. It sits at the average speaker distance. When omni is high (Swell, Impact) the dot widens into a ring around the listener. In Stereo mode the stage draws the dot between and around the two cards the same way.
+- The status line shows the section: "Demo: Calibration" (1), "Demo: Left and right" (2), "Demo: Sweep" (7), "Demo: Orbit" (3), "Demo: Swell" (4), "Demo: Silence" (8), "Demo: Impact" (5), by `DOMINE_DEMO_SECTION_*` value. Idle (0) and finished (6) show the normal status.
+- Cards light up through their meters as usual; no extra animation per card.
+
+### 14.6 Bass on the Grip (honest note)
+JBL Grips roll off below about 70 to 80 Hz (section 1a: 70 Hz at -6 dB, one small driver). The bass roots (Bb1 to F2, 58 to 87 Hz) sit at the edge of what the Grip reproduces. The bass is built so it still works: the saws' harmonics carry the pitch (the ear fills in the missing fundamental), the kick's pitch sweep runs 220 to 73 Hz (A3 to D2), and the D7 beater gives each hit a clear position. The chord spans D2 to D5. Very low bass is hard to place anyway; position comes from the harmonics and the click. On Grips the "feel" is punch in the 100 to 200 Hz range, not sub bass. With larger speakers or a subwoofer in the set the sub content is heard and felt. The UI does not claim more than this.
+
+### 14.7 Levels and tests
+- Levels: one voice at most 0.8 (about -2 dBFS), all voices at most 1.0. The Impact at omni 1 gives each of N speakers 1/sqrt(N) of the kick, so its acoustic power equals one speaker at full.
+- Unit tests: determinism (two runs give identical samples); section boundaries at the exact frames for 44.1 and 48 kHz; length per speaker count; roll-call onsets on the grid and on each speaker's azimuth, in clockwise order from the speaker nearest -90, double hits for N = 2, two rounds for N = 8, one round for N = 9; ping-pong alternates from -90 with gaps 0.5, 0.25, 0.125 s; sweep travels 1080 degrees clockwise with the Doppler bend; orbit starts at +90 and turns 4.25 times; Silence exactly 0; one omni Impact kick; per-voice and summed peaks within 0.8 and 1.0; silent and FINISHED from `domine_demo_length` on; kernel crossfade takes 50 ms each way and program audio is bit exact again after it.
+- Engine tests against the fake HAL: Play Demo in Stereo rebuilds with the surround kernel at -30 and +30 and back afterwards; a device removal during the demo stops it.
+- Listening test (after M8): press Play Demo. Expected: a quiet room with soft ticks, then a kick from each speaker in turn going clockwise from the left (with two Grips: "da-dum" left, "da-dum" right, twice); left/right kicks over a sub pulse that speed up; a tone that flies across the room faster and faster, bending in pitch as it passes; a smooth bass circling with kicks; a brass-like chord that climbs Dm, Bb, Gm, A with a timpani hit on each change, grows and spreads to every speaker, with a riser at the end; a moment of true silence; one big clean impact and D minor chord on every speaker that rings out slowly to silence. No clicks at section changes or at the start or end; program audio returns smoothly.
+
+## 15. Linux port
+
+### 15.1 Goals
+- Same routing idea on PipeWire: create a virtual sink named "Domine", make it the default sink, capture its monitor, run the surround kernel, and play one stream per speaker to that speaker's sink. On stop, restore the previous default sink (remember it at start, like 4c).
+- Sinks are keyed by `node.name` (stable across reconnects, for Bluetooth it contains the device address), never by the numeric node id. `node.description` is the label. Domine's own sink is never listed.
+- Playback streams target their sink by `node.name` and must not be moved to another sink when theirs disappears (`node.dont-reconnect`); a missing sink is handled like 13.5.
+- Never open a Bluetooth source node (same headset profile risk as section 9).
+- Same render kernel: the Makefile compiles every `Sources/DomineDSP/*.c` unchanged. The Core Audio types it needs (`AudioBufferList`, `AudioTimeStamp`, `OSStatus`, `AudioObjectID`) come from a small shim in `linux/compat/CoreAudio/`. So `Sources/DomineDSP/` must stay portable C11: no Apple headers beyond `CoreAudioTypes.h` and `AudioHardwareBase.h`, no Apple-only APIs. The kernel runs on the PipeWire real-time thread with the rules of section 5.
+- Stereo on Linux is the surround kernel with two speakers at -30 and +30, which is bit exact (13.3); there is no separate stereo kernel path.
+- GTK4 UI with the same stage as 13.6 (listener in the centre, draggable cards, snapping, Presets, Width, Surround level, Orbit speed, Rotation), master volume, and Play Demo with the moving dot and section label (section 14).
+- The UI talks to audio only through `linux/src/engine.h` (`dl_engine_*`). Master volume is a kernel gain on every speaker.
+- Settings keyed as in 13.1 with `node.name` in place of the UID, stored under `$XDG_CONFIG_HOME/domine/`.
+
+### 15.2 Non-goals (first version)
+- No Bluetooth hardware volume linking (4a); master volume is digital in the kernel.
+- No auto-calibration (section 12). Manual offsets only.
+- No app exclusions, per-app volume, volume key handling, or virtual driver install. PipeWire's own sink handles volume keys for the "Domine" sink if the desktop shows it.
+
+### 15.3 Build and test
+- Needs the `libpipewire-0.3` and `gtk4` development packages.
+- `cd linux && make` builds `./domine`.
+- `cd linux && make check` builds and runs the headless engine self-test (no audio hardware needed).
+- The macOS build is not affected; `linux/` is not part of `project.yml`.

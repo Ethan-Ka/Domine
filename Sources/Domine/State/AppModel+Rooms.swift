@@ -12,7 +12,8 @@ extension AppModel {
         guard !name.isEmpty else { return nil }
         let room = Room(
             name: name, mode: routingMode, leftUID: leftUID, rightUID: rightUID,
-            rearLeftUID: rearLeftUID, rearRightUID: rearRightUID)
+            rearLeftUID: rearLeftUID, rearRightUID: rearRightUID,
+            surroundUIDs: surroundSettings.uids.isEmpty ? nil : surroundSettings.uids)
         rooms.append(room)
         store.rooms = rooms
         setCurrentRoom(room.id)
@@ -28,6 +29,7 @@ extension AppModel {
         if wasActive { stopRouting() }
         setSpeakers(left: room.leftUID, right: room.rightUID)
         setRear(left: room.rearLeftUID, right: room.rearRightUID)
+        if let surround = room.surroundUIDs, !surround.isEmpty { selectSurroundSet(surround) }
         setRoutingMode(room.mode)
         setCurrentRoom(id)
         if wasActive { Task { await startRouting() } }
@@ -49,8 +51,9 @@ extension AppModel {
     /// Manual changes to speakers or mode leave the room it no longer matches.
     func refreshCurrentRoom() {
         guard let room = currentRoom else { return }
+        let surroundMatches = room.mode != .surround || (room.surroundUIDs ?? []) == surroundSettings.uids
         let matches = room.mode == routingMode && room.leftUID == leftUID && room.rightUID == rightUID
-            && room.rearLeftUID == rearLeftUID && room.rearRightUID == rearRightUID
+            && room.rearLeftUID == rearLeftUID && room.rearRightUID == rearRightUID && surroundMatches
         if !matches { setCurrentRoom(nil) }
     }
 

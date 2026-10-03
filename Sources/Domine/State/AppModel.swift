@@ -36,15 +36,22 @@ final class AppModel {
     /// always kernel position A. Change them with `setSpeakers(left:right:)`.
     private(set) var leftUID: String?
     private(set) var rightUID: String?
-    /// Rear speakers, for quad mode (SPEC 11). Change with `setRear(left:right:)`.
+    /// Rear speakers of the old quad assign sheet. Kept for rooms and the
+    /// quad migration; Surround uses `surroundSettings.speakers`.
     private(set) var rearLeftUID: String?
     private(set) var rearRightUID: String?
-    /// The Stereo / Quad control. Quad only routes once the engine supports it.
+    /// The Stereo / Surround control. Surround routes once three speakers of
+    /// the set are connected; until then routing stays stereo.
     private(set) var routingMode: RoutingMode = .stereo
-    /// Tuning for the current set of four speakers.
-    private(set) var quadSettings = QuadSettings()
-    /// The engine and kernel play four speakers (SPEC 11, phase 2).
-    nonisolated static let engineSupportsQuad = true
+    /// The surround set and its tuning (SPEC 13.1). Change it only through
+    /// the methods in AppModel+Surround, which save it and reach the engine.
+    var surroundSettings = SurroundSettings()
+
+    // Demo (SPEC 14), polled at 30 Hz while it plays (AppModel+Surround).
+    var demoPlaying = false
+    var demoAzimuth: Float = 0
+    var demoSection = 0
+    @ObservationIgnored var demoPollTask: Task<Void, Never>?
     /// Tuning for the selected pair, seen with `leftUID` as Front Left.
     private(set) var pairSettings = PairSettings()
 
@@ -174,6 +181,8 @@ final class AppModel {
         rearRightUID = store.lastRearRightUID
         routingMode = store.routingMode
         rooms = store.rooms
+        store.migrateQuadSets(rooms: rooms)
+        surroundSettings = Self.loadSurroundSettings(store: store)
         currentRoomID = store.currentRoomID.flatMap { id in rooms.contains { $0.id == id } ? id : nil }
         pairSettings = Self.loadPairSettings(store: store, left: leftUID, right: rightUID)
         applyPairSettingsToEngine()
@@ -249,7 +258,6 @@ final class AppModel {
         pairSettings = Self.loadPairSettings(store: store, left: left, right: right)
         // A new pair is not a speaker connecting, so it never auto-starts.
         bothSpeakersWerePresent = bothSelectedSpeakersPresent
-        reloadQuadSettings()
         syncVolumeLink()
         applyPairSettingsToEngine()
         if wasActive {
@@ -257,81 +265,29 @@ final class AppModel {
         }
     }
 
+    /// The old quad rear assignment, kept for rooms saved with rears.
     func setRear(left: String?, right: String?) {
         guard left != rearLeftUID || right != rearRightUID else { return }
         rearLeftUID = left
         rearRightUID = right
-        let wasQuadActive = routingMode == .quad && engine.state.isActive
-        if wasQuadActive { stopRouting() }
         store.lastRearLeftUID = left
         store.lastRearRightUID = right
         refreshCurrentRoom()
-        reloadQuadSettings()
-        syncVolumeLink()
-        if wasQuadActive { Task { await startRouting() } }
     }
 
-    /// Four distinct outputs are assigned (the Quad segment's enable rule).
-    var isQuadAvailable: Bool {
-        let uids = [leftUID, rightUID, rearLeftUID, rearRightUID].compactMap { $0 }
-        return uids.count == 4 && Set(uids).count == 4
-    }
-
-    /// Quad is always selectable. Until four distinct outputs are assigned
-    /// and present, routing stays stereo on the front pair.
+    /// Switching to Surround the first time builds the set from the stereo
+    /// pair (SPEC 13.6). A running engine restarts in the new mode.
     func setRoutingMode(_ mode: RoutingMode) {
         guard mode != routingMode else { return }
         let wasActive = engine.state.isActive
         if wasActive { stopRouting() }
         routingMode = mode
         store.routingMode = mode
+        if mode == .surround { seedSurroundSetIfEmpty() }
         refreshCurrentRoom()
         syncVolumeLink()
-        if wasActive { Task { await startRouting() } }
-    }
-
-    /// The four UIDs in position order when Quad is chosen and all four
-    /// outputs are present; otherwise routing is stereo.
-    var quadRouteUIDs: [String]? {
-        guard Self.engineSupportsQuad, routingMode == .quad, isQuadAvailable else { return nil }
-        let uids = [leftUID, rightUID, rearLeftUID, rearRightUID].compactMap { $0 }
-        return uids.allSatisfy({ catalog.device(uid: $0) != nil }) ? uids : nil
-    }
-
-    func setRearTrim(_ trim: Float) {
-        quadSettings.rearTrim = min(max(trim.isFinite ? trim : 1, 0), 1)
-        engine.rearTrim = quadSettings.rearTrim
-        guard isQuadAvailable else { return }
-        store.setQuadSettings(quadSettings, uids: [leftUID, rightUID, rearLeftUID, rearRightUID].compactMap { $0 })
-    }
-
-    func setQuadRearEffects(_ change: (inout QuadSettings) -> Void) {
-        change(&quadSettings)
-        guard isQuadAvailable else { return }
-        store.setQuadSettings(quadSettings, uids: [leftUID, rightUID, rearLeftUID, rearRightUID].compactMap { $0 })
         applyPairSettingsToEngine()
-    }
-
-    func setSpatial(amount: Float? = nil, roomMs: Float? = nil) {
-        if let amount { quadSettings.spatialAmount = min(max(amount.isFinite ? amount : 0.6, 0), 1) }
-        if let roomMs { quadSettings.spatialRoomMs = min(max(roomMs.isFinite ? roomMs : 15, 5), 30) }
-        engine.spatialAmount = quadSettings.spatialAmount
-        engine.spatialRoomMs = quadSettings.spatialRoomMs
-        guard isQuadAvailable else { return }
-        store.setQuadSettings(quadSettings, uids: [leftUID, rightUID, rearLeftUID, rearRightUID].compactMap { $0 })
-    }
-
-    func setRearMode(_ mode: RearMode) {
-        quadSettings.rearMode = mode.rawValue
-        engine.rearMode = Int32(mode.rawValue)
-        guard isQuadAvailable else { return }
-        store.setQuadSettings(quadSettings, uids: [leftUID, rightUID, rearLeftUID, rearRightUID].compactMap { $0 })
-    }
-
-    private func reloadQuadSettings() {
-        quadSettings = isQuadAvailable
-            ? store.quadSettings(uids: [leftUID, rightUID, rearLeftUID, rearRightUID].compactMap { $0 })
-            : QuadSettings()
+        if wasActive { Task { await startRouting() } }
     }
 
     func uid(at position: SpeakerPosition) -> String? {
@@ -362,15 +318,21 @@ final class AppModel {
         guard !engine.state.isActive, !isStartingRouting else { return }
         isStartingRouting = true
         defer { isStartingRouting = false }
-        let quad = quadRouteUIDs
+        let surround = surroundRouteSpeakers
         tones.stop()
         routingRefusal = nil
         applyInitialDelayIfUnset()
-        if let left = leftUID, let right = rightUID, left != right,
-           catalog.device(uid: left) != nil, catalog.device(uid: right) != nil {
+        var routeUIDs: Set<String>?
+        if let surround {
+            routeUIDs = Set(surround.map(\.uid))
+        } else if let left = leftUID, let right = rightUID, left != right,
+                  catalog.device(uid: left) != nil, catalog.device(uid: right) != nil {
+            routeUIDs = [left, right]
+        }
+        if let routeUIDs {
             do throws(OutputRestorer.Failure) {
                 try outputRestorer.prepareForRouting(
-                    pair: Set(quad ?? [left, right]), playThroughUID: store.excludedAppsPlayThroughUID,
+                    pair: routeUIDs, playThroughUID: store.excludedAppsPlayThroughUID,
                     exclusionsActive: !engine.excludedProcesses.isEmpty)
             } catch .noOtherOutput {
                 routingRefusal = Self.noOtherOutputMessage
@@ -384,8 +346,8 @@ final class AppModel {
             if let volume = volumeLink.relink() { adoptHardwareVolume(volume) }
         }
         applyPairSettingsToEngine()
-        if let quad {
-            await engine.start(quad: quad)
+        if let surround {
+            await engine.start(surround: surround)
         } else {
             await engine.start(left: leftUID, right: rightUID)
         }
@@ -446,8 +408,8 @@ final class AppModel {
     /// Selected speakers that are present, with their current device IDs.
     private var presentSpeakers: [(uid: String, id: AudioObjectID)] {
         var seen = Set<String>()
-        let uids = routingMode == .quad && isQuadAvailable
-            ? [leftUID, rightUID, rearLeftUID, rearRightUID] : [leftUID, rightUID]
+        var uids: [String?] = [leftUID, rightUID]
+        if let surround = surroundRouteSpeakers { uids = surround.map { $0.uid } }
         return uids.compactMap { uid in
             guard let uid, seen.insert(uid).inserted, let device = catalog.device(uid: uid) else { return nil }
             return (uid, device.id)
@@ -495,29 +457,31 @@ final class AppModel {
         engine.leftGain = pairSettings.leftGain * kernelVolume(for: leftUID)
         engine.rightGain = pairSettings.rightGain * kernelVolume(for: rightUID)
         engine.delayMs = pairSettings.delayMs
-        applyQuadSettingsToEngine()
-        let fronts = (pairSettings.effects.left, pairSettings.effects.effectiveRight)
-        engine.setEffects(left: fronts.0, right: fronts.1)
-        let rears = quadSettings.rearEffects(frontLeft: fronts.0, frontRight: fronts.1,
-                                             linkSpeakers: pairSettings.effects.linkSpeakers)
-        engine.setRearEffects(left: rears.left, right: rears.right)
+        engine.setEffects(left: pairSettings.effects.left, right: pairSettings.effects.effectiveRight)
+        applySurroundSettingsToEngine()
     }
 
-    /// Quad kernel controls: per-position gain and delay (the signed pair
-    /// delay becomes two non-negative ones on the fronts), rear mode and trim.
-    private func applyQuadSettingsToEngine() {
-        let master = pairSettings.masterVolume
-        engine.quadGains = [
-            pairSettings.leftGain * kernelVolume(for: leftUID),
-            pairSettings.rightGain * kernelVolume(for: rightUID),
-            master * kernelVolume(for: rearLeftUID), master * kernelVolume(for: rearRightUID),
-        ]
-        let delay = pairSettings.delayMs
-        engine.quadDelaysMs = [max(-delay, 0), max(delay, 0), 0, 0]
-        engine.rearMode = Int32(quadSettings.rearMode)
-        engine.rearTrim = quadSettings.rearTrim
-        engine.spatialAmount = quadSettings.spatialAmount
-        engine.spatialRoomMs = quadSettings.spatialRoomMs
+    /// Surround kernel controls (SPEC 13.4): per speaker trim times the
+    /// master volume's kernel share, calibration offsets, effects, and the
+    /// field controls. Distance compensation is added by the engine.
+    func applySurroundSettingsToEngine() {
+        let s = surroundSettings
+        engine.surroundSpeakers = s.speakers
+        var gains: [String: Float] = [:]
+        var effects: [String: PairSettings.SideEffects] = [:]
+        for uid in s.uids {
+            gains[uid] = s.trim(for: uid) * kernelVolume(for: uid)
+            effects[uid] = s.resolvedEffects(for: uid)
+        }
+        engine.surroundGains = gains
+        engine.surroundDelaysMs = s.offsetsMs
+        engine.setSurroundEffects(effects)
+        engine.surroundWidth = s.width
+        engine.surroundLevel = s.surroundLevel
+        engine.orbitRate = s.orbitRate
+        engine.rotation = s.rotation
+        engine.spatialAmount = s.spatialAmount
+        engine.spatialRoomMs = s.spatialRoomMs
     }
 
     func setEffects(_ effects: PairSettings.EffectsSettings) {
@@ -580,6 +544,7 @@ final class AppModel {
         toneTask?.cancel()
         toneTask = nil
         engine.testTone = .off
+        engine.surroundTestTone = nil
     }
 
     // MARK: - Reacting to the catalog and engine
@@ -612,11 +577,14 @@ final class AppModel {
         if engine.state.isRouting {
             if !hasRunEngine { hasRunEngine = true }
             if !meters.isRunning {
-                meters.start { [weak self] in self?.readMeterPeaks() ?? (0, 0) }
+                meters.start(
+                    reader: { [weak self] in self?.readMeterPeaks() ?? (0, 0) },
+                    surroundReader: { [weak self] in self?.readSurroundPeaks() ?? [:] })
             }
         } else if meters.isRunning {
             meters.stop()
         }
+        if !engine.state.isRouting, demoPlaying { syncDemoStatus() }
         if engine.state != .running && engine.clickTest { engine.clickTest = false }
         syncVirtualOutput()
     }

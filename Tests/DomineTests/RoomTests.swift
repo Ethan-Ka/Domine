@@ -24,12 +24,14 @@ final class RoomTests {
     }
 
     @Test func saveCapturesSetupAndMakesItCurrent() throws {
-        assign(["A", "B", "C", "D"])
-        model.setRoutingMode(.quad)
+        assign(["A", "B"])
+        model.setRoutingMode(.surround)
+        for uid in ["A", "B", "C", "D"] { model.addSurroundSpeaker(uid: uid) }
         let room = try #require(model.saveCurrentAsRoom(name: "  Patio "))
         #expect(room.name == "Patio")
-        #expect(room.mode == .quad)
-        #expect([room.leftUID, room.rightUID, room.rearLeftUID, room.rearRightUID] == ["A", "B", "C", "D"])
+        #expect(room.mode == .surround)
+        #expect([room.leftUID, room.rightUID] == ["A", "B"])
+        #expect(room.surroundUIDs == ["A", "B", "C", "D"])
         #expect(model.rooms == [room])
         #expect(model.currentRoomID == room.id)
         #expect(model.saveCurrentAsRoom(name: "   ") == nil)
@@ -41,7 +43,7 @@ final class RoomTests {
         let first = try #require(model.saveCurrentAsRoom(name: "Desk"))
         assign(["C", "D"])
         model.updatePairSettings { $0.delayMs = 30 }
-        model.setRoutingMode(.quad)
+        model.setRoutingMode(.surround)
         #expect(model.currentRoomID == nil)
 
         model.selectRoom(first.id)
@@ -88,8 +90,30 @@ final class RoomTests {
         #expect(third.currentRoomID == nil)
     }
 
+    @Test func surroundRoomRestoresItsSet() throws {
+        assign(["A", "B"])
+        model.setRoutingMode(.surround)
+        for uid in ["A", "B", "C"] { model.addSurroundSpeaker(uid: uid) }
+        let room = try #require(model.saveCurrentAsRoom(name: "Den"))
+        model.addSurroundSpeaker(uid: "D")
+        #expect(model.currentRoomID == nil)
+        model.selectRoom(room.id)
+        #expect(model.surroundSpeakers.map(\.uid) == ["A", "B", "C"])
+        #expect(model.routingMode == .surround)
+        #expect(model.currentRoomID == room.id)
+    }
+
+    @Test func quadRoomDecodesAsSurround() throws {
+        let json = #"[{"id":"6F2C1A52-58D6-4E43-9D8B-0E3E3E3B8A11","name":"Patio","mode":"quad","leftUID":"A","rightUID":"B","rearLeftUID":"C","rearRightUID":"D"}]"#
+        let rooms = try JSONDecoder().decode([Room].self, from: Data(json.utf8))
+        #expect(rooms.first?.mode == .surround)
+        #expect(rooms.first?.surroundUIDs == ["A", "B", "C", "D"])
+        let bad = #"[{"id":"6F2C1A52-58D6-4E43-9D8B-0E3E3E3B8A11","name":"X","mode":"nope"}]"#
+        #expect(try JSONDecoder().decode([Room].self, from: Data(bad.utf8)).first?.mode == .stereo)
+    }
+
     @Test func rendersRoomViews() throws {
-        let rooms = [Room(name: "Living room", mode: .stereo), Room(name: "Patio", mode: .quad)]
+        let rooms = [Room(name: "Living room", mode: .stereo), Room(name: "Patio", mode: .surround)]
         try render(
             VStack(spacing: 20) {
                 RoomMenu(rooms: rooms, currentRoomID: rooms[0].id)

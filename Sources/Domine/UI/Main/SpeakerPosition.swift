@@ -1,5 +1,5 @@
-/// A place on the stage. Stereo shows the front pair; quad adds the rear
-/// pair (SPEC section 11).
+/// A place on the stage in Stereo mode. Surround cards are keyed by device
+/// UID instead (`SurroundCardInfo`).
 enum SpeakerPosition: String, CaseIterable, Identifiable, Sendable {
     case frontLeft
     case frontRight
@@ -17,9 +17,10 @@ enum SpeakerPosition: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// The positions drawn in `mode`.
+    /// The fixed positions drawn in `mode`. Surround draws one card per
+    /// surround speaker instead, so it has none.
     static func positions(in mode: RoutingMode) -> [SpeakerPosition] {
-        mode == .quad ? allCases : [.frontLeft, .frontRight]
+        mode == .stereo ? [.frontLeft, .frontRight] : []
     }
 
     var isFront: Bool { self == .frontLeft || self == .frontRight }
