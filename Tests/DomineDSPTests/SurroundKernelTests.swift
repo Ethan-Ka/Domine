@@ -18,7 +18,7 @@ struct SurroundKernelTests {
 
     /// Runs one process call. Offsets are flat channel indexes, one per speaker.
     static func run(
-        _ s: OpaquePointer, offsets: [UInt32], left: [Float] = left, right: [Float] = right,
+        _ s: OpaquePointer, offsets: [UInt32], left: [Float] = Self.left, right: [Float] = Self.right,
         buffers: [Int] = [8]
     ) -> TestBufferList {
         let input = TestBufferList.interleaved(left: left, right: right)
@@ -200,6 +200,7 @@ struct SurroundKernelTests {
     @Test func demoStartsReportsAndStops() {
         let s = Self.make(8000, [-45, 45, -135, 135])
         defer { domine_surround_destroy(s) }
+        domine_surround_set_surround_level(s, 0)
         let quarter = [Float](repeating: 0.25, count: 500)
         let offsets: [UInt32] = [0, 2, 4, 6]
         let program = Self.run(s, offsets: offsets, left: quarter, right: quarter).channel(0)[499]
