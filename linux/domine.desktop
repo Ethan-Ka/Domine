@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Domine
+GenericName=Speaker Splitter
+Comment=Play your audio across several speakers, in stereo or surround
+Exec=domine
+Icon=audio-speakers
+Terminal=false
+Categories=AudioVideo;Audio;Settings;
+Keywords=speakers;bluetooth;stereo;surround;audio;
+StartupNotify=true
+DBusActivatable=false
+StartupWMClass=domine

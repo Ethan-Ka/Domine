@@ -181,7 +181,7 @@ static void test_text(void)
     dl_fallback_banner(DL_MODE_SURROUND, 3, missing, banner, sizeof banner);
     CHECK(g_str_has_prefix(banner, "Speaker 2 disconnected."));
     // No em dash or spaced en dash in any UI string built here.
-    CHECK(strstr(banner, "—") == NULL && strstr(banner, " – ") == NULL);
+    CHECK(strstr(banner, "\xe2\x80\x94") == NULL && strstr(banner, " \xe2\x80\x93 ") == NULL);
 }
 
 static void test_tuning_math(void)

@@ -3,7 +3,9 @@
 //   domine --background  starts without a window (used by Launch at login)
 //   domine --self-test   runs the pure logic checks and exits 0 or 1
 //   domine --settings=PATH  uses another settings file (for testing)
+#include <glib-unix.h>
 #include <gtk/gtk.h>
+#include <signal.h>
 #include <string.h>
 #include "ui_app.h"
 #include "ui_selftest.h"
@@ -42,10 +44,26 @@ static void on_activate(GApplication *app, gpointer data)
     dl_window_present(gUi);
 }
 
+/// SIGTERM or SIGINT (logout, Ctrl+C): quit cleanly so routing stops and the
+/// previous default output comes back.
+static gboolean on_signal(gpointer app)
+{
+    if (gUi && gUi->held) {
+        g_application_release(G_APPLICATION(app));
+        gUi->held = 0;
+    }
+    g_application_quit(G_APPLICATION(app));
+    return G_SOURCE_CONTINUE;
+}
+
 static void on_shutdown(GApplication *app, gpointer data)
 {
-    (void)app;
     (void)data;
+    // Close every window first: dialogs reach into the state as they go.
+    GList *wins;
+    while ((wins = gtk_application_get_windows(GTK_APPLICATION(app))) != NULL)
+        gtk_window_destroy(GTK_WINDOW(wins->data));
+    if (gUi) gUi->w.window = NULL;
     dl_ui_free(gUi);
     gUi = NULL;
 }
@@ -70,6 +88,8 @@ int main(int argc, char **argv)
     GtkApplication *app = gtk_application_new("io.github.ethanka.Domine", G_APPLICATION_DEFAULT_FLAGS);
     g_signal_connect(app, "activate", G_CALLBACK(on_activate), NULL);
     g_signal_connect(app, "shutdown", G_CALLBACK(on_shutdown), NULL);
+    g_unix_signal_add(SIGTERM, on_signal, app);
+    g_unix_signal_add(SIGINT, on_signal, app);
     int status = g_application_run(G_APPLICATION(app), argc, argv);
     g_object_unref(app);
     return status;

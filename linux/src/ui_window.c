@@ -117,6 +117,13 @@ static gboolean on_close_request(GtkWindow *win, gpointer data)
     return TRUE;
 }
 
+static void on_window_destroy(GtkWidget *win, gpointer data)
+{
+    (void)win;
+    DLUi *ui = data;
+    memset(&ui->w, 0, sizeof ui->w);
+}
+
 static void act_prefs(GSimpleAction *a, GVariant *p, gpointer data)
 {
     (void)a;
@@ -367,6 +374,7 @@ void dl_window_build(DLUi *ui)
     gtk_window_set_default_size(GTK_WINDOW(w->window), 760, 680);
     gtk_window_set_titlebar(GTK_WINDOW(w->window), build_header(ui));
     g_signal_connect(w->window, "close-request", G_CALLBACK(on_close_request), ui);
+    g_signal_connect(w->window, "destroy", G_CALLBACK(on_window_destroy), ui);
 
     GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     w->banner = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
