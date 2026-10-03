@@ -160,12 +160,14 @@ static void test_text(void)
     dl_percent_text(0.7f, b, sizeof b);
     CHECK_STR(b, "70%");
 
-    CHECK_STR(dl_demo_section_name(1), "Roll call");
+    CHECK_STR(dl_demo_section_name(1), "Calibration");
     CHECK_STR(dl_demo_section_name(2), "Left and right");
     CHECK_STR(dl_demo_section_name(3), "Orbit");
     CHECK_STR(dl_demo_section_name(4), "Swell");
-    CHECK_STR(dl_demo_section_name(5), "Drop");
+    CHECK_STR(dl_demo_section_name(5), "Impact");
     CHECK_STR(dl_demo_section_name(6), "");
+    CHECK_STR(dl_demo_section_name(7), "Sweep");
+    CHECK_STR(dl_demo_section_name(8), "Silence");
 
     dl_card_name(DL_MODE_STEREO, 1, b, sizeof b);
     CHECK_STR(b, "Front Right");

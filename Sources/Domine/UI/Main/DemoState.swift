@@ -4,7 +4,7 @@ struct DemoState: Equatable, Sendable {
     /// Where the sound the listener should follow is, in degrees (0 ahead,
     /// positive to the right).
     var azimuth: Double = 0
-    /// e.g. "Roll call"; nil while idle.
+    /// e.g. "Calibration"; nil while idle.
     var sectionTitle: String?
     /// Routing with at least two speakers present. "Stop Demo" stays
     /// enabled while playing regardless.

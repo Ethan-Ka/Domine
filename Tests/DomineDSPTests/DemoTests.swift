@@ -5,7 +5,7 @@ struct DemoTests {
     static let rate = 48000.0
     static let stereo: [Float] = [-30, 30]
 
-    static func frame(_ seconds: Double, _ rate: Double = rate) -> UInt64 {
+    static func frame(_ seconds: Double, _ rate: Double = Self.rate) -> UInt64 {
         UInt64((seconds * rate).rounded())
     }
 

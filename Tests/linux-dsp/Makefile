@@ -15,7 +15,8 @@ all: $(TESTS)
 # whose ASan/UBSan runtimes are installed in the Linux container.
 OBJDIR := obj
 OBJS := $(patsubst $(ROOT)/Sources/DomineDSP/%.c,$(OBJDIR)/%.o,$(DSP))
-$(OBJDIR)/%.o: $(ROOT)/Sources/DomineDSP/%.c
+HDRS := $(wildcard $(ROOT)/Sources/DomineDSP/include/*.h $(ROOT)/Sources/DomineDSP/*.h)
+$(OBJDIR)/%.o: $(ROOT)/Sources/DomineDSP/%.c $(HDRS)
 	@mkdir -p $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 test_%: test_%.c $(OBJS) check.h

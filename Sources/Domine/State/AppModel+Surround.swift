@@ -327,19 +327,23 @@ extension AppModel {
         }
     }
 
-    /// "Roll call", "Left and right", "Orbit", "Swell", "Drop"; nil when idle or finished.
+    /// "Calibration", "Left and right", "Sweep", "Orbit", "Swell", "Silence",
+    /// "Impact"; nil when idle or finished.
     var demoSectionTitle: String? {
         Self.demoSectionTitle(demoSection)
     }
 
-    /// DOMINE_DEMO_SECTION_ROLL_CALL (1) to _DROP (5) have titles.
+    /// DOMINE_DEMO_SECTION_* values (DomineDemo.h). In play order: 1, 2, 7, 3,
+    /// 4, 8, 5. 0 is idle and 6 finished.
     static func demoSectionTitle(_ section: Int) -> String? {
         switch section {
-        case 1: "Roll call"
+        case 1: "Calibration"
         case 2: "Left and right"
+        case 7: "Sweep"
         case 3: "Orbit"
         case 4: "Swell"
-        case 5: "Drop"
+        case 8: "Silence"
+        case 5: "Impact"
         default: nil
         }
     }

@@ -162,11 +162,13 @@ void dl_geom_format_angle(float degrees, char *buf, uint32_t len)
 const char *dl_demo_section_name(int section)
 {
     switch (section) {
-    case DOMINE_DEMO_SECTION_ROLL_CALL: return "Roll call";
+    case DOMINE_DEMO_SECTION_ROLL_CALL: return "Calibration";
     case DOMINE_DEMO_SECTION_PING_PONG: return "Left and right";
+    case DOMINE_DEMO_SECTION_SWEEP: return "Sweep";
     case DOMINE_DEMO_SECTION_ORBIT: return "Orbit";
     case DOMINE_DEMO_SECTION_SWELL: return "Swell";
-    case DOMINE_DEMO_SECTION_DROP: return "Drop";
+    case DOMINE_DEMO_SECTION_SILENCE: return "Silence";
+    case DOMINE_DEMO_SECTION_DROP: return "Impact";
     default: return "";
     }
 }

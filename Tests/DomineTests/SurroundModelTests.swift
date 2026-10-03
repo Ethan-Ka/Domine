@@ -329,7 +329,7 @@ final class SurroundModelTests {
         start([])
         model.startDemo()
         #expect(!model.demoPlaying)
-        #expect((0...6).map { AppModel.demoSectionTitle($0) }
-            == [nil, "Roll call", "Left and right", "Orbit", "Swell", "Drop", nil])
+        #expect((0...8).map { AppModel.demoSectionTitle($0) }
+            == [nil, "Calibration", "Left and right", "Orbit", "Swell", "Impact", nil, "Sweep", "Silence"])
     }
 }
