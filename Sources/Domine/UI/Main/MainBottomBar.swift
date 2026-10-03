@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Master volume, test tones, the demo, and "Sync & Balance…" under the
+/// Master volume, test tones, and "Sync & Balance…" under the
 /// stage. Surround adds its sliders, "Add Speaker…" and Presets above.
 struct MainBottomBar: View {
     var state: MainWindowState
@@ -109,10 +109,6 @@ struct MainBottomBar: View {
                 testButton("Test L", side: .left)
                 testButton("Test R", side: .right)
             }
-
-            Button(state.demo.buttonTitle, action: actions.toggleDemo)
-                .disabled(!state.demo.isButtonEnabled)
-                .help("Bass hits and a growl that move around the speakers")
 
             Button("Sound…", action: actions.openSound)
             Button("Sync & Balance…", action: actions.openTuning)

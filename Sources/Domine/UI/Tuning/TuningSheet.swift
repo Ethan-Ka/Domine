@@ -144,7 +144,11 @@ struct TuningSheet: View {
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 8)
                 clickTestButton
+                Button("Auto-calibrate") { actions.autoCalibrate?() }
+                    .disabled(actions.autoCalibrate == nil || state.calibrationStatus == .listening)
+                    .help(actions.autoCalibrate == nil ? "Needs the Mac's built-in microphone" : "")
             }
+            calibrationLine
             clickTestMessageLine
         }
     }
