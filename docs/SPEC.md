@@ -435,7 +435,15 @@ Requested by the owner; replaces hand-tuning the delay slider as the normal path
 - The Mac's position matters: it measures arrival time at the Mac, not at the listener. The Tuning sheet says to put the Mac where the listener sits.
 - The "Play Click Test" button in the Tuning sheet mockup is the entry point. Add an "Auto-calibrate" button next to it.
 - Kernel support needed: a one-shot click/chirp generator per side with a sample-accurate start time reported back through an atomic, so the recording can be aligned to the emission.
-- Milestone: after M5, before quad mode. Quad mode reuses it to measure all four positions. With Surround mode (section 13) it measures every speaker in the set, one click per speaker, and writes the per-speaker calibration offsets of section 13.4.
+- Milestone: after M5, before quad mode. Quad mode reuses it to measure all four positions. With Surround mode (section 13) it measures every speaker in the set and writes the per-speaker calibration offsets of section 13.4, as below.
+
+### 12.1 Surround: a ring of pairs
+- Used in Surround routing with three or more present speakers s0...s(N-1) (list order); otherwise the stereo procedure above runs. Same entry points and enable rules as Stereo: the Auto-calibrate button next to the click test in Sync & Balance (built-in microphone present, no run in progress) and the status menu item.
+- N runs of the stereo measurement, one per pair (s0, s1), (s1, s2), ..., (s(N-1), s0). Run k sets `domine_surround_set_calibration_pair(s, k, k+1 mod N)` (kernel indexes): s_k plays the rising chirp, s(k+1) the falling one, every other speaker is silent, and the chirps bypass the delay line. Each run gives d_k = arrival(s(k+1)) - arrival(s_k) in ms. The pair is turned off after every run, on cancel, and on every engine stop.
+- Closure: around the ring the d_k must sum to 0. If |sum d_k| > 2 ms the run fails with "Results varied. Move the Mac and try again." Otherwise sum / N is subtracted from each d_k, arrival(s0) = 0, arrival(s(k+1)) = arrival(s_k) + d_k, and offset_i = max(arrival) - arrival_i, clamped to 0...300 ms. All offsets are written at once and the set is marked timing measured (13.4).
+- Example: arrivals 0, 12, -5, 30 ms give d = 12, -17, 35, -30 and offsets 30, 18, 35, 0.
+- Any failed pair stops the run and leaves every offset unchanged. The message names both speakers of that pair (card title plus UID suffix, since every speaker may be called "JBL Grip") and the reason.
+- Progress reads "Measuring pair 2 of 4…"; success "Delays set for 4 speakers." Cancel (closing the sheet) works between and during pairs.
 
 ## 13. Surround mode (N speakers)
 
@@ -491,6 +499,7 @@ The kernel turns the stereo tap into a few virtual sources and pans each one ove
 - `domine_surround_distance_comp` turns distances into delay and gain so every speaker's sound arrives at the listener at the same time and level. The farthest speaker is the reference (delay 0, gain 1). Speaker i gets delay (dmax - d_i) / 343 m/s and gain d_i / dmax (inverse distance law). Example: speakers at 2 m and 3 m, the 2 m one gets 2.915 ms and 0.667.
 - Combined with calibration (11.3, section 12): total delay_i = distance delay_i + calibration offset_i, then the smallest total over the present speakers is subtracted so it is 0 and none is negative, clamped to `DOMINE_MAX_DELAY_MS` (300). Total gain_i = trim_i times distance gain_i, set with `domine_surround_set_gain` (never above 1).
 - The calibration offset is the per-speaker Bluetooth latency correction (manual in the Sync & Balance sheet, or measured by section 12). Distance is geometry only. They stay separate in settings so moving a card does not lose a measured latency.
+- Measured vs unmeasured: offsets measured with the microphone (12.1) already hold each speaker's whole arrival difference at the Mac, acoustic travel included, so adding distance delay would count travel twice. While the set is marked timing measured, total delay_i = calibration offset_i only (normalised so the smallest over the present speakers is 0, clamped to 300); distance still sets gain. Unmeasured, the rule above applies. Manual offset edits keep the mark; Reset in Sync & Balance clears every offset and the mark; adding or removing a speaker clears the mark. While marked, Surround Sync & Balance says "Timing measured with the microphone; distances set level only."
 - Recomputed on the main actor whenever a distance, trim, offset or speaker presence changes.
 
 ### 13.5 Fallback

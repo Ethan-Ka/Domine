@@ -138,9 +138,11 @@ final class Engine {
         guard surroundRoute != nil, !stereoDemo, resources.surround != nil else { return [] }
         let uids = resources.surroundUIDs
         let present = resources.surroundPresent
-        return uids.indices.compactMap { index in
-            index < present.count && present[index] ? (uid: uids[index], index: index) : nil
+        var speakers: [(uid: String, index: Int)] = []
+        for index in uids.indices where index < present.count && present[index] {
+            speakers.append((uid: uids[index], index: index))
         }
+        return speakers
     }
     /// Test hook: what the last control push gave the surround kernel, per
     /// kernel index (list order; the stereo demo uses A, B).
