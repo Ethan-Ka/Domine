@@ -25,6 +25,8 @@ struct TuningState: Equatable, Sendable {
     /// Surround mode: one row per speaker, replacing the pair's delay offset
     /// and balance. Nil in Stereo.
     var surroundRows: [SurroundTuningRow]?
+    /// Surround: the offsets were measured with the microphone (SPEC 13.4).
+    var isSurroundTimingMeasured = false
 
     var isDemoButtonEnabled: Bool { isDemoPlaying || canPlayDemo }
 

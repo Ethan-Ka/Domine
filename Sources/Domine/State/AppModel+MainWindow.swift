@@ -103,6 +103,7 @@ extension AppModel {
                     trim: Double(settings.trim(for: speaker.uid)),
                     offsetMs: Double(settings.offsetMs(for: speaker.uid)))
             }
+            state.isSurroundTimingMeasured = settings.timingMeasured
         }
         return state
     }
@@ -110,6 +111,7 @@ extension AppModel {
     var tuningSheetActions: TuningActions {
         var actions = tuningActions
         actions.toggleDemo = { [weak self] in self?.toggleDemo() }
+        actions.resetSurround = { [weak self] in self?.resetSurroundTuning() }
         actions.setSurroundTrim = { [weak self] uid, trim in self?.setSurroundTrim(uid: uid, Float(trim)) }
         actions.setSurroundOffset = { [weak self] uid, ms in
             self?.setSurroundOffset(uid: uid, ms: Float(ms.rounded()))

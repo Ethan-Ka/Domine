@@ -9,7 +9,7 @@ extension AppModel {
             reportedLatencies: reportedLatencyText,
             isClickTestPlaying: engine.clickTest,
             isClickTestAvailable: engine.state != .starting && engine.state != .stopping
-                && calibrationStatus != .listening,
+                && calibrationStatus?.isInProgress != true,
             clickTestMessage: clickTestMessage,
             calibrationStatus: calibrationStatus)
     }

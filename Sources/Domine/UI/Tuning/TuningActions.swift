@@ -9,6 +9,8 @@ struct TuningActions: Sendable {
     var autoCalibrate: (@MainActor @Sendable () -> Void)? = nil
     var openMicrophoneSettings: @MainActor @Sendable () -> Void = {}
     var reset: @MainActor @Sendable () -> Void = {}
+    /// Surround: every trim and offset back to default, measured flag cleared.
+    var resetSurround: @MainActor @Sendable () -> Void = {}
     var done: @MainActor @Sendable () -> Void = {}
     /// "Play Demo" / "Stop Demo".
     var toggleDemo: @MainActor @Sendable () -> Void = {}

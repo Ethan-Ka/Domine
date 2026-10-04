@@ -131,6 +131,17 @@ final class Engine {
     var surroundTestTone: String? = nil { didSet { if surroundTestTone != oldValue { applyControls() } } }
     /// The UIDs of a surround routing in list order; nil in stereo.
     @ObservationIgnored fileprivate(set) var surroundRoute: [String]?
+    /// Surround routing: the speakers in this build, in list order, with
+    /// their kernel indexes (for `surroundCalibrationPair`). Empty in stereo
+    /// and during the stereo demo.
+    var surroundPresentSpeakers: [(uid: String, index: Int)] {
+        guard surroundRoute != nil, !stereoDemo, resources.surround != nil else { return [] }
+        let uids = resources.surroundUIDs
+        let present = resources.surroundPresent
+        return uids.indices.compactMap { index in
+            index < present.count && present[index] ? (uid: uids[index], index: index) : nil
+        }
+    }
     /// Test hook: what the last control push gave the surround kernel, per
     /// kernel index (list order; the stereo demo uses A, B).
     private(set) var pushedSurround: PushedSurround?
@@ -160,7 +171,7 @@ final class Engine {
 
     /// The rate the kernel was created with (the aggregate's nominal rate).
     var kernelSampleRate: Double? {
-        guard let kernel = resources.kernel else { return nil }
+        guard let kernel = resources.kernel else { return resources.surround != nil ? resources.surroundRate : nil }
         var stats = DomineKernelStats()
         _ = domine_kernel_stats(kernel, &stats)
         return stats.sampleRate
@@ -177,6 +188,8 @@ final class Engine {
         /// for the stereo demo) and whether each is in this build.
         var surroundUIDs: [String] = []
         var surroundPresent: [Bool] = []
+        /// The surround kernel's rate (the aggregate's nominal rate).
+        var surroundRate: Double?
         /// Surround route: the device ID per speaker; nil for one left out.
         var surroundIDs: [AudioObjectID?] = []
         var ioProc: IOProcHandle?
@@ -1189,6 +1202,7 @@ extension Engine {
         resources.surround = surround
         resources.surroundUIDs = uids
         resources.surroundPresent = layout.outOffsets.map { $0 != nil }
+        resources.surroundRate = rate
         let offsets: [UInt32] = layout.outOffsets.map { $0.map { UInt32($0) } ?? DOMINE_NO_DEVICE }
         offsets.withUnsafeBufferPointer {
             domine_surround_set_layout(surround, UInt32(layout.inFirstBuffer), UInt32($0.count), $0.baseAddress!)
