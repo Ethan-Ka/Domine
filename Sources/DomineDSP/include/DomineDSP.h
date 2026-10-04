@@ -159,6 +159,10 @@ void domine_kernel_set_click_test(DomineKernel *k, int mode);
 /// Writes exactly the samples the kernel emits (before gain) for one
 /// calibration chirp: `frames` samples from the chirp start, zero past its end.
 /// Real-time safe.
+/// Sample n of one calibration chirp (rising nonzero, else falling) at
+/// sampleRate; 0 outside the chirp. Same signal as domine_calibration_chirp
+/// and the kernel's click test mode 2. Real-time safe.
+float domine_calibration_chirp_sample(uint32_t n, double sampleRate, int rising);
 void domine_calibration_chirp(float *out, uint32_t frames, double sampleRate, int rising);
 
 /// Effects chain (SPEC section 5a). Per position (0 = A, 1 = B; positions
