@@ -160,3 +160,9 @@ Ctrl-C restores the previous output and removes the aggregate. On a Grip each si
 - [docs/SPEC.md](docs/SPEC.md): design, audio path, and milestones
 - [docs/mockups/](docs/mockups/README.md): screen layouts
 - [CLAUDE.md](CLAUDE.md): rules for working in this repo
+
+## License
+
+Copyright (C) 2026 Ethan Kawley
+
+Domine is licensed under the [GNU Affero General Public License v3.0](LICENSE). You can use, study, and change it, but anything you distribute or run as a network service that is built on this code must be released under the same license, with full source code.
