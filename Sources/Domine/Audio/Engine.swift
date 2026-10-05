@@ -500,7 +500,7 @@ final class Engine {
     /// The first present speaker is the main sub-device. A clock device
     /// that is not in the aggregate falls back to that speaker.
     private func createAggregate(_ present: [SubDevice]) throws(EngineError) {
-        guard let tap = resources.tap, let main = present.first else { throw .kernelUnavailable }
+        guard let tap = resources.tap, !present.isEmpty else { throw .kernelUnavailable }
         var clock = AggregateBuilder.clock
         if case .device(let uid) = clock, !present.contains(where: { $0.uid == uid }) { clock = .leftSpeaker }
         let description = AggregateBuilder.description(

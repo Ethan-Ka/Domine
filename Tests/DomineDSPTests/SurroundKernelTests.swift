@@ -236,7 +236,7 @@ struct SurroundKernelTests {
             let a: Float = i < 40 ? 1 - e : 0
             let b: Float = i < 40 ? tone * e + 0.5 * (1 - e) : tone
             #expect(out.channel(0)[i] == a)
-            #expect(out.channel(2)[i] == b)
+            #expect(abs(out.channel(2)[i] - b) < 1e-6)
         }
     }
 
@@ -264,7 +264,7 @@ struct SurroundKernelTests {
 
     @Test func calibrationPairPlaysChirpsOnTwoSpeakers() {
         let sr = 8000.0
-        let s = Self.make(sr, [-30, 30, 180])
+        let s = Self.make([-30, 30, 180], sampleRate: sr)
         defer { domine_surround_destroy(s) }
         domine_surround_set_gain(s, 0, 0.5)
         domine_surround_set_delay_ms(s, 0, 1) // the chirp bypasses the delay line

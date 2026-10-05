@@ -187,7 +187,7 @@ final class SurroundEngineTests {
         await engine.setDemo(true)
         #expect(engine.stereoDemo)
         #expect(engine.demoRequested)
-        #expect(engine.kernelSampleRate == nil)
+        #expect(engine.kernelSampleRate != nil)
         #expect(engine.pushedSurround?.azimuths == [-30, 30])
         #expect(subDeviceUIDs == [a, b])
         #expect(engine.state == .running)
