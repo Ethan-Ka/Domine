@@ -35,13 +35,11 @@ struct TuningSheet: View {
         .onExitCommand(perform: actions.done)
     }
 
-    /// Surround resets every speaker's trim and delay; Stereo the pair.
+    /// Surround resets every speaker's trim and delay and clears the
+    /// measured flag; Stereo the pair.
     private func reset() {
-        guard let rows = state.surroundRows else { return actions.reset() }
-        for row in rows {
-            actions.setSurroundTrim(row.uid, 1)
-            actions.setSurroundOffset(row.uid, 0)
-        }
+        guard state.surroundRows != nil else { return actions.reset() }
+        actions.resetSurround()
     }
 
     private var timing: some View {
@@ -69,9 +67,7 @@ struct TuningSheet: View {
                     .fixedSize()
                 Spacer(minLength: 8)
                 clickTestButton
-                Button("Auto-calibrate") { actions.autoCalibrate?() }
-                    .disabled(actions.autoCalibrate == nil || state.calibrationStatus == .listening)
-                    .help(actions.autoCalibrate == nil ? "Needs the Mac's built-in microphone" : "")
+                autoCalibrateButton
             }
             calibrationLine
             clickTestMessageLine
@@ -94,6 +90,12 @@ struct TuningSheet: View {
                 .truncationMode(.tail)
                 .help(message)
         }
+    }
+
+    private var autoCalibrateButton: some View {
+        Button("Auto-calibrate") { actions.autoCalibrate?() }
+            .disabled(actions.autoCalibrate == nil || state.calibrationStatus?.isInProgress == true)
+            .help(actions.autoCalibrate == nil ? "Needs the Mac's built-in microphone" : "")
     }
 
     private var clickTestButton: some View {
@@ -144,9 +146,13 @@ struct TuningSheet: View {
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 8)
                 clickTestButton
-                Button("Auto-calibrate") { actions.autoCalibrate?() }
-                    .disabled(actions.autoCalibrate == nil || state.calibrationStatus == .listening)
-                    .help(actions.autoCalibrate == nil ? "Needs the Mac's built-in microphone" : "")
+                autoCalibrateButton
+            }
+            if state.isSurroundTimingMeasured {
+                Text("Timing measured with the microphone; distances set level only.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             calibrationLine
             clickTestMessageLine
@@ -175,11 +181,11 @@ struct TuningSheet: View {
     @ViewBuilder
     private var calibrationLine: some View {
         switch state.calibrationStatus {
-        case .listening:
+        case .listening, .measuringPair:
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
-                    Text("Listening…")
+                    Text(state.calibrationStatus?.progressText ?? "Listening…")
                 }
                 Text("Place the Mac where you sit.")
                     .foregroundStyle(.secondary)

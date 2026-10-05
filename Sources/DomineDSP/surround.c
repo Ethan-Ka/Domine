@@ -49,6 +49,7 @@ struct DomineSurround {
     _Atomic int muted;
     _Atomic int toneSpeaker; // -1 off
     _Atomic int clickOn;
+    _Atomic uint32_t calPair; // a | b << 16, CAL_OFF when off
     // Demo control and status.
     _Atomic uint32_t demoStartReq;
     _Atomic int demoWanted;
@@ -94,7 +95,13 @@ struct DomineSurround {
     double tonePhase, tonePhaseStep;
     uint32_t clickLevel;  // 0 = program only, toneFadeLength = clicks only
     uint32_t clickCounter, clickLength, clickPeriod;
+    // Calibration chirp pair, as kernel.c's click test mode 2.
+    uint32_t playingPair; // pair the chirp envelope belongs to, CAL_OFF = none
+    uint32_t chirpLevel;  // 0 = program only, toneFadeLength = chirps only
+    uint32_t chirpCounter;
 };
+
+#define CAL_OFF UINT32_MAX
 
 typedef struct { float *data; uint32_t stride, frames; } OutCh;
 typedef struct { const float *data; uint32_t stride, frames; } InCh;
@@ -298,6 +305,8 @@ DomineSurround *domine_surround_create(double sampleRate, uint32_t maxFrames) {
     }
     atomic_init(&s->toneSpeaker, -1);
     atomic_init(&s->clickOn, 0);
+    atomic_init(&s->calPair, CAL_OFF);
+    s->playingPair = CAL_OFF;
     int ok = s->spatial != NULL;
     for (int i = 0; i < NSPK; i++) ok = ok && s->ring[i] && s->eq[i] && s->bass[i] && s->comp[i];
     if (!ok) { domine_surround_destroy(s); return NULL; }
@@ -409,6 +418,13 @@ void domine_surround_set_test_tone(DomineSurround *s, int speaker) {
 void domine_surround_set_click_test(DomineSurround *s, int on) {
     if (s == NULL) return;
     atomic_store_explicit(&s->clickOn, on != 0, memory_order_relaxed);
+}
+
+void domine_surround_set_calibration_pair(DomineSurround *s, int a, int b) {
+    if (s == NULL) return;
+    const int valid = a >= 0 && b >= 0 && a != b && a < NSPK && b < NSPK;
+    const uint32_t v = valid ? ((uint32_t)a | ((uint32_t)b << 16)) : CAL_OFF;
+    atomic_store_explicit(&s->calPair, v, memory_order_relaxed);
 }
 
 void domine_surround_set_demo(DomineSurround *s, int on) {
@@ -593,6 +609,7 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
     const uint32_t fadeTarget = atomic_load_explicit(&s->muted, memory_order_relaxed) ? 0 : s->fadeLength;
     const int toneReq = atomic_load_explicit(&s->toneSpeaker, memory_order_relaxed);
     const int clickOn = atomic_load_explicit(&s->clickOn, memory_order_relaxed);
+    const uint32_t calReq = atomic_load_explicit(&s->calPair, memory_order_relaxed);
     const uint32_t tfull = s->toneFadeLength;
     float peak[NSPK] = { 0 };
     for (uint32_t f = 0; f < frames; f++) {
@@ -678,6 +695,34 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
             else if (s->toneLevel > target) s->toneLevel--;
         }
 
+        // Calibration chirps (kernel.c click test mode 2): a new pair takes
+        // over once the current one has faded out. Replaces the output after
+        // the trim gain, bypassing the delay line.
+        if (s->chirpLevel == 0 && s->playingPair != calReq) {
+            s->playingPair = calReq;
+            s->chirpCounter = 0;
+        }
+        const int chirpActive = s->playingPair != CAL_OFF;
+        float chirpUp = 0.0f, chirpDown = 0.0f, chirpKeep = 1.0f;
+        int chirpA = -1, chirpB = -1;
+        if (chirpActive) {
+            chirpA = (int)(s->playingPair & 0xFFFFu);
+            chirpB = (int)(s->playingPair >> 16);
+            const uint32_t target = calReq == s->playingPair ? tfull : 0;
+            if (s->chirpLevel == tfull && target == tfull) {
+                const uint32_t c = s->chirpCounter;
+                chirpUp = domine_calibration_chirp_sample(c, s->sampleRate, 1);
+                chirpDown = domine_calibration_chirp_sample(c, s->sampleRate, 0);
+                s->chirpCounter = c + 1 < s->clickPeriod ? c + 1 : 0;
+            } else {
+                s->chirpCounter = 0;
+            }
+            chirpKeep = s->chirpLevel == tfull ? 0.0f : 1.0f - (float)s->chirpLevel / (float)tfull;
+            if (s->chirpLevel < target) s->chirpLevel++;
+            else if (s->chirpLevel > target) s->chirpLevel--;
+            if (s->chirpLevel == 0 && target == 0) s->playingPair = CAL_OFF;
+        }
+
         for (uint32_t k = 0; k < n; k++) {
             float x = 0.0f;
             for (int j = 0; j < loopSrc; j++) {
@@ -703,6 +748,11 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
 
             s->ring[k][s->ringPos & s->ringMask] = x;
             float o = delay[k] > 0 ? s->ring[k][(s->ringPos - delay[k]) & s->ringMask] : x;
+            if (chirpActive) {
+                float c = (int)k == chirpA ? chirpUp : (int)k == chirpB ? chirpDown : 0.0f;
+                if (g->applied != 1.0f) c *= g->applied;
+                o = chirpKeep == 0.0f ? c : o * chirpKeep + c;
+            }
             if (toneActive) {
                 const int mine = (int)k == s->playingTone;
                 if (toneFull) o = mine ? tone : 0.0f;

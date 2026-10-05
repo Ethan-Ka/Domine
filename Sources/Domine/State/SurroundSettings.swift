@@ -30,6 +30,10 @@ struct SurroundSettings: Codable, Equatable, Sendable {
     var effects: [String: Effects] = [:]
     /// While on, every speaker uses the first speaker's effects.
     var linkEffects = true
+    /// The offsets were measured with the microphone (SPEC 12, 13.4): they
+    /// hold the whole arrival difference, so distance sets level only.
+    /// Manual offset edits keep it; Reset and a change of speakers clear it.
+    var timingMeasured = false
 
     init() {}
 
@@ -64,6 +68,8 @@ struct SurroundSettings: Codable, Equatable, Sendable {
         copy.trims = trims.filter { kept.contains($0.key) }
         copy.offsetsMs = offsetsMs.filter { kept.contains($0.key) }
         copy.effects = effects.filter { kept.contains($0.key) }
+        // A different set needs its timing measured again.
+        if kept != Set(uids) { copy.timingMeasured = false }
         return copy
     }
 
@@ -136,7 +142,7 @@ struct SurroundSettings: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case speakers, width, surroundLevel, orbitRate, rotation, spatialAmount, spatialRoomMs
-        case trims, offsetsMs, effects, linkEffects
+        case trims, offsetsMs, effects, linkEffects, timingMeasured
     }
 
     /// Missing or mistyped fields fall back to their defaults one by one; a
@@ -156,6 +162,7 @@ struct SurroundSettings: Codable, Equatable, Sendable {
         offsetsMs = (try? c.decodeIfPresent([String: Float].self, forKey: .offsetsMs)) ?? [:]
         effects = (try? c.decodeIfPresent([String: Effects].self, forKey: .effects)) ?? [:]
         linkEffects = (try? c.decodeIfPresent(Bool.self, forKey: .linkEffects)) ?? d.linkEffects
+        timingMeasured = (try? c.decodeIfPresent(Bool.self, forKey: .timingMeasured)) ?? d.timingMeasured
         sanitize()
     }
 

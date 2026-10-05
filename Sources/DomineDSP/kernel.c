@@ -421,6 +421,13 @@ static double chirp_sample(uint32_t n, uint32_t length, double sampleRate, int r
     return DOMINE_CHIRP_AMPLITUDE * envelope * sin(phase);
 }
 
+float domine_calibration_chirp_sample(uint32_t n, double sampleRate, int rising) {
+    if (!(sampleRate > 0.0)) return 0.0f;
+    uint32_t length = (uint32_t)lround(sampleRate * DOMINE_CHIRP_MS / 1000.0);
+    if (length < 2) length = 2;
+    return (float)chirp_sample(n, length, sampleRate, rising);
+}
+
 void domine_calibration_chirp(float *out, uint32_t frames, double sampleRate, int rising) {
     if (out == NULL || sampleRate <= 0.0) return;
     uint32_t length = (uint32_t)lround(sampleRate * DOMINE_CHIRP_MS / 1000.0);

@@ -2,8 +2,11 @@
 extension AppModel {
     /// Starts routing if it is off, records the chirps through the built-in
     /// microphone, and writes the measured offset to the delay setting.
+    /// In Surround routing with three or more speakers it measures the ring
+    /// of pairs instead (`autoCalibrateSurround`).
     func autoCalibrate() {
         guard calibrationTask == nil else { return }
+        if surroundRouteSpeakers != nil { return autoCalibrateSurround() }
         stopClickTest()
         calibrationStatus = .listening
         calibrationTask = Task { [weak self] in
@@ -34,7 +37,8 @@ extension AppModel {
         calibrationTask?.cancel()
         calibrationTask = nil
         if engine.calibrationChirps { engine.calibrationChirps = false }
-        if calibrationStatus == .listening { calibrationStatus = nil }
+        if engine.surroundCalibrationPair != nil { engine.surroundCalibrationPair = nil }
+        if calibrationStatus?.isInProgress == true { calibrationStatus = nil }
     }
 
     /// offset = arrival(right) - arrival(left). Saved through the same path

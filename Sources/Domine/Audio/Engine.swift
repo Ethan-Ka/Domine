@@ -105,8 +105,21 @@ final class Engine {
     var spatialRoomMs: Float = 15 { didSet { applyControls() } }
     /// Trim gain per speaker UID, 0...1, master volume included. Missing is 1.
     var surroundGains: [String: Float] = [:] { didSet { applyControls() } }
-    /// Calibration offset per speaker UID in ms, added to distance delay. Missing is 0.
+    /// Calibration offset per speaker UID in ms, added to distance delay
+    /// unless `surroundTimingMeasured`. Missing is 0.
     var surroundDelaysMs: [String: Float] = [:] { didSet { applyControls() } }
+    /// The offsets were measured with the microphone (SPEC 13.4): they
+    /// already include acoustic travel, so distance sets level only.
+    var surroundTimingMeasured = false { didSet { if surroundTimingMeasured != oldValue { applyControls() } } }
+    /// Surround calibration chirps (SPEC 12): kernel speaker indexes (list
+    /// order) of the rising and falling speaker; nil is off. Every stop turns it off.
+    var surroundCalibrationPair: SurroundCalibrationPair? = nil {
+        didSet { if surroundCalibrationPair != oldValue { applyControls() } }
+    }
+    struct SurroundCalibrationPair: Equatable, Sendable {
+        var rising: Int
+        var falling: Int
+    }
     /// Effects per speaker UID, already resolved (linking) by the caller.
     private(set) var surroundEffects: [String: PairSettings.SideEffects] = [:]
     func setSurroundEffects(_ effects: [String: PairSettings.SideEffects]) {
@@ -118,6 +131,19 @@ final class Engine {
     var surroundTestTone: String? = nil { didSet { if surroundTestTone != oldValue { applyControls() } } }
     /// The UIDs of a surround routing in list order; nil in stereo.
     @ObservationIgnored fileprivate(set) var surroundRoute: [String]?
+    /// Surround routing: the speakers in this build, in list order, with
+    /// their kernel indexes (for `surroundCalibrationPair`). Empty in stereo
+    /// and during the stereo demo.
+    var surroundPresentSpeakers: [(uid: String, index: Int)] {
+        guard surroundRoute != nil, !stereoDemo, resources.surround != nil else { return [] }
+        let uids = resources.surroundUIDs
+        let present = resources.surroundPresent
+        var speakers: [(uid: String, index: Int)] = []
+        for index in uids.indices where index < present.count && present[index] {
+            speakers.append((uid: uids[index], index: index))
+        }
+        return speakers
+    }
     /// Test hook: what the last control push gave the surround kernel, per
     /// kernel index (list order; the stereo demo uses A, B).
     private(set) var pushedSurround: PushedSurround?
@@ -147,7 +173,7 @@ final class Engine {
 
     /// The rate the kernel was created with (the aggregate's nominal rate).
     var kernelSampleRate: Double? {
-        guard let kernel = resources.kernel else { return nil }
+        guard let kernel = resources.kernel else { return resources.surround != nil ? resources.surroundRate : nil }
         var stats = DomineKernelStats()
         _ = domine_kernel_stats(kernel, &stats)
         return stats.sampleRate
@@ -164,6 +190,8 @@ final class Engine {
         /// for the stereo demo) and whether each is in this build.
         var surroundUIDs: [String] = []
         var surroundPresent: [Bool] = []
+        /// The surround kernel's rate (the aggregate's nominal rate).
+        var surroundRate: Double?
         /// Surround route: the device ID per speaker; nil for one left out.
         var surroundIDs: [AudioObjectID?] = []
         var ioProc: IOProcHandle?
@@ -360,6 +388,7 @@ final class Engine {
     func stop() {
         clickTest = false
         calibrationChirps = false
+        surroundCalibrationPair = nil
         formatCheck?.cancel()
         formatCheck = nil
         formatRebuilds = 0
@@ -1175,6 +1204,7 @@ extension Engine {
         resources.surround = surround
         resources.surroundUIDs = uids
         resources.surroundPresent = layout.outOffsets.map { $0 != nil }
+        resources.surroundRate = rate
         let offsets: [UInt32] = layout.outOffsets.map { $0.map { UInt32($0) } ?? DOMINE_NO_DEVICE }
         offsets.withUnsafeBufferPointer {
             domine_surround_set_layout(surround, UInt32(layout.inFirstBuffer), UInt32($0.count), $0.baseAddress!)
@@ -1253,7 +1283,9 @@ extension Engine {
                 distanceGain[index] = gains[k]
             }
         }
-        var totals = (0..<count).map { distanceDelay[$0] + max(entries[$0].offsetMs, 0) }
+        // Measured offsets already include acoustic travel (SPEC 13.4).
+        let measured = surroundTimingMeasured && !stereoDemo
+        var totals = (0..<count).map { (measured ? 0 : distanceDelay[$0]) + max(entries[$0].offsetMs, 0) }
         let earliest = presentIndexes.map { totals[$0] }.min() ?? 0
         let maxDelay = PairSettings.delayLimitMs
         totals = totals.map { min(max($0 - earliest, 0), maxDelay) }
@@ -1285,6 +1317,8 @@ extension Engine {
         domine_surround_set_spatial(surround, &spatial)
         domine_surround_set_test_tone(surround, surroundToneIndex())
         domine_surround_set_click_test(surround, clickTest ? 1 : 0)
+        let pair = surroundCalibrationPair
+        domine_surround_set_calibration_pair(surround, Int32(pair?.rising ?? -1), Int32(pair?.falling ?? -1))
         domine_surround_set_muted(surround, muted || fadingOut ? 1 : 0)
         pushedSurround = PushedSurround(azimuths: azimuths, gains: gains, delaysMs: totals,
                                         width: width, rotation: fieldRotation, orbitRate: orbit)

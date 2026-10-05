@@ -120,6 +120,16 @@ void domine_surround_set_test_tone(DomineSurround *s, int speaker);
 /// kernel. Default off.
 void domine_surround_set_click_test(DomineSurround *s, int on);
 
+/// Calibration chirps for a pair of speakers (SPEC 12, Surround): once every
+/// DOMINE_CLICK_PERIOD_MS, speaker `a` plays the rising calibration chirp and
+/// speaker `b` the falling one (the stereo kernel's click test mode 2 signals,
+/// domine_calibration_chirp_sample), both starting on the same sample; every
+/// other speaker is silent. The chirps replace program audio after the trim
+/// gain and bypass the delay line, so a measurement sees each speaker's raw
+/// arrival time. 40 ms crossfade with program audio like the click test.
+/// a < 0, b < 0, a == b, or an index out of range turns it off. Default off.
+void domine_surround_set_calibration_pair(DomineSurround *s, int a, int b);
+
 /// Demo (DomineDemo.h). on nonzero starts it from 0 s (restarts if playing);
 /// 0 stops it. Program audio crossfades out over 50 ms while the demo plays
 /// and back in when it stops or finishes. The demo runs through the same
