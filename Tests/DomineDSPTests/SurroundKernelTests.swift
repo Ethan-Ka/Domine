@@ -262,6 +262,27 @@ struct SurroundKernelTests {
         }
     }
 
+    @Test func calibrationPairPlaysChirpsOnTwoSpeakers() {
+        let sr = 8000.0
+        let s = Self.make(sr, [-30, 30, 180])
+        defer { domine_surround_destroy(s) }
+        domine_surround_set_gain(s, 0, 0.5)
+        domine_surround_set_delay_ms(s, 0, 1) // the chirp bypasses the delay line
+        let zero = [Float](repeating: 0, count: 2000)
+        _ = Self.run(s, offsets: [0, 2, 4], left: zero, right: zero, buffers: [6])
+        domine_surround_set_calibration_pair(s, 0, 2)
+        let out = Self.run(s, offsets: [0, 2, 4], left: zero, right: zero, buffers: [6])
+        let full = 320
+        for f in 0..<2000 {
+            let n = UInt32(max(f - full, 0))
+            let up: Float = f >= full ? domine_calibration_chirp_sample(n, sr, 1) : 0
+            let down: Float = f >= full ? domine_calibration_chirp_sample(n, sr, 0) : 0
+            #expect(out.channel(0)[f] == up * 0.5)
+            #expect(out.channel(2)[f] == 0)
+            #expect(out.channel(4)[f] == down)
+        }
+    }
+
     // MARK: IOProc and buffers
 
     @Test func ioprocSkipsSubDeviceInputsAndUsesLayout() {

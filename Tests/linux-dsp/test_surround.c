@@ -661,6 +661,87 @@ static void test_click_test(void) {
     domine_surround_destroy(s);
 }
 
+static void test_calibration_pair(void) {
+    // domine_calibration_chirp_sample matches domine_calibration_chirp.
+    {
+        enum { M = 1200 };
+        float up[M], down[M];
+        domine_calibration_chirp(up, M, 8000, 1);
+        domine_calibration_chirp(down, M, 8000, 0);
+        int ok = 1;
+        for (uint32_t n = 0; n < M; n++) {
+            ok &= domine_calibration_chirp_sample(n, 8000, 1) == up[n];
+            ok &= domine_calibration_chirp_sample(n, 8000, 0) == down[n];
+        }
+        CHECK(ok);
+    }
+    const double sr = 8000;
+    const float az[3] = { -30, 30, 180 };
+    DomineSurround *s = make(sr, 3, az);
+    domine_surround_set_gain(s, 0, 0.5f);
+    domine_surround_set_delay_ms(s, 0, 1.0f); // must not shift the chirp
+    const uint32_t off[3] = { 0, 2, 4 };
+    enum { N = 9000 };
+    static float zero[N];
+    Buf out = out_new(6, N);
+    run(s, zero, zero, 400, &out, off); // settle gains
+    domine_surround_set_calibration_pair(s, 0, 2);
+    run(s, zero, zero, N, &out, off);
+    const uint32_t full = 320, period = 8000; // 40 ms fade, 1000 ms period
+    int ok = 1, silent = 1;
+    for (uint32_t f = 0; f < N; f++) {
+        float up = 0.0f, down = 0.0f;
+        if (f >= full) {
+            const uint32_t n = (f - full) % period;
+            up = domine_calibration_chirp_sample(n, sr, 1);
+            down = domine_calibration_chirp_sample(n, sr, 0);
+        }
+        ok &= *buf_at(&out, 0, f) == up * 0.5f && *buf_at(&out, 1, f) == up * 0.5f;
+        ok &= *buf_at(&out, 4, f) == down && *buf_at(&out, 5, f) == down;
+        silent &= *buf_at(&out, 2, f) == 0.0f && *buf_at(&out, 3, f) == 0.0f;
+    }
+    CHECK(ok);
+    CHECK(silent);
+    CHECK(fabsf(*buf_at(&out, 4, full + 100)) > 0.01f);
+    CHECK(fabsf(*buf_at(&out, 0, full + period + 100)) > 0.001f);
+    buf_free(&out);
+    domine_surround_destroy(s);
+
+    // Off by default and for invalid pairs: two speakers pass L and R.
+    const float az2[2] = { -30, 30 };
+    const uint32_t off2[2] = { 0, 2 };
+    const int bad[4][2] = { { -1, 1 }, { 1, 1 }, { 0, 16 }, { -1, -1 } };
+    for (int t = 0; t < 5; t++) {
+        DomineSurround *k = make(48000, 2, az2);
+        if (t < 4) domine_surround_set_calibration_pair(k, bad[t][0], bad[t][1]);
+        fill_program();
+        Buf o = out_new(4, NF);
+        run(k, L, R, NF, &o, off2);
+        int pass = 1;
+        for (uint32_t f = 0; f < NF; f++) pass &= *buf_at(&o, 0, f) == L[f] && *buf_at(&o, 2, f) == R[f];
+        CHECK(pass);
+        buf_free(&o);
+        domine_surround_destroy(k);
+    }
+
+    // Turning it off crossfades back to program.
+    {
+        DomineSurround *k = make(sr, 2, az2);
+        enum { M = 2000 };
+        static float ones[M];
+        for (int i = 0; i < M; i++) ones[i] = 0.25f;
+        Buf o = out_new(4, M);
+        domine_surround_set_calibration_pair(k, 0, 1);
+        run(k, ones, ones, M, &o, off2);
+        domine_surround_set_calibration_pair(k, -1, -1);
+        run(k, ones, ones, M, &o, off2);
+        CHECK(*buf_at(&o, 0, M - 1) == 0.25f);
+        CHECK(*buf_at(&o, 2, M - 1) == 0.25f);
+        buf_free(&o);
+        domine_surround_destroy(k);
+    }
+}
+
 // MARK: - IO
 
 static void test_multi_tap(void) {
@@ -772,6 +853,7 @@ int main(void) {
     test_demo();
     test_test_tone();
     test_click_test();
+    test_calibration_pair();
     test_multi_tap();
     test_ioproc();
     test_bounds_and_zeroing();
