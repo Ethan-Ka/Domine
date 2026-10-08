@@ -52,7 +52,7 @@ struct GeneralSettingsView: View {
 
             LabeledContent {
                 VStack(alignment: .leading, spacing: 6) {
-                    Toggle("Start routing when the speakers connect", isOn: $state.startWhenBothConnect)
+                    Toggle("Start routing when speakers connect", isOn: $state.startWhenBothConnect)
                     Toggle("Reconnect speakers that drop", isOn: $state.reconnectDroppedSpeakers)
                     Toggle("Keep speakers from turning off", isOn: $state.keepSpeakersAwake)
                     Toggle("Launch at login", isOn: $state.launchAtLogin)

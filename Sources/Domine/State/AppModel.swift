@@ -612,7 +612,7 @@ final class AppModel {
             && uids.allSatisfy { catalog.device(uid: $0) != nil }
     }
 
-    /// "Start routing when the speakers connect" (SPEC 6a): starts when the
+    /// "Start routing when speakers connect" (SPEC 6a): starts when the
     /// last of the current mode's speakers becomes present while routing is
     /// off. After the user turned routing off, it waits until a speaker
     /// disconnects and returns.
