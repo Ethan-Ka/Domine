@@ -165,11 +165,13 @@ extension AppModel {
                     uidSuffix: OutputDevice.suffix(forUID: speaker.uid),
                     statusText: "Not connected", connection: .disconnected)
             }
-            return SpeakerCardState.surroundCard(
+            var card = SpeakerCardState.surroundCard(
                 info, deviceName: device.name, uidSuffix: device.uidSuffix,
                 statusText: toneUID == speaker.uid ? "Playing test tone" : "Connected",
                 connection: .connected,
                 level: routing ? Double(surroundLevel(uid: speaker.uid)) : 0)
+            card.batteryPercent = batteryPercent[speaker.uid]
+            return card
         }
     }
 
@@ -292,10 +294,12 @@ extension AppModel {
         }
         let level = engine.state.isRouting && position.isFront ? (isA ? meters.levelA : meters.levelB) : 0
         let isMonoFallback = missing != nil
-        return SpeakerCardState(
+        var card = SpeakerCardState(
             position: position, sideTag: isMonoFallback ? "L+R" : tag,
             deviceName: device.name, uidSuffix: device.uidSuffix,
             statusText: isMonoFallback ? "Mono fallback" : "Connected", connection: .connected,
             level: Double(level), isMonoFallback: isMonoFallback)
+        card.batteryPercent = batteryPercent[uid]
+        return card
     }
 }
