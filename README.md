@@ -70,7 +70,7 @@ This build is signed for development, not notarized. Other Macs need right-click
 
 ## Install
 
-Download `Domine-0.2.1.pkg` from [Releases](https://github.com/Ethan-Ka/Domine/releases) and run it. It installs the app in Applications and the audio driver, then restarts macOS audio for a few seconds. To update, run the newer installer. To remove everything, run `scripts/uninstall.sh`.
+Download `Domine-0.2.1.pkg` from [Releases](https://github.com/Ethan-Ka/Domine/releases) and run it. It installs the app in Applications and the audio driver, then restarts macOS audio for a few seconds. To update, run the newer installer. To remove everything (app, driver, settings and permissions), choose "Uninstall Domine…" in the app menu or run `scripts/uninstall.sh`.
 
 ## Requirements
 
@@ -98,7 +98,7 @@ Download `Domine-0.2.1.pkg` from [Releases](https://github.com/Ethan-Ka/Domine/r
 | `./scripts/uninstall-driver.sh` | Remove the virtual output driver and restart coreaudiod (needs sudo) |
 | `./scripts/release.sh` | Archive, Developer ID sign the app and driver, notarize, and staple into `build/release/` (see [Releasing](#releasing)) |
 | `./scripts/package.sh` | Installer: build, sign, notarize, and staple `build/release/Domine-<version>.pkg` from the release output (needs `INSTALLER_IDENTITY`) |
-| `./scripts/uninstall.sh` | Installer: remove the app and driver, forget the pkg receipts, and restart coreaudiod (needs sudo) |
+| `./scripts/uninstall.sh` | Installer: remove the app, driver, settings and permissions, forget the pkg receipts, and restart coreaudiod; also in the app menu as "Uninstall Domine…" |
 
 A typical loop: edit, `./scripts/test.sh`, then `./scripts/run.sh --logs` to try it.
 
@@ -154,7 +154,7 @@ To also build the installer package, install a Developer ID Installer certificat
 INSTALLER_IDENTITY="Developer ID Installer: Your Name (TEAMID)" DEVELOPMENT_TEAM=TEAMID NOTARY_PROFILE=NAME ./scripts/release.sh --pkg
 ```
 
-`build/release/Domine-<version>.pkg` installs the app and the driver and restarts coreaudiod. End users remove everything with `./scripts/uninstall.sh`.
+`build/release/Domine-<version>.pkg` installs the app and the driver and restarts coreaudiod. End users remove the app, driver, settings and permissions with "Uninstall Domine…" in the app menu or `./scripts/uninstall.sh`.
 ### Updates
 
 Releases are published as a notarized `.pkg` on GitHub Releases, tagged `vVERSION`. Updating means downloading and running the installer, which replaces the app and the driver. Domine checks the latest release at launch (at most once a day) and from "Check for Updates…" in the app menu; when a newer version exists it offers to open the installer download. Settings > General has "Check for updates automatically". To publish: run `release.sh --pkg`, create the GitHub release with the tag, and attach the `.pkg`. Bump `CFBundleShortVersionString` in `project.yml` for every release.
