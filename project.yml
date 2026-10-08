@@ -24,6 +24,7 @@ targets:
       - Sources/Domine
     dependencies:
       - target: DomineDSP
+      - sdk: IOBluetooth.framework
     # Hardened runtime blocks the microphone without this (auto-calibration).
     entitlements:
       path: Sources/Domine/Domine.entitlements
@@ -36,6 +37,7 @@ targets:
         CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
         LSApplicationCategoryType: public.app-category.music
+        NSBluetoothAlwaysUsageDescription: Domine reads speaker battery levels and reconnects speakers that dropped.
         NSMicrophoneUsageDescription: Domine listens to its own test sounds through the built-in microphone to line up the two speakers.
         NSAudioCaptureUsageDescription: Domine captures system audio to send the left channel to one speaker and the right channel to another.
     settings:
