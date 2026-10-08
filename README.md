@@ -29,7 +29,7 @@ The aggregate corrects clock drift between the two speakers, and a delay slider 
 Tested daily on a MacBook Pro with two JBL Grips.
 
 **New in 0.2.1**
-- Battery level on each speaker card, in red at 15% or less.
+- Battery level on the speaker card for speakers that report it to macOS, in red at 15% or less. The JBL Grip does not.
 - Speakers that drop are reconnected automatically, and a disconnected card has a Reconnect button.
 - Keep speakers from turning off: an inaudible 15 Hz tone during silence stops the Grips' auto power-off. On by default.
 - Clearer hints when one Grip is missing because the two are paired in the JBL Portable app, or when a phone takes over a speaker.
