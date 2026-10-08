@@ -34,8 +34,8 @@ targets:
       path: Sources/Domine/Info.plist
       properties:
         CFBundleDisplayName: Domine
-        CFBundleShortVersionString: "0.2.0"
-        CFBundleVersion: "2"
+        CFBundleShortVersionString: "0.2.1"
+        CFBundleVersion: "3"
         LSApplicationCategoryType: public.app-category.music
         NSBluetoothAlwaysUsageDescription: Domine reads speaker battery levels and reconnects speakers that dropped.
         NSHumanReadableCopyright: "© 2026 Ethan Kawley. Free software under the GNU AGPL 3.0."
@@ -78,8 +78,8 @@ targets:
       properties:
         CFBundleName: Domine
         CFBundleDisplayName: Domine
-        CFBundleShortVersionString: "0.2.0"
-        CFBundleVersion: "2"
+        CFBundleShortVersionString: "0.2.1"
+        CFBundleVersion: "3"
         CFPlugInDynamicRegistration: false
         CFPlugInUnloadFunction: ""
         CFPlugInFactories:

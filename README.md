@@ -24,9 +24,23 @@ macOS can combine devices into a Multi-Output Device, but then every speaker pla
 Domine captures system audio with a Core Audio process tap, sends it to a private aggregate device, and writes left to one speaker and right to the other. 
 The aggregate corrects clock drift between the two speakers, and a delay slider (1 ms steps) lines up their Bluetooth latency.
 
-## Status: v0.2.0
+## Status: v0.2.1
 
 Tested daily on a MacBook Pro with two JBL Grips.
+
+**New in 0.2.1**
+- Battery level on each speaker card, in red at 15% or less.
+- Speakers that drop are reconnected automatically, and a disconnected card has a Reconnect button.
+- Keep speakers from turning off: an inaudible 15 Hz tone during silence stops the Grips' auto power-off. On by default.
+- Clearer hints when one Grip is missing because the two are paired in the JBL Portable app, or when a phone takes over a speaker.
+- Crossfeed slider, and Same sound on both speakers for speakers in different rooms.
+- Night mode in the Sound sheet: stronger compression for quieter peaks.
+- Nudge the delay by 1 or 5 ms with buttons or the arrow keys while the click test plays.
+- Now Playing in the menu bar menu, when macOS provides it.
+- Export and import saved rooms.
+- Copy Report and per-speaker dropout counts in the debug panel.
+- The stage keeps speakers lined up with the drawing when the window is resized.
+- Surround with one speaker in front and one behind sends the room sound to the back again.
 
 **New in 0.2.0**
 - Surround mode replaces Quad. Use 2 to 16 speakers, drag each one to where it stands on a top-down stage, or pick a preset (Front and Back, Quad, 5 speaker, 7 speaker, Ring). Quad setups carry over.
@@ -56,7 +70,7 @@ This build is signed for development, not notarized. Other Macs need right-click
 
 ## Install
 
-Download `Domine-0.2.0.pkg` from [Releases](https://github.com/Ethan-Ka/Domine/releases) and run it. It installs the app in Applications and the audio driver, then restarts macOS audio for a few seconds. To update, run the newer installer. To remove everything, run `scripts/uninstall.sh`.
+Download `Domine-0.2.1.pkg` from [Releases](https://github.com/Ethan-Ka/Domine/releases) and run it. It installs the app in Applications and the audio driver, then restarts macOS audio for a few seconds. To update, run the newer installer. To remove everything, run `scripts/uninstall.sh`.
 
 ## Requirements
 
