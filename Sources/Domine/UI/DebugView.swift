@@ -7,7 +7,8 @@ struct DebugView: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { _ in
-            DebugContentView(snapshot: model.engine.diagnostics?.snapshot())
+            DebugContentView(snapshot: model.engine.diagnostics?.snapshot(),
+                             onResetCounts: { model.engine.diagnostics?.resetDropoutCounts() })
         }
     }
 }
@@ -15,6 +16,7 @@ struct DebugView: View {
 /// The layout, separate from the engine so it renders from sample values.
 struct DebugContentView: View {
     let snapshot: DebugSnapshot?
+    var onResetCounts: () -> Void = {}
 
     var body: some View {
         Form {
@@ -24,6 +26,32 @@ struct DebugContentView: View {
                         row("UID", speaker.uid)
                         row("Sample rate", Self.hz(speaker.sampleRate))
                         row("Latency", Self.latency(speaker.latency, rate: speaker.sampleRate))
+                    }
+                }
+                Section("Dropouts") {
+                    ForEach(Array(snapshot.speakers.enumerated()), id: \.offset) { _, speaker in
+                        let entry = snapshot.dropouts[uid: speaker.uid]
+                        LabeledContent {
+                            HStack(spacing: 12) {
+                                Text("Overloads \(entry.overloads)")
+                                Text("Disconnects \(entry.disconnects)")
+                                    .foregroundStyle(entry.disconnects > 0 ? Color.red : Color.primary)
+                            }
+                            .monospacedDigit()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text(speaker.label)
+                                Text(String(speaker.uid.prefix(17).suffix(5)))
+                                    .foregroundStyle(.secondary)
+                                    .monospaced()
+                            }
+                        }
+                    }
+                    HStack {
+                        Text("Since \(snapshot.dropouts.sessionStart.formatted(date: .omitted, time: .standard))")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Reset Counts", action: onResetCounts)
                     }
                 }
                 Section("Aggregate") {

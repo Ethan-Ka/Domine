@@ -32,6 +32,7 @@ final class EngineDiagnostics {
     private var firstOutputLead: Double?
     private var task: Task<Void, Never>?
     private var overloadToken: HALListenerToken?
+    private let dropouts: DropoutTracker
     private var overloadsAtLastSample = 0
     private var clockReadings: [AudioObjectID: AudioTimeStamp] = [:]
     /// Rates measured with AudioDeviceGetCurrentTime, by device, for tests.
@@ -51,12 +52,14 @@ final class EngineDiagnostics {
         self.devices = devices
         self.tap = tap
         self.interval = interval
+        dropouts = DropoutTracker(hal: hal, devices: devices)
         var timebase = mach_timebase_info_data_t()
         mach_timebase_info(&timebase)
         secondsPerTick = timebase.denom == 0 ? 1e-9 : Double(timebase.numer) / Double(timebase.denom) * 1e-9
     }
 
     func start() {
+        dropouts.start()
         do {
             overloadToken = try hal.addListener(.processorOverload(aggregate)) { [weak self] in
                 self?.overloads += 1
@@ -79,6 +82,7 @@ final class EngineDiagnostics {
 
     /// Stops the timer and the listener. Call before the kernel is destroyed.
     func stop() {
+        dropouts.stop()
         task?.cancel()
         task = nil
         overloadToken?.cancel()
@@ -190,6 +194,11 @@ final class EngineDiagnostics {
         return Self.f(rate, 1) + " Hz"
     }
 
+    /// Per-speaker overloads and disconnects since the session start.
+    var dropoutCounts: DropoutCounts { dropouts.counts }
+
+    func resetDropoutCounts() { dropouts.reset() }
+
     /// Reads the current values for the Debug window. Changes no audio state.
     func snapshot() -> DebugSnapshot {
         var stats = DomineKernelStats()
@@ -206,7 +215,8 @@ final class EngineDiagnostics {
             aggregateRate: try? hal.nominalSampleRate(of: aggregate),
             tapFormat: format.map(Self.describe),
             kernel: DebugSnapshot.Kernel(stats),
-            window: lastWindow)
+            window: lastWindow,
+            dropouts: dropouts.counts)
     }
 
     // MARK: - Start-up log

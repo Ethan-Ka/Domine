@@ -37,4 +37,5 @@ struct DebugSnapshot: Equatable, Sendable {
     var tapFormat: String?
     var kernel: Kernel?
     var window: DiagnosticsWindow?
+    var dropouts = DropoutCounts()
 }
