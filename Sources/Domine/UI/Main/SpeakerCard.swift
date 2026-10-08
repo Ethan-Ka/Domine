@@ -63,21 +63,23 @@ struct SpeakerCard: View {
                         DeviceNameLabel(name: name, suffix: state.uidSuffix)
                             .font(.callout)
                     }
-                    Text(state.statusText)
-                        .font(.subheadline)
-                        .foregroundStyle(isError ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondary))
+                    HStack(spacing: 4) {
+                        Text(state.statusText)
+                            .foregroundStyle(isError ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondary))
+                        if let percent = state.batteryPercent {
+                            Spacer(minLength: 4)
+                            Image(systemName: Self.batterySymbol(percent))
+                            Text("\(percent)%")
+                                .monospacedDigit()
+                        }
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(state.batteryPercent.map { $0 <= 15 } == true
+                                     ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondary))
                     if let secondary = state.statusDetail {
                         Text(secondary)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-                    }
-                    if let percent = state.batteryPercent {
-                        HStack(spacing: 4) {
-                            Image(systemName: Self.batterySymbol(percent))
-                            Text("\(percent)%")
-                        }
-                        .font(.subheadline)
-                        .foregroundStyle(percent <= 15 ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondary))
                     }
                 }
                 .lineLimit(1)
