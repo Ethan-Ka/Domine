@@ -39,6 +39,7 @@ extension AppModel {
                 // The model counts degrees per second; the slider turns.
                 orbitRate: Double(settings.orbitRate) / 360,
                 rotation: Double(settings.rotation),
+                orbitResetCount: orbitResetCount,
                 showsBluetoothWarning: showsBluetoothBandwidthWarning),
             canAddSurroundSpeaker: surroundSpeakers.count < SurroundSpeaker.maxCount,
             demo: DemoState(
@@ -134,7 +135,8 @@ extension AppModel {
                         suffix: catalog.device(uid: speaker.uid)?.uidSuffix ?? OutputDevice.suffix(forUID: speaker.uid),
                         effects: surroundEffects(uid: speaker.uid))
                 },
-                isLinked: settings.linkEffects)
+                isLinked: settings.linkEffects,
+                isMono: settings.mono)
         }
         return state
     }
@@ -143,6 +145,7 @@ extension AppModel {
         var actions = soundActions
         actions.setSurroundEffects = { [weak self] uid, effects in self?.setSurroundEffects(uid: uid, effects) }
         actions.setSurroundLinked = { [weak self] in self?.setSurroundEffectsLinked($0) }
+        actions.setSurroundMono = { [weak self] in self?.setSurroundMono($0) }
         return actions
     }
 

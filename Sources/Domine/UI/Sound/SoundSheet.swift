@@ -119,6 +119,12 @@ struct SoundSheet: View {
                 .accessibilityLabel("Speaker")
             }
             Spacer()
+            Toggle("Mono", isOn: Binding(
+                get: { surround.isMono },
+                set: { actions.setSurroundMono($0) }))
+                .toggleStyle(.checkbox)
+                .fixedSize()
+                .help("Play left and right together on every speaker")
         }
     }
 

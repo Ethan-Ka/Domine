@@ -186,6 +186,30 @@ final class SurroundModelTests {
         #expect(model.surroundSpeakers.isEmpty)
     }
 
+    @Test func monoIsOffByDefaultSavedAndPushed() throws {
+        let devices = (1...2).map { Self.device($0) }
+        start(devices)
+        model.assign(devices[0].uid, to: .frontLeft)
+        model.assign(devices[1].uid, to: .frontRight)
+        model.setRoutingMode(.surround)
+        #expect(!model.surroundSettings.mono)
+        #expect(!model.engine.surroundMono)
+        model.setSurroundMono(true)
+        #expect(model.engine.surroundMono)
+        #expect(model.soundSheetState.surround?.isMono == true)
+        let saved = try #require(model.store.surroundSettings(uids: uids(devices)))
+        #expect(saved.mono)
+        let old = try JSONDecoder().decode(SurroundSettings.self, from: Data(#"{"speakers":[{"uid":"A","azimuth":0}]}"#.utf8))
+        #expect(!old.mono)
+    }
+
+    @Test func orbitResetCountsForTheStage() {
+        start([])
+        let before = model.mainWindowState.surround.orbitResetCount
+        model.resetSurroundOrbit()
+        #expect(model.mainWindowState.surround.orbitResetCount == before + 1)
+    }
+
     @Test func twoSpeakersAreEnoughForSurround() {
         let devices = (1...2).map { Self.device($0) }
         start(devices)

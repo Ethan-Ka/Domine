@@ -30,6 +30,8 @@ struct SurroundSettings: Codable, Equatable, Sendable {
     var effects: [String: Effects] = [:]
     /// While on, every speaker uses the first speaker's effects.
     var linkEffects = true
+    /// L and R summed before panning, so every speaker plays the whole mix.
+    var mono = false
     /// The offsets were measured with the microphone (SPEC 12, 13.4): they
     /// hold the whole arrival difference, so distance sets level only.
     /// Manual offset edits keep it; Reset and a change of speakers clear it.
@@ -142,7 +144,7 @@ struct SurroundSettings: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case speakers, width, surroundLevel, orbitRate, rotation, spatialAmount, spatialRoomMs
-        case trims, offsetsMs, effects, linkEffects, timingMeasured
+        case trims, offsetsMs, effects, linkEffects, timingMeasured, mono
     }
 
     /// Missing or mistyped fields fall back to their defaults one by one; a
@@ -163,6 +165,7 @@ struct SurroundSettings: Codable, Equatable, Sendable {
         effects = (try? c.decodeIfPresent([String: Effects].self, forKey: .effects)) ?? [:]
         linkEffects = (try? c.decodeIfPresent(Bool.self, forKey: .linkEffects)) ?? d.linkEffects
         timingMeasured = (try? c.decodeIfPresent(Bool.self, forKey: .timingMeasured)) ?? d.timingMeasured
+        mono = (try? c.decodeIfPresent(Bool.self, forKey: .mono)) ?? d.mono
         sanitize()
     }
 

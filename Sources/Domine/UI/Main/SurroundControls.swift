@@ -10,6 +10,8 @@ struct SurroundControls: Equatable, Sendable {
     var orbitRate: Double = 0
     /// Rotation of the whole sound field in degrees, -180...180.
     var rotation: Double = 0
+    /// Goes up each time the orbit is reset, so the stage turns back too.
+    var orbitResetCount = 0
     /// More Bluetooth speakers than the radio can carry reliably.
     var showsBluetoothWarning = false
 

@@ -42,6 +42,7 @@ struct DomineSurround {
     // Field parameters.
     _Atomic uint32_t widthBits, rotationBits, orbitRateBits, levelBits;
     _Atomic uint32_t orbitResetReq;
+    _Atomic int mono;
     // Per speaker.
     _Atomic uint32_t gainBits[NSPK];
     _Atomic uint32_t delaySamples[NSPK];
@@ -276,6 +277,7 @@ DomineSurround *domine_surround_create(double sampleRate, uint32_t maxFrames) {
     atomic_init(&s->orbitRateBits, 0);
     atomic_init(&s->levelBits, f2u(SURROUND_LEVEL_DEFAULT));
     atomic_init(&s->orbitResetReq, 0);
+    atomic_init(&s->mono, 0);
     atomic_init(&s->muted, 0);
     atomic_init(&s->demoStartReq, 0);
     atomic_init(&s->demoWanted, 0);
@@ -359,6 +361,11 @@ void domine_surround_set_orbit_rate(DomineSurround *s, float degreesPerSecond) {
     if (r > ORBIT_MAX) r = ORBIT_MAX;
     if (r < -ORBIT_MAX) r = -ORBIT_MAX;
     atomic_store_explicit(&s->orbitRateBits, f2u(r), memory_order_relaxed);
+}
+
+void domine_surround_set_mono(DomineSurround *s, int on) {
+    if (s == NULL) return;
+    atomic_store_explicit(&s->mono, on != 0, memory_order_relaxed);
 }
 
 void domine_surround_reset_orbit(DomineSurround *s) {
@@ -611,6 +618,7 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
     const int clickOn = atomic_load_explicit(&s->clickOn, memory_order_relaxed);
     const uint32_t calReq = atomic_load_explicit(&s->calPair, memory_order_relaxed);
     const uint32_t tfull = s->toneFadeLength;
+    const int mono = atomic_load_explicit(&s->mono, memory_order_relaxed);
     float peak[NSPK] = { 0 };
     for (uint32_t f = 0; f < frames; f++) {
         if (s->fadePosition < fadeTarget) s->fadePosition++;
@@ -620,6 +628,7 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
         float L, R;
         if (tapSet != NULL) tapmix_read(&s->taps, tapSet, f, &L, &R);
         else { L = read_in(&inL, f); R = read_in(&inR, f); }
+        if (mono) { const float m = 0.5f * L + 0.5f * R; L = m; R = m; }
         float rl, rr;
         domine_spatial_tick(s->spatial, L, R, &rl, &rr); // always, so its state stays warm
         const float src[NPROG] = { L, R, rl, rr };

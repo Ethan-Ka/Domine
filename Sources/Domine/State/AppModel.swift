@@ -49,6 +49,8 @@ final class AppModel {
 
     // Demo (SPEC 14), polled at 30 Hz while it plays (AppModel+Surround).
     var demoPlaying = false
+    /// Counts orbit resets, so the stage drawing turns back with the kernel.
+    var orbitResetCount = 0
     var demoAzimuth: Float = 0
     var demoSection = 0
     @ObservationIgnored var demoPollTask: Task<Void, Never>?
@@ -479,6 +481,7 @@ final class AppModel {
         engine.setSurroundEffects(effects)
         engine.surroundWidth = s.width
         engine.surroundLevel = s.surroundLevel
+        engine.surroundMono = s.mono
         engine.orbitRate = s.orbitRate
         engine.rotation = s.rotation
         engine.spatialAmount = s.spatialAmount

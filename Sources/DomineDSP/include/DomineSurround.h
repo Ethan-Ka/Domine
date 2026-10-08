@@ -87,6 +87,9 @@ void domine_surround_set_rotation(DomineSurround *s, float degrees);
 /// phase to 0 at the next process call.
 void domine_surround_set_orbit_rate(DomineSurround *s, float degreesPerSecond);
 void domine_surround_reset_orbit(DomineSurround *s);
+/// Mono: L and R are both replaced by 0.5 * L + 0.5 * R before panning and
+/// the spatial upmixer, so every speaker plays the whole mix. Default off.
+void domine_surround_set_mono(DomineSurround *s, int on);
 /// Level of the ambience sources, 0...1, default 0.7.
 void domine_surround_set_surround_level(DomineSurround *s, float level);
 /// Ambience parameters (forwarded to the spatial upmixer). Default amount 0.6.

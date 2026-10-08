@@ -236,6 +236,7 @@ extension AppModel {
     /// Returns the orbit phase to 0.
     func resetSurroundOrbit() {
         engine.resetOrbit()
+        orbitResetCount += 1
     }
 
     /// Ambience amount 0...1 and room size 5...30 ms.
@@ -271,6 +272,11 @@ extension AppModel {
         guard let first = surroundSpeakers.first?.uid,
               surroundSpeakers.contains(where: { $0.uid == uid }) else { return }
         updateSurroundSettings { s in s.effects[s.linkEffects ? first : uid] = effects }
+    }
+
+    /// Mono in the Sound sheet: L and R summed before panning.
+    func setSurroundMono(_ on: Bool) {
+        updateSurroundSettings { $0.mono = on }
     }
 
     func setSurroundEffectsLinked(_ linked: Bool) {

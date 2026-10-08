@@ -91,6 +91,8 @@ final class Engine {
     var surroundWidth: Float = 30 { didSet { applyControls() } }
     /// Ambience level 0...1.
     var surroundLevel: Float = 0.7 { didSet { applyControls() } }
+    /// L and R summed before panning (Sound sheet, Surround).
+    var surroundMono = false { didSet { if surroundMono != oldValue { applyControls() } } }
     /// Orbit speed in degrees per second; going back to 0 resets the phase.
     var orbitRate: Float = 0 {
         didSet {
@@ -1314,6 +1316,7 @@ extension Engine {
         domine_surround_set_orbit_rate(surround, orbit)
         // Stereo routing (the stereo demo) stays plain L and R.
         domine_surround_set_surround_level(surround, stereoDemo ? 0 : surroundLevel)
+        domine_surround_set_mono(surround, surroundMono && !stereoDemo ? 1 : 0)
         var spatial = DomineSpatialParams(amount: spatialAmount, roomMs: spatialRoomMs, highCutHz: 5000)
         domine_surround_set_spatial(surround, &spatial)
         domine_surround_set_test_tone(surround, surroundToneIndex())

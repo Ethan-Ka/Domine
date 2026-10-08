@@ -134,6 +134,19 @@ struct SurroundKernelTests {
         #expect(on > off * 4)
     }
 
+    @Test func monoPlaysTheSumOnEverySpeaker() {
+        let s = Self.make([-30, 30])
+        defer { domine_surround_destroy(s) }
+        domine_surround_set_mono(s, 1)
+        let mono = zip(Self.left, Self.right).map { 0.5 * $0 + 0.5 * $1 }
+        let out = Self.run(s, offsets: [0, 2], buffers: [4])
+        for c in 0..<4 { #expect(out.channel(c) == mono) }
+        domine_surround_set_mono(s, 0)
+        let back = Self.run(s, offsets: [0, 2], buffers: [4])
+        #expect(back.channel(0) == Self.left)
+        #expect(back.channel(2) == Self.right)
+    }
+
     @Test func oneSpeakerIgnoresSurroundLevel() {
         let s = Self.make([77])
         defer { domine_surround_destroy(s) }

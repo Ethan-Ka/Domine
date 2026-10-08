@@ -16,6 +16,8 @@ struct SurroundSound: Equatable, Sendable {
     var speakers: [Speaker]
     /// While on, every speaker plays the first speaker's effects.
     var isLinked: Bool
+    /// L and R summed before panning. Off by default.
+    var isMono = false
 
     /// The speaker edits go to: the first while linked, else `selection`
     /// when it is still in the set.
