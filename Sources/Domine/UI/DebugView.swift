@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Read-only window of live audio values (SPEC section 6). Refreshes once a
@@ -7,14 +8,41 @@ struct DebugView: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { _ in
-            DebugContentView(snapshot: model.engine.diagnostics?.snapshot())
+            let snapshot = model.engine.diagnostics?.snapshot()
+            DebugContentView(snapshot: snapshot, report: { report(snapshot) })
         }
+    }
+
+    private func report(_ snapshot: DebugSnapshot?) -> String {
+        let info = Bundle.main.infoDictionary
+        let uids = [model.leftUID, model.rightUID, model.rearLeftUID, model.rearRightUID].compactMap { $0 }
+        let speakers = uids.map { uid -> DiagnosticsReport.SpeakerInfo in
+            let device = model.catalog.device(uid: uid)
+            return .init(uid: uid, name: device?.name ?? "unknown",
+                         transport: device.map { $0.isBluetooth ? "Bluetooth" : "Other" } ?? "unknown",
+                         connected: device != nil)
+        }
+        var lastError: String?
+        if case .error(let message) = model.engine.state { lastError = message }
+        let context = DiagnosticsReport.Context(
+            appVersion: info?["CFBundleShortVersionString"] as? String ?? "unknown",
+            build: info?["CFBundleVersion"] as? String ?? "unknown",
+            macOS: ProcessInfo.processInfo.operatingSystemVersionString,
+            routingMode: model.routingMode.title,
+            delayMs: Double(model.pairSettings.delayMs),
+            overloads: model.engine.diagnostics?.overloads,
+            engineState: "\(model.engine.state)",
+            lastError: lastError,
+            speakers: speakers)
+        return DiagnosticsReport.make(snapshot: snapshot, context: context)
     }
 }
 
 /// The layout, separate from the engine so it renders from sample values.
 struct DebugContentView: View {
     let snapshot: DebugSnapshot?
+    var report: (() -> String)?
+    @State private var copied = false
 
     var body: some View {
         Form {
@@ -53,6 +81,20 @@ struct DebugContentView: View {
         }
         .formStyle(.grouped)
         .frame(minWidth: 460, minHeight: 360)
+        .toolbar {
+            if let report {
+                Button(copied ? "Copied" : "Copy Report") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(report(), forType: .string)
+                    copied = true
+                }
+                .task(id: copied) {
+                    guard copied else { return }
+                    try? await Task.sleep(for: .seconds(2))
+                    copied = false
+                }
+            }
+        }
     }
 
     private func row(_ label: String, _ value: String) -> some View {
