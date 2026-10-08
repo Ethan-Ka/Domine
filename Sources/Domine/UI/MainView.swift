@@ -14,12 +14,15 @@ struct MainView: View {
                 AssignSheet(
                     state: model.assignSheetState(for: position),
                     actions: model.assignSheetActions(for: position))
+                    .sheet(isPresented: $model.showsBluetooth) { bluetoothSheet }
             }
             .sheet(item: $surroundAssign.target) { target in
                 AssignSheet(
                     state: model.surroundAssignSheetState(for: target, selection: surroundAssign.selection),
                     actions: surroundAssignActions(for: target))
+                    .sheet(isPresented: $model.showsBluetooth) { bluetoothSheet }
             }
+            .sheet(isPresented: standaloneBluetooth) { bluetoothSheet }
             .sheet(isPresented: $model.showsTuning) {
                 TuningSheet(state: model.tuningSheetState, actions: model.tuningSheetActions)
             }
@@ -51,6 +54,21 @@ struct MainView: View {
             .onDisappear { model.mainWindowDidClose() }
     }
 
+    /// The Bluetooth sheet sits on top of a Choose Speaker sheet when opened
+    /// from one; otherwise it is presented here.
+    private var standaloneBluetooth: Binding<Bool> {
+        let presenter = surroundAssign
+        let appModel = model
+        return Binding(
+            get: { appModel.showsBluetooth && appModel.assignPosition == nil && presenter.target == nil },
+            set: { if !$0 { appModel.closeBluetooth() } })
+    }
+
+    private var bluetoothSheet: some View {
+        BluetoothSheet(state: model.bluetoothSheetState, actions: model.bluetoothSheetActions)
+            .onDisappear { model.closeBluetooth() }
+    }
+
     /// The model's actions plus the two that present the Surround sheet,
     /// whose state lives here.
     private var actions: MainWindowActions {
@@ -71,6 +89,7 @@ struct MainView: View {
             confirm: { uid in
                 appModel.confirmSurroundAssign(uid, target: target)
                 presenter.dismiss()
-            })
+            },
+            openBluetooth: { appModel.openBluetooth() })
     }
 }

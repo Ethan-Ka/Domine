@@ -95,6 +95,9 @@ struct StatusMenu: View {
             Button { actions.openMainWindow() } label: {
                 StatusMenuItemLabel(title: "Open Domine")
             }
+            Button { actions.bluetoothSpeakers() } label: {
+                StatusMenuItemLabel(title: "Bluetooth Speakers…")
+            }
             Button { actions.openSettings() } label: {
                 StatusMenuItemLabel(title: "Settings…", shortcut: "⌘,")
             }

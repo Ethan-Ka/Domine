@@ -60,6 +60,7 @@ extension AppModel {
             confirm: { [weak self] uid in
                 self?.assign(uid, to: position)
                 self?.assignPosition = nil
-            })
+            },
+            openBluetooth: { [weak self] in self?.openBluetooth() })
     }
 }

@@ -7,5 +7,8 @@ struct AssignSheetActions: Sendable {
     /// "Use This Speaker" with the selected row's UID.
     var confirm: @MainActor @Sendable (_ uid: String) -> Void = { _ in }
 
+    /// "Bluetooth…" in the bottom row; hidden when nil.
+    var openBluetooth: (@MainActor @Sendable () -> Void)?
+
     static let none = AssignSheetActions()
 }

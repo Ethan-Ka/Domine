@@ -169,6 +169,7 @@ extension AppModel {
         guard !surroundSettings.speakers.isEmpty else { return }
         store.setSurroundSettings(surroundSettings)
         store.lastSurroundUIDs = surroundSettings.uids
+        rememberBluetoothSpeakers(surroundSettings.uids)
     }
 
     /// Edits the record, sanitizes and saves it, and pushes it to the engine.

@@ -17,6 +17,9 @@ struct AssignSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack(spacing: 8) {
+                if let openBluetooth = actions.openBluetooth {
+                    Button("Bluetooth…", action: openBluetooth)
+                }
                 Spacer()
                 Button("Cancel", action: actions.cancel)
                     .keyboardShortcut(.cancelAction)
