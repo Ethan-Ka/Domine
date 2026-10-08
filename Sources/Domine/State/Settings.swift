@@ -11,6 +11,7 @@ final class SettingsStore {
     private enum Key: String {
         case lastLeftUID, lastRightUID, lastRearLeftUID, lastRearRightUID, routingMode, lastSurroundUIDs
         case volumeKeysEnabled, restorePreviousOutput, closeBehavior, startWhenBothConnect, reconnectDroppedSpeakers
+        case keepSpeakersAwake
         case previousOutputUID, outputNeedsRestore, excludedAppsPlayThroughUID, exclusions, appVolumes
         case hasCompletedWelcome, audioCaptureWorking, audioCaptureSignature
         case rooms, currentRoomID
@@ -193,6 +194,12 @@ final class SettingsStore {
     var reconnectDroppedSpeakers: Bool {
         get { bool(.reconnectDroppedSpeakers, default: true) }
         set { defaults.set(newValue, forKey: Key.reconnectDroppedSpeakers.name) }
+    }
+
+    /// Play an inaudible tone during silence so speakers do not power off. On by default.
+    var keepSpeakersAwake: Bool {
+        get { bool(.keepSpeakersAwake, default: true) }
+        set { defaults.set(newValue, forKey: Key.keepSpeakersAwake.name) }
     }
 
     /// Default output saved at start, for restore on stop and crash recovery (SPEC section 4c).

@@ -32,4 +32,5 @@ struct GeneralSettingsState: Equatable, Sendable {
     var startWhenBothConnect = true
     var launchAtLogin = false
     var reconnectDroppedSpeakers = true
+    var keepSpeakersAwake = true
 }
