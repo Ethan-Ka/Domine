@@ -33,6 +33,15 @@ struct TuningSheet: View {
         .padding(.horizontal, 20)
         .frame(width: Self.width)
         .onExitCommand(perform: actions.done)
+        .focusable()
+        .focusEffectDisabled()
+        .onKeyPress(phases: [.down, .repeat]) { press in
+            guard state.surroundRows == nil,
+                  press.key == .leftArrow || press.key == .rightArrow else { return .ignored }
+            let size = press.modifiers.contains(.shift) ? 5 : 1
+            actions.setDelayMs(state.nudgedDelay(by: press.key == .leftArrow ? -size : size))
+            return .handled
+        }
     }
 
     /// Surround resets every speaker's trim and delay and clears the
@@ -46,7 +55,10 @@ struct TuningSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             sectionTitle("TIMING")
             VStack(spacing: 4) {
-                readoutRow("Delay offset", value: state.delayReadout)
+                HStack(spacing: 6) {
+                    readoutRow("Delay offset", value: state.delayReadout)
+                    nudgeButtons
+                }
                 Slider(
                     value: Binding(
                         get: { Double(state.delayMs) },
@@ -266,6 +278,24 @@ struct TuningSheet: View {
         }
         .font(.callout)
         .accessibilityHidden(true)
+    }
+
+    /// Positive steps delay the right speaker more, negative the left.
+    private var nudgeButtons: some View {
+        HStack(spacing: 4) {
+            ForEach([-5, -1, 1, 5], id: \.self) { step in
+                Button(step < 0 ? "\u{2212}\(-step)" : "+\(step)") {
+                    actions.setDelayMs(state.nudgedDelay(by: step))
+                }
+                .accessibilityLabel(Self.nudgeLabel(step))
+            }
+        }
+    }
+
+    static func nudgeLabel(_ step: Int) -> String {
+        let unit = abs(step) == 1 ? "millisecond" : "milliseconds"
+        let side = step < 0 ? "left" : "right"
+        return "Delay \(abs(step)) \(unit) more on the \(side)"
     }
 
     private func endLabels(_ leading: String, _ trailing: String) -> some View {

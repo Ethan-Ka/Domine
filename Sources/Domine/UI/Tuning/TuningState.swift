@@ -46,6 +46,15 @@ struct TuningState: Equatable, Sendable {
     }
 
     var delayReadout: String { Self.delayReadout(delayMs) }
+
+    /// The delay after nudging by `step` ms, kept inside the current range.
+    func nudgedDelay(by step: Int) -> Int {
+        Self.nudge(delayMs, by: step, in: delayRange)
+    }
+
+    static func nudge(_ ms: Int, by step: Int, in range: ClosedRange<Int>) -> Int {
+        min(max(ms + step, range.lowerBound), range.upperBound)
+    }
     var balanceReadout: String { Self.balanceReadout(balance) }
 
     static func delayReadout(_ ms: Int) -> String {
