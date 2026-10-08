@@ -653,7 +653,7 @@ JBL Grips roll off below about 70 to 80 Hz (section 1a: 70 Hz at -6 dB, one smal
 
 ### 16.7 Delay nudge
 - Buttons -5, -1, +1 and +5 ms in Tuning. Arrow keys nudge by 1 ms, Shift with an arrow by 5 ms.
-- Results are clamped to the current slider range (4).
+- Results are clamped to the current slider range (section 4).
 
 ### 16.8 Now Playing
 - Read through MediaRemote, loaded with `dlopen`.
