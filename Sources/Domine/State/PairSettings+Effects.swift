@@ -34,6 +34,8 @@ extension PairSettings {
         var compressorEnabled = false
         /// 0...1: threshold -6...-30 dB, ratio 1.5...4, automatic makeup.
         var compressorAmount: Float = 0
+        /// Overrides the compressor and adds loudness without touching the settings above.
+        var nightMode = false
 
         init() {}
 
@@ -47,10 +49,11 @@ extension PairSettings {
             bassAmount = Self.unit((try? c.decodeIfPresent(Float.self, forKey: .bassAmount)) ?? d.bassAmount)
             compressorEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .compressorEnabled)) ?? d.compressorEnabled
             compressorAmount = Self.unit((try? c.decodeIfPresent(Float.self, forKey: .compressorAmount)) ?? d.compressorAmount)
+            nightMode = (try? c.decodeIfPresent(Bool.self, forKey: .nightMode)) ?? d.nightMode
         }
 
         private enum CodingKeys: String, CodingKey {
-            case eqEnabled, eqBands, bassEnabled, bassAmount, compressorEnabled, compressorAmount
+            case eqEnabled, eqBands, bassEnabled, bassAmount, compressorEnabled, compressorAmount, nightMode
         }
 
         private static func unit(_ v: Float) -> Float { v.isFinite ? min(max(v, 0), 1) : 0 }
@@ -60,13 +63,29 @@ extension PairSettings {
         /// Makeup restores half of the gain reduction a 0 dB peak would get.
         var compressorMakeupDb: Float { -compressorThresholdDb * (1 - 1 / compressorRatio) * 0.5 }
 
+        static let nightThresholdDb: Float = -30
+        static let nightRatio: Float = 6
+        static let nightMakeupDb: Float = 6
+        /// Loudness curve added to the EQ while night mode is on.
+        static let loudnessGainsDb: [Float] = [5, 1, -1, 1, 4]
+
+        /// EQ gain per band as the kernel gets it: the user's, plus loudness in night mode.
+        var effectiveEQGains: [Float] {
+            (0..<5).map { i in
+                let g = i < eqBands.count ? eqBands[i].gainDb : 0
+                guard nightMode else { return g }
+                return min(max(g + Self.loudnessGainsDb[i], -12), 12)
+            }
+        }
+
         var eqParams: DomineEQParams {
             var p = domine_eq_default_params()
-            p.enabled = eqEnabled ? 1 : 0
+            p.enabled = (eqEnabled || nightMode) ? 1 : 0
+            let gains = effectiveEQGains
             withUnsafeMutableBytes(of: &p.bands) { raw in
                 let bands = raw.bindMemory(to: DomineEQBand.self)
                 for i in 0..<min(5, eqBands.count) {
-                    bands[i] = DomineEQBand(freqHz: eqBands[i].freqHz, gainDb: eqBands[i].gainDb, q: eqBands[i].q)
+                    bands[i] = DomineEQBand(freqHz: eqBands[i].freqHz, gainDb: gains[i], q: eqBands[i].q)
                 }
             }
             return p
@@ -77,7 +96,12 @@ extension PairSettings {
         }
 
         var compressorParams: DomineCompressorParams {
-            DomineCompressorParams(enabled: compressorEnabled ? 1 : 0, thresholdDb: compressorThresholdDb,
+            if nightMode {
+                return DomineCompressorParams(enabled: 1, thresholdDb: Self.nightThresholdDb,
+                                              ratio: Self.nightRatio, attackMs: 2, releaseMs: 100,
+                                              makeupDb: Self.nightMakeupDb, limiterCeilingDb: -1)
+            }
+            return DomineCompressorParams(enabled: compressorEnabled ? 1 : 0, thresholdDb: compressorThresholdDb,
                                    ratio: compressorRatio, attackMs: 10, releaseMs: 100,
                                    makeupDb: compressorMakeupDb, limiterCeilingDb: -1)
         }
@@ -107,6 +131,13 @@ extension PairSettings {
 
         /// What the right speaker actually gets.
         var effectiveRight: SideEffects { linkSpeakers ? left : right }
+        var nightMode: Bool { left.nightMode }
+        func settingNightMode(_ on: Bool) -> EffectsSettings {
+            var e = self
+            e.left.nightMode = on
+            e.right.nightMode = on
+            return e
+        }
         var swapped: EffectsSettings {
             var copy = self
             copy.left = right

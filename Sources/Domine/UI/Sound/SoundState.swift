@@ -48,6 +48,6 @@ struct SoundState: Equatable, Sendable {
     func applying(preset: PairSettings.Preset) -> Effects {
         var e = preset.settings
         e.linkSpeakers = effects.linkSpeakers
-        return e
+        return e.settingNightMode(effects.nightMode)
     }
 }
