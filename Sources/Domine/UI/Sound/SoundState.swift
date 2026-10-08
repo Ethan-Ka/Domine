@@ -4,6 +4,8 @@ struct SoundState: Equatable, Sendable {
     typealias Side = PairSettings.SideEffects
 
     var effects = Effects()
+    var crossfeed = 0.0
+    var sameOnBoth = false
     /// Set in Surround mode: every speaker's effects and the link.
     var surround: SurroundSound?
 

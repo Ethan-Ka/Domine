@@ -472,6 +472,7 @@ final class AppModel {
         engine.leftGain = pairSettings.leftGain * kernelVolume(for: leftUID)
         engine.rightGain = pairSettings.rightGain * kernelVolume(for: rightUID)
         engine.delayMs = pairSettings.delayMs
+        engine.crossfeed = pairSettings.effectiveCrossfeed
         engine.setEffects(left: pairSettings.effects.left, right: pairSettings.effects.effectiveRight)
         applySurroundSettingsToEngine()
     }
