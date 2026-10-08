@@ -248,9 +248,9 @@ struct EngineFormatTests {
         hal.setDefault(uid: Self.gripA.uid) // default output moved to a Grip, already at 48 kHz
         #expect(await engine.checkFormat() == false)
         #expect(engine.state == .running)
-        // No new tap, aggregate, or stop.
-        #expect(hal.ops.count == before)
-        // The previous default output got its own rate back.
+        // No new tap, aggregate, or stop: the only HAL write is giving the
+        // previous default output its own rate back.
+        #expect(Array(hal.ops.dropFirst(before)) == [.setSampleRate(uid: Self.speakers.uid)])
         #expect(hal.sampleRate(uid: Self.speakers.uid) == 44_100)
         #expect(await engine.checkFormat() == false)
     }
