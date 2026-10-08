@@ -125,6 +125,10 @@ extension AppModel {
                 self?.showsSaveRoom = true
                 self?.showMainWindow()
             },
+            bluetoothSpeakers: { [weak self] in
+                self?.openBluetooth()
+                self?.showMainWindow()
+            },
             manageRooms: { [weak self] in
                 self?.showsManageRooms = true
                 self?.showMainWindow()

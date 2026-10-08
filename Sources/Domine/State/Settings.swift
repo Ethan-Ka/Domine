@@ -14,7 +14,7 @@ final class SettingsStore {
         case keepSpeakersAwake, pauseOnExit
         case previousOutputUID, outputNeedsRestore, excludedAppsPlayThroughUID, exclusions, appVolumes
         case hasCompletedWelcome, audioCaptureWorking, audioCaptureSignature
-        case rooms, currentRoomID
+        case rooms, currentRoomID, rememberedSpeakers
 
         var name: String { SettingsStore.keyPrefix + rawValue }
     }
@@ -256,6 +256,19 @@ final class SettingsStore {
         set {
             guard let data = try? JSONEncoder().encode(newValue) else { return }
             defaults.set(data, forKey: Key.rooms.name)
+        }
+    }
+
+    /// Speakers the Bluetooth window keeps under My Speakers, in the order
+    /// they were added. Missing or corrupt reads as none.
+    var rememberedSpeakers: [RememberedSpeaker] {
+        get {
+            defaults.data(forKey: Key.rememberedSpeakers.name)
+                .flatMap { try? JSONDecoder().decode([RememberedSpeaker].self, from: $0) } ?? []
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue) else { return }
+            defaults.set(data, forKey: Key.rememberedSpeakers.name)
         }
     }
 

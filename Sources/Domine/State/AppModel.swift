@@ -74,6 +74,9 @@ final class AppModel {
     var assignSelection: String?
     /// Closing the tuning sheet stops the click test.
     var showsSound = false
+    /// Drives the Bluetooth Speakers sheet.
+    var showsBluetooth = false
+    let bluetoothSpeakers: BluetoothSpeakersModel
     var showsTuning = false {
         didSet { if !showsTuning { stopClickTest(); cancelCalibration() } }
     }
@@ -172,11 +175,13 @@ final class AppModel {
          pauseWatchdog: PauseWatchdog = .live(),
          battery: any BatteryReading = IOBluetoothBatteryReader(),
          bluetooth: any BluetoothConnecting = IOBluetoothConnector(),
+         radio: any BluetoothRadio = IOBluetoothRadio(),
          reconnectSleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }) {
         batteryReader = battery
         self.pauseWatchdog = pauseWatchdog
         let store = SettingsStore(defaults: defaults)
         self.hal = hal
+        bluetoothSpeakers = BluetoothSpeakersModel(radio: radio, store: store)
         let catalog = DeviceCatalog(hal: hal)
         self.catalog = catalog
         volumeLink = SpeakerVolumeLink(hal: hal)
@@ -277,6 +282,7 @@ final class AppModel {
         routingRefusal = nil
         store.lastLeftUID = left
         store.lastRightUID = right
+        rememberBluetoothSpeakers([left, right])
         refreshCurrentRoom()
         pairSettings = Self.loadPairSettings(store: store, left: left, right: right)
         // A new pair is not a speaker connecting, so it never auto-starts.
@@ -586,6 +592,7 @@ final class AppModel {
         refreshBatteryLevels()
         autoStartIfSpeakersConnected()
         syncReconnector()
+        if showsBluetooth { bluetoothSpeakers.refresh() }
     }
 
     /// Assigned speakers that are not in the catalog right now.

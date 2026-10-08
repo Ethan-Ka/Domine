@@ -10,6 +10,8 @@ struct StatusMenuActions {
     var autoCalibrate: @MainActor () -> Void = {}
     var selectRoom: @MainActor (Room.ID) -> Void = { _ in }
     var saveRoom: @MainActor () -> Void = {}
+    /// Opens the main window with the Bluetooth Speakers sheet.
+    var bluetoothSpeakers: @MainActor () -> Void = {}
     var manageRooms: @MainActor () -> Void = {}
     var quit: @MainActor () -> Void = {}
 }
