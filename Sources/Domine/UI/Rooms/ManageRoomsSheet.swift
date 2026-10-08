@@ -5,7 +5,9 @@ struct ManageRoomsSheet: View {
     var rooms: [Room]
     var rename: @MainActor (Room.ID, String) -> Void
     var delete: @MainActor (Room.ID) -> Void
+    var importRooms: @MainActor ([Room]) -> Void
     var done: @MainActor () -> Void
+    @State private var selection = Set<Room.ID>()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -16,12 +18,20 @@ struct ManageRoomsSheet: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 60)
             } else {
-                List(rooms) { room in
+                List(rooms, selection: $selection) { room in
                     ManageRoomRow(room: room, rename: rename, delete: delete)
                 }
                 .frame(height: min(CGFloat(rooms.count) * 32 + 8, 240))
             }
             HStack {
+                Button("Export…") {
+                    let chosen = selection.isEmpty ? rooms : rooms.filter { selection.contains($0.id) }
+                    RoomsFilePanels.export(chosen)
+                }
+                .disabled(rooms.isEmpty)
+                Button("Import…") {
+                    if let imported = RoomsFilePanels.importRooms() { importRooms(imported) }
+                }
                 Spacer()
                 Button("Done") { done() }
                     .keyboardShortcut(.defaultAction)
@@ -69,5 +79,5 @@ private struct ManageRoomRow: View {
 #Preview {
     ManageRoomsSheet(
         rooms: [Room(name: "Living room", mode: .stereo), Room(name: "Patio", mode: .surround)],
-        rename: { _, _ in }, delete: { _ in }, done: {})
+        rename: { _, _ in }, delete: { _ in }, importRooms: { _ in }, done: {})
 }

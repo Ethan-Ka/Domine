@@ -36,6 +36,7 @@ struct MainView: View {
                     rooms: model.rooms,
                     rename: { model.renameRoom($0, to: $1) },
                     delete: { model.deleteRoom($0) },
+                    importRooms: { model.importRooms($0) },
                     done: { model.showsManageRooms = false })
             }
             .sheet(isPresented: $model.showsWelcome) {
