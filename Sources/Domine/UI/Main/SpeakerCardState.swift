@@ -16,6 +16,8 @@ struct SpeakerCardState: Identifiable, Equatable, Sendable {
     /// Post-kernel peak, 0...1 (SPEC section 3a).
     var level: Double
     var isMonoFallback: Bool
+    /// 1...100 when the speaker reports it.
+    var batteryPercent: Int?
     /// Set for Surround cards: the output and where it sits. `position` is
     /// not used for these.
     var surround: SurroundCardInfo?

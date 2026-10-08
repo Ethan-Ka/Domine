@@ -31,6 +31,15 @@ struct SpeakerCard: View {
         }
     }
 
+    static func batterySymbol(_ percent: Int) -> String {
+        switch percent {
+        case ..<38: "battery.25"
+        case ..<63: "battery.50"
+        case ..<88: "battery.75"
+        default: "battery.100"
+        }
+    }
+
     private var isError: Bool { state.connection == .disconnected }
 
     private var card: some View {
@@ -60,6 +69,14 @@ struct SpeakerCard: View {
                         Text(secondary)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                    }
+                    if let percent = state.batteryPercent {
+                        HStack(spacing: 4) {
+                            Image(systemName: Self.batterySymbol(percent))
+                            Text("\(percent)%")
+                        }
+                        .font(.subheadline)
+                        .foregroundStyle(percent <= 15 ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondary))
                     }
                 }
                 .lineLimit(1)
@@ -114,6 +131,9 @@ struct SpeakerCard: View {
             parts.append([name, state.uidSuffix].compactMap { $0 }.joined(separator: " "))
         }
         parts.append(state.statusText)
+        if let percent = state.batteryPercent {
+            parts.append("Battery \(percent) percent")
+        }
         if let secondary = state.statusDetail {
             parts.append(secondary)
         }

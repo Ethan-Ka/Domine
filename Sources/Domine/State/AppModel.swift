@@ -148,6 +148,10 @@ final class AppModel {
     /// How often trust is re-read while a "not granted" note shows.
     @ObservationIgnored var trustPollInterval: Duration = .seconds(2)
     @ObservationIgnored let hal: any AudioHAL
+    /// Battery percent by speaker UID; unknown speakers are absent (AppModel+Battery).
+    var batteryPercent: [String: Int] = [:]
+    @ObservationIgnored let batteryReader: any BatteryReading
+    @ObservationIgnored var batteryTask: Task<Void, Never>?
     /// Follows the Domine virtual output's volume and mute (AppModel+VirtualOutput).
     @ObservationIgnored var virtualOutput: VirtualOutputLink?
     /// Resolves excluded apps to process objects for the tap (SPEC 3b).
@@ -157,7 +161,9 @@ final class AppModel {
     var appVolumes: [String: Double]
 
     init(hal: any AudioHAL = CoreAudioHAL(), defaults: UserDefaults = .standard,
-         services: SystemServices = .live) {
+         services: SystemServices = .live,
+         battery: any BatteryReading = IOBluetoothBatteryReader()) {
+        batteryReader = battery
         let store = SettingsStore(defaults: defaults)
         self.hal = hal
         let catalog = DeviceCatalog(hal: hal)
@@ -222,6 +228,7 @@ final class AppModel {
         logPermissionsAtLaunch()
         observeCatalog()
         observeEngine()
+        startBatteryPolling()
         observeActivationForVolumeKeys()
         observeSleepAndWake()
         // Never leave a muting tap behind on quit. AppKit posts this on the
@@ -560,6 +567,7 @@ final class AppModel {
         chooseDefaultSpeakers()
         syncSettingsWithCatalog()
         syncVolumeLink()
+        refreshBatteryLevels()
         autoStartIfSpeakersConnected()
     }
 
