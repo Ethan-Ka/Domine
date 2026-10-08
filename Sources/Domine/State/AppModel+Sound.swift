@@ -3,13 +3,15 @@
 /// speaker shares while effects are linked (SPEC 13.6).
 extension AppModel {
     var soundState: SoundState {
-        guard let first = surroundSoundUID else { return SoundState(effects: pairSettings.effects) }
+        guard let first = surroundSoundUID else { return SoundState(effects: pairSettings.effects, crossfeed: pairSettings.crossfeed, sameOnBoth: pairSettings.sameOnBoth) }
         return SoundState(effects: PairSettings.EffectsSettings(both: surroundEffects(uid: first)))
     }
 
     var soundActions: SoundActions {
         SoundActions(
             setEffects: { [weak self] in self?.setSoundEffects($0) },
+            setCrossfeed: { [weak self] v in self?.updatePairSettings { $0.crossfeed = v } },
+            setSameOnBoth: { [weak self] v in self?.updatePairSettings { $0.sameOnBoth = v } },
             reset: { [weak self] in self?.setSoundEffects(PairSettings.EffectsSettings()) },
             done: { [weak self] in self?.showsSound = false })
     }

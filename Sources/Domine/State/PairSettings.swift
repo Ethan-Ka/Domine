@@ -15,9 +15,19 @@ struct PairSettings: Codable, Equatable, Sendable {
     var masterVolume: Float = 0.5
     /// EQ, bass, and compressor, per speaker or linked.
     var effects = EffectsSettings()
+    /// Stereo only: how much of each side is mixed into the other, 0...1.
+    var crossfeed: Double = 0
+    /// Both speakers play the same mix (speakers in different rooms).
+    var sameOnBoth = false
+
+    /// What the kernel gets: full mix while `sameOnBoth`, else the slider.
+    var effectiveCrossfeed: Float { sameOnBoth ? 1 : Float(min(max(crossfeed.isFinite ? crossfeed : 0, 0), 1)) }
 
     init(delayMs: Float = 0, extendedRange: Bool = false, balance: Float = 0, masterVolume: Float = 0.5,
-         effects: EffectsSettings = EffectsSettings()) {
+         effects: EffectsSettings = EffectsSettings(),
+         crossfeed: Double = 0, sameOnBoth: Bool = false) {
+        self.crossfeed = crossfeed
+        self.sameOnBoth = sameOnBoth
         self.effects = effects
         self.delayMs = delayMs
         self.extendedRange = extendedRange
@@ -55,7 +65,7 @@ struct PairSettings: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case delayMs, extendedRange, balance, masterVolume, effects
+        case delayMs, extendedRange, balance, masterVolume, effects, crossfeed, sameOnBoth
     }
 
     /// Missing or mistyped fields fall back to their defaults one by one,
@@ -68,6 +78,8 @@ struct PairSettings: Codable, Equatable, Sendable {
             extendedRange: (try? c.decodeIfPresent(Bool.self, forKey: .extendedRange)) ?? defaults.extendedRange,
             balance: (try? c.decodeIfPresent(Float.self, forKey: .balance)) ?? defaults.balance,
             masterVolume: (try? c.decodeIfPresent(Float.self, forKey: .masterVolume)) ?? defaults.masterVolume,
-            effects: (try? c.decodeIfPresent(EffectsSettings.self, forKey: .effects)) ?? defaults.effects)
+            effects: (try? c.decodeIfPresent(EffectsSettings.self, forKey: .effects)) ?? defaults.effects,
+            crossfeed: (try? c.decodeIfPresent(Double.self, forKey: .crossfeed)) ?? defaults.crossfeed,
+            sameOnBoth: (try? c.decodeIfPresent(Bool.self, forKey: .sameOnBoth)) ?? defaults.sameOnBoth)
     }
 }

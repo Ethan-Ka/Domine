@@ -48,6 +48,7 @@ final class Engine {
     /// left, falling on the right, once a second. Wins over `clickTest`.
     /// Every stop turns it off.
     var calibrationChirps = false { didSet { if calibrationChirps != oldValue { applyControls() } } }
+    var crossfeed: Float = 0 { didSet { if crossfeed != oldValue { applyControls() } } }
     var leftGain: Float = 1 { didSet { applyControls() } }
     var rightGain: Float = 1 { didSet { applyControls() } }
     /// Positive delays the right speaker, negative the left (SPEC section 4).
@@ -1124,6 +1125,7 @@ final class Engine {
         domine_kernel_set_mode(kernel, monoPerSpeaker ? 1 : 0, swapSides ? 1 : 0, kernelMonoFallback ? 1 : 0)
         domine_kernel_set_test_tone(kernel, testTone.rawValue)
         domine_kernel_set_click_test(kernel, calibrationChirps ? 2 : (clickTest ? 1 : 0))
+        domine_kernel_set_crossfeed(kernel, crossfeed)
         domine_kernel_set_gains(kernel, leftGain, rightGain)
         domine_kernel_set_delay_ms(kernel, delayMs)
         domine_kernel_set_muted(kernel, muted || fadingOut ? 1 : 0)

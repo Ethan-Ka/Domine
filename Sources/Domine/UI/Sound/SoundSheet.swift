@@ -30,6 +30,7 @@ struct SoundSheet: View {
             } else {
                 speakerLinkRow
             }
+            if state.surround == nil { GroupBox { crossfeedControls.padding(2) } }
             GroupBox { eq.padding(2) }
             GroupBox { bass.padding(2) }
             GroupBox { compressor.padding(2) }
@@ -145,6 +146,28 @@ struct SoundSheet: View {
                 .frame(width: 140)
             }
             Spacer()
+        }
+    }
+
+    private var crossfeedControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Crossfeed").font(.callout)
+                Slider(value: Binding(
+                    get: { state.sameOnBoth ? 1 : state.crossfeed },
+                    set: { actions.setCrossfeed($0) }), in: 0...1)
+                    .labelsHidden()
+                    .accessibilityLabel("Crossfeed")
+                    .disabled(state.sameOnBoth)
+                Text("\(Int(((state.sameOnBoth ? 1 : state.crossfeed) * 100).rounded()))%")
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44, alignment: .trailing)
+            }
+            Toggle("Same sound on both speakers", isOn: Binding(
+                get: { state.sameOnBoth },
+                set: { actions.setSameOnBoth($0) }))
+                .toggleStyle(.checkbox)
         }
     }
 
