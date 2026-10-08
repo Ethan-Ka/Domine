@@ -394,7 +394,9 @@ void domine_surround_reset_orbit(DomineSurround *s) {
 
 void domine_surround_set_surround_level(DomineSurround *s, float level) {
     if (s == NULL) return;
-    atomic_store_explicit(&s->levelBits, f2u(clamp01(level)), memory_order_relaxed);
+    if (!isfinite(level) || !(level > 0.0f)) level = 0.0f;
+    if (level > 2.0f) level = 2.0f;
+    atomic_store_explicit(&s->levelBits, f2u(level), memory_order_relaxed);
 }
 
 void domine_surround_set_spatial(DomineSurround *s, const DomineSpatialParams *params) {
@@ -585,6 +587,17 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
     if (nsrc > 2 && level != 1.0f)
         for (int src = 2; src < nsrc; src++)
             for (uint32_t k = 0; k < n; k++) gT[src][k] *= level;
+    // Rear fill above 1: L and R also play at the rear positions, times
+    // (level - 1), so near-mono music still reaches the rear speakers.
+    if (nsrc > 2 && level > 1.0f) {
+        const float fill = level - 1.0f;
+        float rear[NSPK];
+        for (int src = 0; src < 2; src++) {
+            memset(rear, 0, sizeof rear);
+            pan_source(&pan, srcAz[src + 2] + field, rear);
+            for (uint32_t k = 0; k < n; k++) gT[src][k] += fill * rear[k];
+        }
+    }
     // Headroom (13.3): one scale for the whole matrix, from the loudest
     // speaker's sum. Scaling each speaker by its own sum would leave quiet
     // speakers untouched while louder ones drop, so with two speakers front

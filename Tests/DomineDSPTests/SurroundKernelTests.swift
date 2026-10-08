@@ -134,6 +134,30 @@ struct SurroundKernelTests {
         #expect(on > off * 4)
     }
 
+    @Test func surroundAboveOneFillsTheRear() {
+        // Mono input has almost no ambience; above 1, rear fill reaches the
+        // rear speaker. At 1 the rear already gets L and R spill, so level 2
+        // is about 2.6x the rear energy. Output never exceeds the input peak.
+        let tone: [Float] = (0..<256).map { 0.8 * sin(2 * .pi * 440 * Float($0) / 48000) }
+        func energy(level: Float) -> (rear: Float, front: Float, peak: Float) {
+            let s = Self.make([0, 180])
+            defer { domine_surround_destroy(s) }
+            domine_surround_set_surround_level(s, level)
+            var peak: Float = 0
+            var out = Self.run(s, offsets: [0, 2], left: tone, right: tone, buffers: [4])
+            for _ in 0..<3 {
+                out = Self.run(s, offsets: [0, 2], left: tone, right: tone, buffers: [4])
+                for c in 0..<4 { peak = max(peak, out.channel(c).map(abs).max() ?? 0) }
+            }
+            return (out.channel(2).reduce(0) { $0 + $1 * $1 }, out.channel(0).reduce(0) { $0 + $1 * $1 }, peak)
+        }
+        let one = energy(level: 1), two = energy(level: 2)
+        #expect(two.rear >= one.rear * 2.5)
+        #expect(two.rear / two.front >= 2.5 * one.rear / one.front)
+        #expect(one.peak <= 0.8 + 1e-5 && two.peak <= 0.8 + 1e-5)
+        #expect(energy(level: 5).rear == two.rear)
+    }
+
     @Test func monoPlaysTheSumOnEverySpeaker() {
         let s = Self.make([-30, 30])
         defer { domine_surround_destroy(s) }

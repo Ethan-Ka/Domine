@@ -24,7 +24,7 @@ struct MainBottomBar: View {
                 GridRow {
                     compactSlider("Width", value: controls.width, range: SurroundControls.widthRange,
                                   text: controls.widthText, set: actions.setSurroundWidth)
-                    compactSlider("Surround", value: controls.level, range: 0...1,
+                    compactSlider("Surround", value: controls.level, range: 0...2,
                                   text: controls.levelText, set: actions.setSurroundLevel)
                     Button("Add Speaker…", action: actions.addSurroundSpeaker)
                         .disabled(!state.canAddSurroundSpeaker)

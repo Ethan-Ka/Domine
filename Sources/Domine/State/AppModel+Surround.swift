@@ -219,7 +219,7 @@ extension AppModel {
         updateSurroundSettings { $0.width = degrees }
     }
 
-    /// Ambience level, clamped to 0...1.
+    /// Surround level, clamped to 0...2. Above 1 adds rear fill.
     func setSurroundLevel(_ level: Float) {
         updateSurroundSettings { $0.surroundLevel = level }
     }

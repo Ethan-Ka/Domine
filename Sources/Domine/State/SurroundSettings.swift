@@ -14,7 +14,7 @@ struct SurroundSettings: Codable, Equatable, Sendable {
     var speakers: [SurroundSpeaker] = []
     /// Azimuth of the L and R sources, 10...90 degrees.
     var width: Float = 30
-    /// Ambience level, 0...1.
+    /// Surround level, 0...2 (above 1 adds rear fill).
     var surroundLevel: Float = 0.7
     /// Degrees per second, 0 is off.
     var orbitRate: Float = 0
@@ -86,7 +86,7 @@ struct SurroundSettings: Codable, Equatable, Sendable {
             speakers[index].distance = Self.clamp(speakers[index].distance, SurroundSpeaker.distanceRange, fallback: 2)
         }
         width = Self.clamp(width, Self.widthRange, fallback: 30)
-        surroundLevel = Self.clamp(surroundLevel, 0...1, fallback: 0.7)
+        surroundLevel = Self.clamp(surroundLevel, 0...2, fallback: 0.7)
         orbitRate = Self.clamp(orbitRate, Self.orbitRange, fallback: 0)
         rotation = SurroundSpeaker.wrap(rotation)
         spatialAmount = Self.clamp(spatialAmount, 0...1, fallback: 0.6)

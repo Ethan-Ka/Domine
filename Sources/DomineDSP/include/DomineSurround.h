@@ -23,9 +23,11 @@
 //
 // Headroom: the pan gains G[source][speaker] of the program sources (0 to 3)
 // are VBAP gains (each source has unit power), times the surround level for
-// sources 2 and 3. Each speaker's program column is then scaled by
-// 1 / max(1, sum over program sources of |G|), so a speaker never exceeds
-// full scale for program inputs within +-1 (before effects). The matrix is
+// sources 2 and 3. Above level 1, sources 0 and 1 also get (level - 1) times
+// their rear-position gains (rear fill). The whole matrix is then scaled by
+// 1 / max(1, largest per-speaker sum over program sources of |G|), so no
+// speaker gains level and none exceeds full scale for program inputs within
+// +-1 (before effects). The matrix is
 // recomputed at the start of every process call (orbit phase at the end of
 // the call) and ramps linearly from the previous one across the call.
 //
@@ -97,7 +99,10 @@ float domine_surround_orbit_phase(DomineSurround *s);
 /// domine_kernel_set_keep_alive. Off by default.
 void domine_surround_set_keep_alive(DomineSurround *s, int on);
 void domine_surround_set_mono(DomineSurround *s, int on);
-/// Level of the ambience sources, 0...1, default 0.7.
+/// Surround level 0...2, default 0.7 (non-finite is 0). Up to 1 it scales the
+/// ambience sources. Above 1 the ambience gains are times the level and L and
+/// R also play at -REAR_AZ and +REAR_AZ times (level - 1) ("rear fill"), with
+/// 2 or more present speakers. Headroom still applies, so fronts may drop.
 void domine_surround_set_surround_level(DomineSurround *s, float level);
 /// Ambience parameters (forwarded to the spatial upmixer). Default amount 0.6.
 void domine_surround_set_spatial(DomineSurround *s, const DomineSpatialParams *params);

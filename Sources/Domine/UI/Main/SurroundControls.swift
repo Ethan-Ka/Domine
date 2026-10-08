@@ -4,7 +4,7 @@ import Foundation
 struct SurroundControls: Equatable, Sendable {
     /// Front image width in degrees, 10...90.
     var width: Double = 30
-    /// How much goes to the speakers behind the listener, 0...1.
+    /// How much goes to the speakers behind the listener, 0...2.
     var level: Double = 0.7
     /// Turns per second, 0 (off) ... 2. The model stores degrees per second.
     var orbitRate: Double = 0
@@ -21,7 +21,7 @@ struct SurroundControls: Equatable, Sendable {
     static let bluetoothWarning = "More than 4 Bluetooth speakers may drop out"
 
     var widthText: String { "\(Int(width.rounded()))°" }
-    var levelText: String { "\(Int((min(max(level, 0), 1) * 100).rounded()))%" }
+    var levelText: String { "\(Int((min(max(level, 0), 2) * 100).rounded()))%" }
     var rotationText: String { "\(Int(rotation.rounded()))°" }
 
     var orbitText: String { Self.orbitText(orbitRate) }

@@ -902,6 +902,47 @@ static void test_front_back_ambience(void) {
     CHECK(on > off * 4.0f);
 }
 
+// Mirror of surroundAboveOneFillsTheRear in SurroundKernelTests.swift.
+// Mono input (L == R) has almost no ambience, so the rear needs rear fill.
+// Speaker 0 at 0 and speaker 1 at 180; default ambience amount.
+static float mono_rear_energy(float level, float *peak, float *front) {
+    enum { N = 256 };
+    float m[N];
+    for (uint32_t f = 0; f < N; f++) m[f] = 0.8f * sinf(6.2831853f * 440.0f * (float)f / 48000.0f);
+    const float az[2] = { 0.0f, 180.0f };
+    const uint32_t off[2] = { 0, 2 };
+    DomineSurround *s = make(48000, 2, az);
+    domine_surround_set_surround_level(s, level);
+    float e = 0.0f;
+    *peak = 0.0f;
+    *front = 0.0f;
+    for (int call = 0; call < 4; call++) {
+        Buf out = out_new(4, N);
+        run(s, m, m, N, &out, off);
+        for (uint32_t f = 0; f < N; f++) {
+            if (call == 3) e += *buf_at(&out, 2, f) * *buf_at(&out, 2, f);
+            if (call == 3) *front += *buf_at(&out, 0, f) * *buf_at(&out, 0, f);
+            for (uint32_t c = 0; c < 4; c++) if (fabsf(*buf_at(&out, c, f)) > *peak) *peak = fabsf(*buf_at(&out, c, f));
+        }
+        buf_free(&out);
+    }
+    domine_surround_destroy(s);
+    return e;
+}
+static void test_rear_fill(void) {
+    float p1, p2, f1, f2;
+    const float one = mono_rear_energy(1.0f, &p1, &f1), two = mono_rear_energy(2.0f, &p2, &f2);
+    // At level 1 the rear already gets L and R spill (front and back pair),
+    // so level 2 is about 2.6x the rear energy and the front drops a little.
+    CHECK(two >= one * 2.5f);
+    CHECK(two / f2 >= 2.5f * (one / f1));
+    CHECK(p1 <= 0.8f + 1e-5f && p2 <= 0.8f + 1e-5f);
+    // Clamp: above 2 is 2, non-finite is 0.
+    float p3, f3;
+    CHECK(mono_rear_energy(5.0f, &p3, &f3) == two);
+    CHECK(mono_rear_energy(NAN, &p3, &f3) == mono_rear_energy(0.0f, &p3, &f3));
+}
+
 int main(void) {
     test_vbap_rules();
     test_vbap_unit_power_sweep();
@@ -919,6 +960,7 @@ int main(void) {
     test_width();
     test_headroom();
     test_front_back_ambience();
+    test_rear_fill();
     test_demo();
     test_test_tone();
     test_click_test();
