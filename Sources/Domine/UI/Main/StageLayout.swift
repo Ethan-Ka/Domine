@@ -2,7 +2,9 @@ import CoreGraphics
 import Foundation
 
 /// Geometry of the stage, taken from docs/mockups/Main.dc.html (616 x 320
-/// design size) and stretched to the real size.
+/// design size). Everything drawn around the Mac (guide circle, sound field,
+/// cards, connectors) uses the same center and the same `scale`, so the
+/// drawing and the cards move together when the window is resized.
 struct StageLayout: Equatable, Sendable {
     let size: CGSize
     /// Stereo draws two front cards in the middle row; Surround is a top-down
@@ -15,6 +17,12 @@ struct StageLayout: Equatable, Sendable {
     static let cardSize = CGSize(width: 176, height: 100)
     private var cardSize: CGSize { Self.cardSize }
 
+    /// One uniform scale for the whole drawing: 1 at the design size.
+    var scale: CGFloat {
+        guard Self.designSize.width > 0, Self.designSize.height > 0 else { return 1 }
+        return max(0, min(size.width / Self.designSize.width, size.height / Self.designSize.height))
+    }
+
     /// Center of the Mac symbol, which is where the listener sits.
     var macCenter: CGPoint {
         CGPoint(x: size.width / 2, y: size.height / 2)
@@ -23,23 +31,28 @@ struct StageLayout: Equatable, Sendable {
     var guideRadius: CGFloat {
         switch mode {
         case .stereo:
-            return 118 * min(size.width / Self.designSize.width, size.height / Self.designSize.height)
+            return Self.stereoGuideRadius * scale
         case .surround:
-            // The 2 m ring, kept inside the stage.
-            let fit = min(size.width, size.height) / 2 - Self.guideMargin
-            return max(0, min(surroundRadius(forDistance: 2), fit))
+            return Self.surroundGuideRadius * scale
         }
     }
+
+    /// Stereo guide circle radius at the design size.
+    static let stereoGuideRadius: CGFloat = 118
+    /// Surround guide circle radius at the design size: the ring that fits
+    /// the design height with `guideMargin` to spare.
+    static let surroundGuideRadius: CGFloat = designSize.height / 2 - guideMargin
+    /// Horizontal distance from the Mac's center to a Stereo card's center at
+    /// the design size (the mockup's cards sit `cardInset` from the edges).
+    static let stereoCardOffset: CGFloat = designSize.width / 2 - cardInset.width - cardSize.width / 2
 
     /// Space between the Surround guide circle and the stage edge.
     static let guideMargin: CGFloat = 12
 
     func cardCenter(_ position: SpeakerPosition) -> CGPoint {
-        let halfW = cardSize.width / 2
-        let x = position.isLeft
-            ? Self.cardInset.width + halfW
-            : size.width - Self.cardInset.width - halfW
-        return CGPoint(x: x, y: size.height / 2)
+        let offset = Self.stereoCardOffset * scale
+        let x = position.isLeft ? macCenter.x - offset : macCenter.x + offset
+        return clampedCardCenter(CGPoint(x: x, y: macCenter.y))
     }
 
     /// Where the connector leaves the Mac: just outside the symbol, on the
@@ -83,13 +96,21 @@ struct StageLayout: Equatable, Sendable {
 
     // MARK: - Surround
 
-    /// Radius of the nearest distance (0.5 m): clear of the Mac symbol.
+    /// Radius of the nearest distance (0.5 m) at the design size: clear of
+    /// the Mac symbol.
     static let surroundMinRadius: CGFloat = 70
+    /// Radius of the farthest distance (10 m) at the design size: half the
+    /// longer side, so the whole range stays draggable; cards are clamped
+    /// inside the stage.
+    static let surroundMaxRadiusAtDesign: CGFloat =
+        max(designSize.width, designSize.height) / 2 - guideMargin
 
-    /// Radius of the farthest distance (10 m). Uses the longer side so the
-    /// whole range stays draggable; cards are clamped inside the stage.
+    /// Nearest-distance radius at this size.
+    var surroundNearRadius: CGFloat { Self.surroundMinRadius * scale }
+
+    /// Farthest-distance radius at this size.
     var surroundMaxRadius: CGFloat {
-        max(Self.surroundMinRadius + 1, max(size.width, size.height) / 2 - Self.guideMargin)
+        max(surroundNearRadius + 1, Self.surroundMaxRadiusAtDesign * scale)
     }
 
     private static let minDistance = Double(SurroundSpeaker.distanceRange.lowerBound)
@@ -100,13 +121,13 @@ struct StageLayout: Equatable, Sendable {
     func surroundRadius(forDistance distance: Double) -> CGFloat {
         let d = min(max(distance.isFinite ? distance : 2, Self.minDistance), Self.maxDistance)
         let t = log(d / Self.minDistance) / log(Self.maxDistance / Self.minDistance)
-        return Self.surroundMinRadius + CGFloat(t) * (surroundMaxRadius - Self.surroundMinRadius)
+        return surroundNearRadius + CGFloat(t) * (surroundMaxRadius - surroundNearRadius)
     }
 
     /// Radius in points to distance in metres; the inverse of the above.
     func surroundDistance(forRadius radius: CGFloat) -> Double {
-        let span = surroundMaxRadius - Self.surroundMinRadius
-        let t = Double(min(max((radius - Self.surroundMinRadius) / span, 0), 1))
+        let span = surroundMaxRadius - surroundNearRadius
+        let t = Double(min(max((radius - surroundNearRadius) / span, 0), 1))
         return Self.minDistance * pow(Self.maxDistance / Self.minDistance, t)
     }
 
