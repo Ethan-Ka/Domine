@@ -672,3 +672,10 @@ JBL Grips roll off below about 70 to 80 Hz (section 1a: 70 Hz at -6 dB, one smal
 - The watchdog waits for Domine to exit (kqueue `NOTE_EXIT`), sends MediaRemote pause (never toggle), and exits. If Domine is already gone, it pauses at once. This covers quitting and crashing, so playback does not move to the Mac's own speakers.
 - When routing stops while Domine keeps running, or the setting is turned off, Domine sends the watchdog SIGTERM and it exits without pausing. On quit while routing, Domine leaves it running.
 - The unit test host never launches a watchdog.
+
+### 16.12 Bluetooth Speakers window
+- Domine's own window for Bluetooth speakers, so the user never needs System Settings > Bluetooth. Opened from "Bluetooth…" in the Choose Speaker sheet and "Bluetooth Speakers…" in the menu bar menu.
+- My Speakers: Domine's remembered list (address and last known name, saved in settings, kept across launches). A speaker joins it when it is connected or paired from this window, or assigned to a side or the surround set. Forget removes it from Domine's list only; macOS stays paired.
+- Other Paired Speakers: paired audio devices not in My Speakers, in a collapsed group.
+- Nearby: Search runs an IOBluetooth inquiry for about 10 s and lists unpaired audio devices. Pair pairs, then connects.
+- Only audio-class devices are shown. Nothing is ever opened for input.
