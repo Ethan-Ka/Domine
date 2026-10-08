@@ -27,7 +27,7 @@ done
 BUNDLE="com.ethankawley.Domine"
 APPS=("/Applications/Domine.app")
 case "${DOMINE_APP_PATH:-}" in
-    /?*.app)
+    /*/Domine.app)
         if [ "$DOMINE_APP_PATH" != "/Applications/Domine.app" ]; then APPS+=("$DOMINE_APP_PATH"); fi ;;
 esac
 DRIVER="/Library/Audio/Plug-Ins/HAL/Domine.driver"
@@ -85,7 +85,8 @@ if [ "$DRY_RUN" -eq 1 ] || [ -e "$DRIVER" ]; then add rm -rf "$DRIVER"; fi
 for id in "${RECEIPTS[@]}"; do
     if [ "$DRY_RUN" -eq 1 ] || pkgutil --pkg-info "$id" >/dev/null 2>&1; then add pkgutil --forget "$id"; fi
 done
-ADMIN="$ADMIN; launchctl kickstart -k system/com.apple.audio.coreaudiod || killall coreaudiod"
+add launchctl kickstart -k system/com.apple.audio.coreaudiod
+ADMIN="$ADMIN || killall coreaudiod"
 
 # Escape for an AppleScript string literal
 ESC=${ADMIN//\\/\\\\}
