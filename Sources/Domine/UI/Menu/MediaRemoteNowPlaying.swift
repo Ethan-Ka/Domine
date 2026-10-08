@@ -6,11 +6,9 @@ import Foundation
 final class MediaRemoteNowPlaying: NowPlayingSource, @unchecked Sendable {
     private typealias InfoBlock = @convention(block) (CFDictionary?) -> Void
     private typealias GetInfo = @convention(c) (DispatchQueue, @escaping InfoBlock) -> Void
-    private typealias SendCommand = @convention(c) (UInt32, CFDictionary?) -> Bool
     private typealias Register = @convention(c) (DispatchQueue) -> Void
 
     private let getInfo: GetInfo?
-    private let sendCommand: SendCommand?
     private let register: Register?
     private let queue = DispatchQueue(label: "domine.nowplaying")
 
@@ -21,7 +19,6 @@ final class MediaRemoteNowPlaying: NowPlayingSource, @unchecked Sendable {
             return unsafeBitCast(ptr, to: type)
         }
         getInfo = symbol("MRMediaRemoteGetNowPlayingInfo", as: GetInfo.self)
-        sendCommand = symbol("MRMediaRemoteSendCommand", as: SendCommand.self)
         register = symbol("MRMediaRemoteRegisterForNowPlayingNotifications", as: Register.self)
     }
 
@@ -41,8 +38,7 @@ final class MediaRemoteNowPlaying: NowPlayingSource, @unchecked Sendable {
     }
 
     func send(_ command: NowPlayingCommand) {
-        // MRMediaRemoteCommand: TogglePlayPause = 2, NextTrack = 4.
-        _ = sendCommand?(command == .togglePlayPause ? 2 : 4, nil)
+        (command == .togglePlayPause ? MediaRemoteCommand.togglePlayPause : .nextTrack).send()
     }
 
     func observe(_ onChange: @escaping @Sendable () -> Void) {

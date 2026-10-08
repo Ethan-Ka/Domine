@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-@main
+/// Started from main.swift, which handles watchdog mode first.
 struct DomineApp: App {
     /// True when the app only hosts the unit tests. The host then shows no
     /// sheets and never touches Core Audio, so tests run against the fake HAL alone.

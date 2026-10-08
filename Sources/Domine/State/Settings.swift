@@ -11,7 +11,7 @@ final class SettingsStore {
     private enum Key: String {
         case lastLeftUID, lastRightUID, lastRearLeftUID, lastRearRightUID, routingMode, lastSurroundUIDs
         case volumeKeysEnabled, restorePreviousOutput, closeBehavior, startWhenBothConnect, reconnectDroppedSpeakers
-        case keepSpeakersAwake
+        case keepSpeakersAwake, pauseOnExit
         case previousOutputUID, outputNeedsRestore, excludedAppsPlayThroughUID, exclusions, appVolumes
         case hasCompletedWelcome, audioCaptureWorking, audioCaptureSignature
         case rooms, currentRoomID
@@ -200,6 +200,12 @@ final class SettingsStore {
     var keepSpeakersAwake: Bool {
         get { bool(.keepSpeakersAwake, default: true) }
         set { defaults.set(newValue, forKey: Key.keepSpeakersAwake.name) }
+    }
+
+    /// Pause media playback if Domine quits or crashes while routing (SPEC 16.11). On by default.
+    var pauseOnExit: Bool {
+        get { bool(.pauseOnExit, default: true) }
+        set { defaults.set(newValue, forKey: Key.pauseOnExit.name) }
     }
 
     /// Default output saved at start, for restore on stop and crash recovery (SPEC section 4c).

@@ -164,13 +164,17 @@ final class AppModel {
     /// Apps playing audio now, and their saved volumes by bundle ID (AppModel+AppAudio).
     let appAudio: AppAudioList
     var appVolumes: [String: Double]
+    /// Pauses playback if Domine quits or crashes while routing (SPEC 16.11).
+    @ObservationIgnored let pauseWatchdog: PauseWatchdog
 
     init(hal: any AudioHAL = CoreAudioHAL(), defaults: UserDefaults = .standard,
          services: SystemServices = .live,
+         pauseWatchdog: PauseWatchdog = .live(),
          battery: any BatteryReading = IOBluetoothBatteryReader(),
          bluetooth: any BluetoothConnecting = IOBluetoothConnector(),
          reconnectSleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }) {
         batteryReader = battery
+        self.pauseWatchdog = pauseWatchdog
         let store = SettingsStore(defaults: defaults)
         self.hal = hal
         let catalog = DeviceCatalog(hal: hal)
@@ -643,6 +647,12 @@ final class AppModel {
         if !engine.state.isRouting, demoPlaying { syncDemoStatus() }
         if engine.state != .running && engine.clickTest { engine.clickTest = false }
         syncVirtualOutput()
+        syncPauseWatchdog()
+    }
+
+    /// One watchdog while routing with "Pause playback if Domine quits while playing" on (SPEC 16.11).
+    func syncPauseWatchdog() {
+        pauseWatchdog.update(routing: engine.state.isRouting, enabled: store.pauseOnExit)
     }
 
     private func observeCatalog() {

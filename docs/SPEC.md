@@ -666,3 +666,10 @@ JBL Grips roll off below about 70 to 80 Hz (section 1a: 70 Hz at -6 dB, one smal
 ### 16.10 Diagnostics
 - Copy Report puts a fenced plain text report on the clipboard.
 - Per-speaker dropout counts: sub-device processor overloads and disconnects. Reset Counts clears them.
+
+### 16.11 Pause on exit
+- Settings > General: "Pause playback if Domine quits while playing", on by default.
+- While routing with the setting on, Domine runs one watchdog: its own executable relaunched with `--pause-watchdog <pid>`. The watchdog handles that argument before any UI starts, so it has no Dock icon or window.
+- The watchdog waits for Domine to exit (kqueue `NOTE_EXIT`), sends MediaRemote pause (never toggle), and exits. If Domine is already gone, it pauses at once. This covers quitting and crashing, so playback does not move to the Mac's own speakers.
+- When routing stops while Domine keeps running, or the setting is turned off, Domine sends the watchdog SIGTERM and it exits without pausing. On quit while routing, Domine leaves it running.
+- The unit test host never launches a watchdog.

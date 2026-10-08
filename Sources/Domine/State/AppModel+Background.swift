@@ -62,6 +62,8 @@ extension AppModel {
 
     /// Never leave a tap or the pair as default output behind on quit.
     func appWillTerminate() {
+        // A running watchdog outlives Domine and pauses playback (SPEC 16.11).
+        pauseWatchdog.appWillTerminate()
         stopRouting()
     }
 

@@ -10,7 +10,8 @@ extension AppModel {
             startWhenBothConnect: store.startWhenBothConnect,
             launchAtLogin: services.isLaunchAtLoginEnabled(),
             reconnectDroppedSpeakers: store.reconnectDroppedSpeakers,
-            keepSpeakersAwake: store.keepSpeakersAwake)
+            keepSpeakersAwake: store.keepSpeakersAwake,
+            pauseOnExit: store.pauseOnExit)
     }
 
     static func makeExclusionsSettings(store: SettingsStore, services: SystemServices) -> ExclusionsState {
@@ -45,6 +46,10 @@ extension AppModel {
         if new.keepSpeakersAwake != old.keepSpeakersAwake {
             store.keepSpeakersAwake = new.keepSpeakersAwake
             engine.keepAlive = new.keepSpeakersAwake
+        }
+        if new.pauseOnExit != old.pauseOnExit {
+            store.pauseOnExit = new.pauseOnExit
+            syncPauseWatchdog()
         }
         if new.launchAtLogin != old.launchAtLogin {
             do {
