@@ -57,6 +57,14 @@ extension AppModel {
         if !matches { setCurrentRoom(nil) }
     }
 
+    /// Adds rooms read from a file. Names that already exist get a number.
+    func importRooms(_ imported: [Room]) {
+        let added = RoomsFile.merge(imported, existingNames: rooms.map(\.name))
+        guard !added.isEmpty else { return }
+        rooms.append(contentsOf: added)
+        store.rooms = rooms
+    }
+
     private func setCurrentRoom(_ id: Room.ID?) {
         currentRoomID = id
         store.currentRoomID = id

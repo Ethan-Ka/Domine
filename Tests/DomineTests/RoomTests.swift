@@ -118,7 +118,7 @@ final class RoomTests {
             VStack(spacing: 20) {
                 RoomMenu(rooms: rooms, currentRoomID: rooms[0].id)
                 SaveRoomSheet(save: { _ in }, cancel: {})
-                ManageRoomsSheet(rooms: rooms, rename: { _, _ in }, delete: { _ in }, done: {})
+                ManageRoomsSheet(rooms: rooms, rename: { _, _ in }, delete: { _ in }, importRooms: { _ in }, done: {})
             }.padding(),
             named: "rooms")
     }
