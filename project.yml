@@ -34,10 +34,11 @@ targets:
       path: Sources/Domine/Info.plist
       properties:
         CFBundleDisplayName: Domine
-        CFBundleShortVersionString: "0.1.0"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: "0.2.0"
+        CFBundleVersion: "2"
         LSApplicationCategoryType: public.app-category.music
         NSBluetoothAlwaysUsageDescription: Domine reads speaker battery levels and reconnects speakers that dropped.
+        NSHumanReadableCopyright: "© 2026 Ethan Kawley. Free software under the GNU AGPL 3.0."
         NSMicrophoneUsageDescription: Domine listens to its own test sounds through the built-in microphone to line up the two speakers.
         NSAudioCaptureUsageDescription: Domine captures system audio to send the left channel to one speaker and the right channel to another.
     settings:
@@ -77,8 +78,8 @@ targets:
       properties:
         CFBundleName: Domine
         CFBundleDisplayName: Domine
-        CFBundleShortVersionString: "0.1.0"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: "0.2.0"
+        CFBundleVersion: "2"
         CFPlugInDynamicRegistration: false
         CFPlugInUnloadFunction: ""
         CFPlugInFactories:
