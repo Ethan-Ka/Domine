@@ -182,6 +182,14 @@ void domine_kernel_set_compressor(DomineKernel *k, int position, const DomineCom
 /// starts unmuted at full gain with no ramp.
 void domine_kernel_set_muted(DomineKernel *k, int muted);
 
+/// Keep-alive (default off). When on, once the program source has stayed below
+/// -80 dBFS peak for 2 s, a 15 Hz sine at -60 dBFS is added to every output
+/// channel (below a JBL Grip's range) so the speakers do not power off. It
+/// fades in over 50 ms and out over 10 ms once program audio returns, and is
+/// absent while muted or during the test tone and click test. When off, output
+/// is unchanged.
+void domine_kernel_set_keep_alive(DomineKernel *k, int on);
+
 /// Puts the output gain at 0 at once, as if a mute fade had just finished.
 /// Unless muted, the next process calls then fade in over the same 50 ms
 /// ramp (1/L, 2/L, ... L/L). The engine calls it on a kernel built for a

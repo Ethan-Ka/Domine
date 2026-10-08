@@ -27,6 +27,13 @@
 
 _Static_assert(sizeof(DomineKernelStats) % sizeof(uint64_t) == 0, "stats must pack into whole words");
 
+#define KEEP_ALIVE_THRESHOLD 1.0e-4f // -80 dBFS
+#define KEEP_ALIVE_AMPLITUDE 1.0e-3  // -60 dBFS
+#define KEEP_ALIVE_HZ 15.0
+#define KEEP_ALIVE_HOLD_S 2.0
+#define KEEP_ALIVE_FADE_IN_S 0.05
+#define KEEP_ALIVE_FADE_OUT_S 0.01
+
 struct DomineKernel {
     double sampleRate;
     uint32_t maxFrames;
@@ -40,6 +47,7 @@ struct DomineKernel {
     _Atomic int monoFallback;
     _Atomic int toneSide;
     _Atomic int muted;
+    _Atomic int keepAlive;
     _Atomic int clickTest; // click test mode: 0 off, 1 clicks
     _Atomic uint32_t layoutInFirstBuffer;
     _Atomic uint32_t layoutOutA;
@@ -107,6 +115,11 @@ struct DomineKernel {
     uint32_t chirpLevel;   // calibration chirp crossfade, 0..toneFadeLength
     uint32_t chirpCounter; // samples since the current chirp started
     uint32_t chirpLength;  // samples in one chirp
+
+    // Keep-alive, render thread state only (see domine_kernel_set_keep_alive).
+    uint32_t kaSilent;     // consecutive frames below the threshold
+    float kaLevel;         // fade 0..1
+    double kaPhase;        // cycles, 0..1
 };
 
 // A resolved output channel: base pointer, stride in floats, usable frames.
@@ -289,6 +302,7 @@ DomineKernel *domine_kernel_create(double sampleRate, uint32_t maxFrames) {
     k->chirpLength = (uint32_t)lround(sampleRate * DOMINE_CHIRP_MS / 1000.0);
     if (k->chirpLength < 2) k->chirpLength = 2;
     if (k->clickPeriod <= k->chirpLength) k->clickPeriod = k->chirpLength + 1;
+    atomic_init(&k->keepAlive, 0);
     atomic_init(&k->clickTest, 0);
     atomic_init(&k->layoutInFirstBuffer, 0);
     atomic_init(&k->layoutOutA, 0);
@@ -370,6 +384,11 @@ void domine_kernel_set_compressor(DomineKernel *k, int position, const DomineCom
     domine_compressor_set_params(k->comp[position], params);
 }
 // END EFFECTS BLOCK
+
+void domine_kernel_set_keep_alive(DomineKernel *k, int on) {
+    if (k == NULL) return;
+    atomic_store_explicit(&k->keepAlive, on != 0, memory_order_relaxed);
+}
 
 void domine_kernel_set_muted(DomineKernel *k, int muted) {
     if (k == NULL) return;
@@ -571,6 +590,7 @@ static RenderResult render(DomineKernel *k,
     const int toneSide = atomic_load_explicit(&k->toneSide, memory_order_relaxed);
     const int muted = atomic_load_explicit(&k->muted, memory_order_relaxed);
     const int clickTest = atomic_load_explicit(&k->clickTest, memory_order_relaxed);
+    const int keepAlive = atomic_load_explicit(&k->keepAlive, memory_order_relaxed);
 
     const uint32_t delayA = delay < 0 ? (uint32_t)(-delay) : 0;
     const uint32_t delayB = delay > 0 ? (uint32_t)delay : 0;
@@ -619,6 +639,14 @@ static RenderResult render(DomineKernel *k,
             k->fifoRead++;
         } else {
             result.underrunFrames++;
+        }
+
+        if (keepAlive) {
+            const float lvl = fabsf(l) > fabsf(r) ? fabsf(l) : fabsf(r);
+            if (lvl > KEEP_ALIVE_THRESHOLD) k->kaSilent = 0;
+            else if (k->kaSilent < UINT32_MAX) k->kaSilent++;
+        } else {
+            k->kaSilent = 0;
         }
 
         float srcA, srcB;
@@ -715,6 +743,29 @@ static RenderResult render(DomineKernel *k,
             }
             if (k->toneLevel < toneTarget) k->toneLevel++;
             else if (k->toneLevel > toneTarget) k->toneLevel--;
+        }
+
+        // Keep-alive: a 15 Hz sine at -60 dBFS after 2 s of silence, so
+        // speakers do not power off. Fades in over 50 ms, out over 10 ms.
+        // Absent while muted or while a tone, click or chirp is playing.
+        if (keepAlive || k->kaLevel > 0.0f) {
+            const int quiet = keepAlive && !muted && toneSide == 0 && k->playingToneSide == 0
+                && clickTest == 0 && k->clickLevel == 0 && k->chirpLevel == 0;
+            const uint32_t hold = (uint32_t)lround(k->sampleRate * KEEP_ALIVE_HOLD_S);
+            if (quiet && k->kaSilent >= hold) {
+                k->kaLevel += (float)(1.0 / (k->sampleRate * KEEP_ALIVE_FADE_IN_S));
+                if (k->kaLevel > 1.0f) k->kaLevel = 1.0f;
+            } else {
+                k->kaLevel -= (float)(1.0 / (k->sampleRate * KEEP_ALIVE_FADE_OUT_S));
+                if (k->kaLevel < 0.0f) k->kaLevel = 0.0f;
+            }
+            if (k->kaLevel > 0.0f) {
+                const float ka = (float)(KEEP_ALIVE_AMPLITUDE * sin(2.0 * M_PI * k->kaPhase)) * k->kaLevel;
+                outA += ka;
+                outB += ka;
+            }
+            k->kaPhase += KEEP_ALIVE_HZ / k->sampleRate;
+            if (k->kaPhase >= 1.0) k->kaPhase -= 1.0;
         }
 
         if (k->fadePosition < fadeTarget) k->fadePosition++;
