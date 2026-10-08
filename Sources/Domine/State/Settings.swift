@@ -10,7 +10,7 @@ final class SettingsStore {
 
     private enum Key: String {
         case lastLeftUID, lastRightUID, lastRearLeftUID, lastRearRightUID, routingMode, lastSurroundUIDs
-        case volumeKeysEnabled, restorePreviousOutput, closeBehavior, startWhenBothConnect
+        case volumeKeysEnabled, restorePreviousOutput, closeBehavior, startWhenBothConnect, reconnectDroppedSpeakers
         case previousOutputUID, outputNeedsRestore, excludedAppsPlayThroughUID, exclusions, appVolumes
         case hasCompletedWelcome, audioCaptureWorking, audioCaptureSignature
         case rooms, currentRoomID
@@ -187,6 +187,12 @@ final class SettingsStore {
     var startWhenBothConnect: Bool {
         get { bool(.startWhenBothConnect, default: true) }
         set { defaults.set(newValue, forKey: Key.startWhenBothConnect.name) }
+    }
+
+    /// Try to bring a dropped Bluetooth speaker back. On by default.
+    var reconnectDroppedSpeakers: Bool {
+        get { bool(.reconnectDroppedSpeakers, default: true) }
+        set { defaults.set(newValue, forKey: Key.reconnectDroppedSpeakers.name) }
     }
 
     /// Default output saved at start, for restore on stop and crash recovery (SPEC section 4c).

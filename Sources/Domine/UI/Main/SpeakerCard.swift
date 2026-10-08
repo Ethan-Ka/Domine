@@ -4,6 +4,7 @@ import SwiftUI
 struct SpeakerCard: View {
     var state: SpeakerCardState
     var onSelect: @MainActor () -> Void = {}
+    var onReconnect: @MainActor () -> Void = {}
 
     static let size = StageLayout.cardSize
 
@@ -65,7 +66,13 @@ struct SpeakerCard: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
             }
-            LevelMeter(level: isError ? 0 : state.level)
+            if isError, state.reconnectUID != nil {
+                Button(state.isReconnecting ? "Connecting…" : "Reconnect") { onReconnect() }
+                    .controlSize(.small)
+                    .disabled(state.isReconnecting)
+            } else {
+                LevelMeter(level: isError ? 0 : state.level)
+            }
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 12)

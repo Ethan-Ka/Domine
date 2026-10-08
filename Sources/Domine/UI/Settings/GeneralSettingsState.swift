@@ -31,4 +31,5 @@ struct GeneralSettingsState: Equatable, Sendable {
     var closeBehavior: CloseBehavior = .keepPlaying
     var startWhenBothConnect = true
     var launchAtLogin = false
+    var reconnectDroppedSpeakers = true
 }
