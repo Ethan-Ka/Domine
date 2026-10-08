@@ -8,7 +8,8 @@ extension AppModel {
             previousOutputName: nil,
             closeBehavior: closeBehaviorState(store.closeBehavior),
             startWhenBothConnect: store.startWhenBothConnect,
-            launchAtLogin: services.isLaunchAtLoginEnabled())
+            launchAtLogin: services.isLaunchAtLoginEnabled(),
+            reconnectDroppedSpeakers: store.reconnectDroppedSpeakers)
     }
 
     static func makeExclusionsSettings(store: SettingsStore, services: SystemServices) -> ExclusionsState {
@@ -36,6 +37,10 @@ extension AppModel {
         if new.restorePreviousOutput != old.restorePreviousOutput { store.restorePreviousOutput = new.restorePreviousOutput }
         if new.closeBehavior != old.closeBehavior { store.closeBehavior = Self.closeBehavior(new.closeBehavior) }
         if new.startWhenBothConnect != old.startWhenBothConnect { store.startWhenBothConnect = new.startWhenBothConnect }
+        if new.reconnectDroppedSpeakers != old.reconnectDroppedSpeakers {
+            store.reconnectDroppedSpeakers = new.reconnectDroppedSpeakers
+            syncReconnector()
+        }
         if new.launchAtLogin != old.launchAtLogin {
             do {
                 try services.setLaunchAtLogin(new.launchAtLogin)

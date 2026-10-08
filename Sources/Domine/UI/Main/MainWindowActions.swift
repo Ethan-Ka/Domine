@@ -10,6 +10,8 @@ struct MainWindowActions: Sendable {
     var testSurroundSpeakers: @MainActor @Sendable () -> Void = {}
     /// A card was clicked; the owner presents `AssignSheet`.
     var selectSpeaker: @MainActor @Sendable (SpeakerPosition) -> Void = { _ in }
+    /// "Reconnect" on a disconnected speaker card.
+    var reconnectSpeaker: @MainActor @Sendable (_ uid: String) -> Void = { _ in }
     /// "Sync & Balance…" was clicked; the owner presents `TuningSheet`.
     var openTuning: @MainActor @Sendable () -> Void = {}
 

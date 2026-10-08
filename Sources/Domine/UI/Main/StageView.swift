@@ -74,7 +74,10 @@ struct StageView: View {
             .position(x: layout.macCenter.x, y: layout.macCenter.y + 8)
 
         ForEach(SpeakerPosition.positions(in: .stereo)) { position in
-            SpeakerCard(state: state.speaker(at: position)) { actions.selectSpeaker(position) }
+            SpeakerCard(
+                state: state.speaker(at: position),
+                onSelect: { actions.selectSpeaker(position) },
+                onReconnect: { state.speaker(at: position).reconnectUID.map(actions.reconnectSpeaker) })
                 .position(layout.cardCenter(position))
         }
     }
@@ -123,7 +126,10 @@ struct StageView: View {
     }
 
     private func surroundCard(_ card: SpeakerCardState, info: SurroundCardInfo, layout: StageLayout) -> some View {
-        SpeakerCard(state: card) { actions.chooseSurroundSpeaker(info.uid) }
+        SpeakerCard(
+            state: card,
+            onSelect: { actions.chooseSurroundSpeaker(info.uid) },
+            onReconnect: { actions.reconnectSpeaker(info.uid) })
             .onTapGesture { actions.chooseSurroundSpeaker(info.uid) }
             .gesture(dragGesture(info: info, layout: layout))
             .contextMenu {

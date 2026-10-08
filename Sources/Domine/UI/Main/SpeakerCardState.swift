@@ -21,6 +21,10 @@ struct SpeakerCardState: Identifiable, Equatable, Sendable {
     /// Set for Surround cards: the output and where it sits. `position` is
     /// not used for these.
     var surround: SurroundCardInfo?
+    /// Set on a disconnected Bluetooth speaker: its UID, for the Reconnect button.
+    var reconnectUID: String?
+    /// A connection attempt is running; the button reads "Connecting…".
+    var isReconnecting = false
 
     var id: String { surround.map { "surround:" + $0.uid } ?? position.rawValue }
 

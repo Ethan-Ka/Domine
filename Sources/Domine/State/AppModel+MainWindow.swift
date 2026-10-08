@@ -64,6 +64,7 @@ extension AppModel {
             playTestTone: { [weak self] in self?.playTestTone($0) },
             testSurroundSpeakers: { [weak self] in self?.testSurroundSpeakers() },
             selectSpeaker: { [weak self] in self?.openAssign($0) },
+            reconnectSpeaker: { [weak self] in self?.reconnector.reconnectNow(uid: $0) },
             openTuning: { [weak self] in self?.openTuning() },
             openSound: { [weak self] in self?.openSound() },
             // Add and Choose present a sheet whose state MainView holds
@@ -160,10 +161,12 @@ extension AppModel {
             let info = SurroundCardInfo(
                 uid: speaker.uid, azimuth: Double(speaker.azimuth), distance: Double(speaker.distance))
             guard let device = catalog.device(uid: speaker.uid) else {
-                return SpeakerCardState.surroundCard(
+                var card = SpeakerCardState.surroundCard(
                     info, deviceName: knownNames[speaker.uid],
                     uidSuffix: OutputDevice.suffix(forUID: speaker.uid),
                     statusText: "Not connected", connection: .disconnected)
+            markReconnectable(&card, uid: speaker.uid)
+            return card
             }
             var card = SpeakerCardState.surroundCard(
                 info, deviceName: device.name, uidSuffix: device.uidSuffix,
@@ -305,10 +308,12 @@ extension AppModel {
         }
         let missing = monoFallbackMissingPosition
         guard missing != position, let device = catalog.device(uid: uid) else {
-            return SpeakerCardState(
+            var card = SpeakerCardState(
                 position: position, sideTag: tag,
                 deviceName: knownNames[uid], uidSuffix: OutputDevice.suffix(forUID: uid),
                 statusText: "Not connected", connection: .disconnected)
+            markReconnectable(&card, uid: uid)
+            return card
         }
         let level = engine.state.isRouting && position.isFront ? (isA ? meters.levelA : meters.levelB) : 0
         let isMonoFallback = missing != nil
@@ -319,5 +324,11 @@ extension AppModel {
             level: Double(level), isMonoFallback: isMonoFallback)
         card.batteryPercent = batteryPercent[uid]
         return card
+    }
+
+    private func markReconnectable(_ card: inout SpeakerCardState, uid: String) {
+        guard BluetoothAddress(deviceUID: uid) != nil else { return }
+        card.reconnectUID = uid
+        card.isReconnecting = reconnector.connecting.contains(uid)
     }
 }

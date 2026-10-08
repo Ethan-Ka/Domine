@@ -18,6 +18,8 @@ final class AppModel {
     @ObservationIgnored let store: SettingsStore
     /// The selected speakers' hardware volumes, kept linked (SPEC 4a).
     @ObservationIgnored let volumeLink: SpeakerVolumeLink
+    /// Brings dropped Bluetooth speakers back (SpeakerReconnector).
+    let reconnector: SpeakerReconnector
     /// Moves the default output off the pair and back (SPEC 4c).
     @ObservationIgnored let outputRestorer: OutputRestorer
 
@@ -162,13 +164,17 @@ final class AppModel {
 
     init(hal: any AudioHAL = CoreAudioHAL(), defaults: UserDefaults = .standard,
          services: SystemServices = .live,
-         battery: any BatteryReading = IOBluetoothBatteryReader()) {
+         battery: any BatteryReading = IOBluetoothBatteryReader(),
+         bluetooth: any BluetoothConnecting = IOBluetoothConnector(),
+         reconnectSleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }) {
         batteryReader = battery
         let store = SettingsStore(defaults: defaults)
         self.hal = hal
         let catalog = DeviceCatalog(hal: hal)
         self.catalog = catalog
         volumeLink = SpeakerVolumeLink(hal: hal)
+        reconnector = SpeakerReconnector(
+            connector: bluetooth, isEnabled: { store.reconnectDroppedSpeakers }, sleep: reconnectSleep)
         outputRestorer = OutputRestorer(hal: hal, store: store, outputs: { catalog.outputs })
         engine = Engine(hal: hal)
         exclusionResolver = ExclusionResolver(hal: hal)
@@ -569,6 +575,14 @@ final class AppModel {
         syncVolumeLink()
         refreshBatteryLevels()
         autoStartIfSpeakersConnected()
+        syncReconnector()
+    }
+
+    /// Assigned speakers that are not in the catalog right now.
+    func syncReconnector() {
+        let assigned: [String?] = routingMode == .surround
+            ? surroundSpeakers.map(\.uid) : [leftUID, rightUID]
+        reconnector.update(missing: Set(assigned.compactMap { $0 }.filter { catalog.device(uid: $0) == nil }))
     }
 
     /// "Start routing when both speakers connect" (SPEC 6a): starts when both
