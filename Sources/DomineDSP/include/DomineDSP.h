@@ -113,6 +113,14 @@ void domine_kernel_set_delay_ms(DomineKernel *k, float signedDelayMs);
 ///       speaker is missing (SPEC section 7).
 void domine_kernel_set_mode(DomineKernel *k, int monoPerSpeaker, int swapSides, int monoFallback);
 
+/// Crossfeed amount, 0...1 (default 0; non-finite values become 0). Applied
+/// right after side mapping (swap) and before the effects: with a = amount,
+/// A = (1 - a/2) * A + (a/2) * B and B = (1 - a/2) * B + (a/2) * A. At 1.0 both
+/// speakers get (L + R) / 2. Ignored while monoFallback is on. After the first
+/// process call a changed amount ramps linearly over 20 ms of samples; at 0
+/// the path is bit for bit unchanged.
+void domine_kernel_set_crossfeed(DomineKernel *k, float amount);
+
 /// Test tone: 0 off, 1 position A (left speaker), 2 position B (right
 /// speaker). Positions are not affected by swapSides. While the tone is on,
 /// the chosen position plays domine_chime_sample(t) (peak 0.3, repeating every

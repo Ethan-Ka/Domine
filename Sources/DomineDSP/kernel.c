@@ -38,6 +38,7 @@ struct DomineKernel {
     _Atomic int monoPerSpeaker;
     _Atomic int swapSides;
     _Atomic int monoFallback;
+    _Atomic uint32_t crossfeedBits;
     _Atomic int toneSide;
     _Atomic int muted;
     _Atomic int clickTest; // click test mode: 0 off, 1 clicks
@@ -78,6 +79,10 @@ struct DomineKernel {
     float gainTargetA, gainTargetB;
     float gainStepA, gainStepB;
     uint32_t gainLeftA, gainLeftB; // ramp samples remaining
+    // Crossfeed amount smoothing (20 ms linear ramp), render thread only.
+    uint32_t xfRampLength;
+    float xfCur, xfTarget, xfStep;
+    uint32_t xfLeft;
     int playingToneSide;   // side the tone envelope belongs to, 0 = none
     uint32_t toneFadeLength;
     uint32_t toneLevel;    // 0 = program only, toneFadeLength = tone only
@@ -270,6 +275,10 @@ DomineKernel *domine_kernel_create(double sampleRate, uint32_t maxFrames) {
         k->gainRampLength = ramp > 0 ? ramp : 1;
         k->gainCurA = k->gainCurB = k->gainTargetA = k->gainTargetB = 1.0f;
     }
+    {
+        const uint32_t xr = (uint32_t)llround(0.02 * sampleRate);
+        k->xfRampLength = xr > 0 ? xr : 1;
+    }
     k->tonePhaseStep = 1.0 / sampleRate;
     uint32_t toneFade = (uint32_t)lround(sampleRate * DOMINE_TONE_FADE_MS / 1000.0);
     k->toneFadeLength = toneFade > 0 ? toneFade : 1;
@@ -284,6 +293,7 @@ DomineKernel *domine_kernel_create(double sampleRate, uint32_t maxFrames) {
     atomic_init(&k->monoPerSpeaker, 1);
     atomic_init(&k->swapSides, 0);
     atomic_init(&k->monoFallback, 0);
+    atomic_init(&k->crossfeedBits, float_bits(0.0f));
     atomic_init(&k->toneSide, 0);
     atomic_init(&k->muted, 0);
     k->chirpLength = (uint32_t)lround(sampleRate * DOMINE_CHIRP_MS / 1000.0);
@@ -342,6 +352,14 @@ void domine_kernel_set_mode(DomineKernel *k, int monoPerSpeaker, int swapSides, 
     atomic_store_explicit(&k->monoPerSpeaker, monoPerSpeaker != 0, memory_order_relaxed);
     atomic_store_explicit(&k->swapSides, swapSides != 0, memory_order_relaxed);
     atomic_store_explicit(&k->monoFallback, monoFallback != 0, memory_order_relaxed);
+}
+
+void domine_kernel_set_crossfeed(DomineKernel *k, float amount) {
+    if (k == NULL) return;
+    float a = isfinite(amount) ? amount : 0.0f;
+    if (a < 0.0f) a = 0.0f;
+    if (a > 1.0f) a = 1.0f;
+    atomic_store_explicit(&k->crossfeedBits, float_bits(a), memory_order_relaxed);
 }
 
 void domine_kernel_set_test_tone(DomineKernel *k, int side) {
@@ -549,6 +567,7 @@ static RenderResult render(DomineKernel *k,
     const float gainA = bits_float(atomic_load_explicit(&k->gainABits, memory_order_relaxed));
     const float gainB = bits_float(atomic_load_explicit(&k->gainBBits, memory_order_relaxed));
     // The first call snaps to the target; later changes ramp over 30 ms.
+    const int xfFirst = !k->gainPrimed;
     if (!k->gainPrimed) {
         k->gainPrimed = 1;
         k->gainCurA = k->gainTargetA = gainA;
@@ -563,6 +582,17 @@ static RenderResult render(DomineKernel *k,
         k->gainTargetB = gainB;
         k->gainLeftB = k->gainRampLength;
         k->gainStepB = (gainB - k->gainCurB) / (float)k->gainRampLength;
+    }
+    const float xf = bits_float(atomic_load_explicit(&k->crossfeedBits, memory_order_relaxed));
+    if (xf != k->xfTarget) {
+        k->xfTarget = xf;
+        if (xfFirst) {
+            k->xfCur = xf;
+            k->xfLeft = 0;
+        } else {
+            k->xfLeft = k->xfRampLength;
+            k->xfStep = (xf - k->xfCur) / (float)k->xfRampLength;
+        }
     }
     const int32_t delay = atomic_load_explicit(&k->delaySamples, memory_order_relaxed);
     const int monoPerSpeaker = atomic_load_explicit(&k->monoPerSpeaker, memory_order_relaxed);
@@ -630,6 +660,17 @@ static RenderResult render(DomineKernel *k,
         } else {
             srcA = l;
             srcB = r;
+        }
+        // Crossfeed (ignored in mono fallback, already mono). Bit-exact at 0.
+        if (k->xfLeft) {
+            k->xfCur = --k->xfLeft ? k->xfCur + k->xfStep : k->xfTarget;
+        }
+        if (!monoFallback && k->xfCur != 0.0f) {
+            const float h = k->xfCur * 0.5f;
+            const float mixA = (1.0f - h) * srcA + h * srcB;
+            const float mixB = (1.0f - h) * srcB + h * srcA;
+            srcA = mixA;
+            srcB = mixB;
         }
 
         // EFFECTS BLOCK (SPEC 5a): per position chain on the program source,
