@@ -64,7 +64,7 @@ enum SampleStates {
                 statusText: "Not connected", connection: .disconnected),
         ],
         masterVolume: 0.62,
-        bannerMessage: "Front Right disconnected. Front Left plays both sides until it reconnects.")
+        bannerMessage: "Front Right disconnected. Front Left plays both sides until it reconnects. A phone connected to it can take over, so check for one.")
 
     /// Routing on, Front Right dropped out, before the engine has rebuilt
     /// for mono fallback (a moment at most; see monoFallback above).

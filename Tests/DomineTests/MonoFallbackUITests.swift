@@ -50,7 +50,7 @@ final class MonoFallbackUITests {
         let state = model.mainWindowState
         #expect(state.isOn)
         #expect(state.statusLine == "Mono fallback")
-        #expect(state.bannerMessage == "Front Right disconnected. Front Left plays both sides until it reconnects.")
+        #expect(state.bannerMessage == "Front Right disconnected. Front Left plays both sides until it reconnects. A phone connected to it can take over, so check for one.")
 
         let left = state.speaker(at: .frontLeft)
         #expect(left.connection == .connected)
@@ -74,7 +74,7 @@ final class MonoFallbackUITests {
         await settle()
 
         let state = model.mainWindowState
-        #expect(state.bannerMessage == "Front Left disconnected. Front Right plays both sides until it reconnects.")
+        #expect(state.bannerMessage == "Front Left disconnected. Front Right plays both sides until it reconnects. A phone connected to it can take over, so check for one.")
         #expect(state.speaker(at: .frontLeft).statusText == "Not connected")
         #expect(state.speaker(at: .frontRight).sideTag == "L+R")
         #expect(state.speaker(at: .frontRight).statusText == "Mono fallback")

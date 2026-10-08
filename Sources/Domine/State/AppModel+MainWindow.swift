@@ -253,7 +253,7 @@ extension AppModel {
     var monoFallbackBanner: String? {
         guard let missing = monoFallbackMissingPosition else { return nil }
         let playing: SpeakerPosition = missing == .frontLeft ? .frontRight : .frontLeft
-        return "\(missing.title) disconnected. \(playing.title) plays both sides until it reconnects."
+        return "\(missing.title) disconnected. \(playing.title) plays both sides until it reconnects. A phone connected to it can take over, so check for one."
     }
 
     /// One short phrase for the window subtitle.
