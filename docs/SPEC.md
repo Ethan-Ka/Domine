@@ -447,7 +447,7 @@ Requested by the owner; replaces hand-tuning the delay slider as the normal path
 
 ## 13. Surround mode (N speakers)
 
-Replaces quad mode (section 11) as the multi-speaker plan. The owner asked for "three or more speakers, unlimited, set up like a surround system no matter the number, and you can move them around". Surround mode takes 2 to 16 speakers (ambience needs 3; with 2 it pans L and R only) (`DOMINE_SURROUND_MAX_SPEAKERS`, `SurroundSpeaker.maxCount`), places each at an angle and distance around the listener, and pans the stereo tap across them. Stereo mode (two speakers, `domine_kernel_*`) is unchanged.
+Replaces quad mode (section 11) as the multi-speaker plan. The owner asked for "three or more speakers, unlimited, set up like a surround system no matter the number, and you can move them around". Surround mode takes 2 to 16 speakers (two can sit front and back, with the ambience on the rear one) (`DOMINE_SURROUND_MAX_SPEAKERS`, `SurroundSpeaker.maxCount`), places each at an angle and distance around the listener, and pans the stereo tap across them. Stereo mode (two speakers, `domine_kernel_*`) is unchanged.
 
 Naming: the owner called it "Dolby Atmos 8D". Section 11.6 forbids "Dolby" and "Atmos" anywhere in the app, and "8D" is not used either. The mode is "Surround", the rotating effect is "Orbit".
 
@@ -481,7 +481,7 @@ Kernel contract: `Sources/DomineDSP/include/DomineSurround.h`. Model: `Sources/D
 ### 13.3 Rendering
 The kernel turns the stereo tap into a few virtual sources and pans each one over the speakers.
 
-- Sources: 0 is L at -width, 1 is R at +width, 2 and 3 are the ambience pair from the spatial upmixer (`DomineSpatial.h`, 11.6a) at -110 and +110 (`DOMINE_SURROUND_REAR_AZ`) times surround level, 4 and up are demo voices (section 14). Ambience sources are used only when 3 or more speakers are present.
+- Sources: 0 is L at -width, 1 is R at +width, 2 and 3 are the ambience pair from the spatial upmixer (`DomineSpatial.h`, 11.6a) at -110 and +110 (`DOMINE_SURROUND_REAR_AZ`) times surround level, 4 and up are demo voices (section 14). Ambience sources are used whenever 2 or more speakers are present (stereo routing's demo sets surround level 0).
 - Every source azimuth is offset by rotation plus the orbit phase before panning.
 - Panning: 2D pairwise VBAP (`domine_surround_vbap`). A source pans between the two adjacent present speakers that enclose it. If their arc is under 180 degrees the gains solve the 2D VBAP equation and are normalised to unit power. One speaker gets gain 1.
 - Gap rule: if the enclosing arc is 180 degrees or wider (behind a front-only pair, or one side of a lopsided layout) VBAP would flip sign, so the gains are constant-power by angle fraction across the arc: cos(f pi/2) and sin(f pi/2), where f is the source's fraction of the arc.
@@ -504,7 +504,7 @@ The kernel turns the stereo tap into a few virtual sources and pans each one ove
 
 ### 13.5 Fallback
 - Any speaker missing (device gone or `kAudioDevicePropertyDeviceIsAlive` 0): state `degraded(.surroundMissing(uids))`. Rebuild the aggregate with the present speakers only. The kernel keeps the full layout (indexes, effects and settings stay put) and the missing speaker gets `DOMINE_NO_DEVICE`, so VBAP re-pans its share to its neighbours. If the clock speaker went, the next present speaker in list order is the clock.
-- Two present: the surround kernel continues with two speakers (gap rule covers the open side). Ambience is off below 3 present speakers.
+- Two present: the surround kernel continues with two speakers (gap rule covers the open side). Ambience stays on with two present speakers.
 - One present: it plays the mono sum (L + R) / 2 on both channels (13.3 headroom rule gives this exactly). Status "Mono fallback".
 - None present: `idle`, restore the previous output (4c).
 - A returning speaker (matched by UID) rebuilds back into the set at its saved position. 50 ms fades out and in across every rebuild.
@@ -516,7 +516,7 @@ The kernel turns the stereo tap into a few virtual sources and pans each one ove
 - Drag a card to move it: azimuth and distance follow the pointer, azimuth snaps to 5 degrees and distance to 0.1 m; holding Option disables snapping. Distance clamps to 0.5 to 10 m. The kernel follows live; settings save on drag end. A click without movement opens the Choose Speaker sheet for that card.
 - Card contents as in stereo (device name, UID suffix, status line, 16-segment meter), but the side tag (L, R, L+R) is replaced by an angle label like "-30°" (with "2.0 m" beside it while dragging). Fallback cards show "L+R" as in stereo.
 - "Add Speaker..." (bottom bar) opens the Choose Speaker sheet filtered to outputs not in the set. Disabled at 16 speakers. Card context menu: "Choose Speaker...", "Remove Speaker". With fewer than 2 connected speakers in the set, routing falls back to Stereo on the pair.
-- Presets menu (13.1): Quad, 5 speaker, 7 speaker, Ring.
+- Presets menu (13.1): Front and Back (2 speakers: 0 and 180), Quad, 5 speaker, 7 speaker, Ring.
 - Controls in a row under the stage: Width (slider, 10° to 90°), Surround level (slider, 0 to 100%), Orbit speed (slider, -90 to 90°/s, centre is "Off", readout like "20°/s clockwise"), Rotation (slider, -180° to 180°, with Reset). Master volume, Play Demo (section 14) and "Sync & Balance..." stay in the bottom bar; Test L / Test R are hidden in Surround; in their place "Test Speakers" plays the chime on each connected speaker of the set in list order (1.5 s each, 250 ms apart), and each card reads "Playing test tone" while its chime sounds. The card context menu's "Play Test Tone" plays one speaker.
 - Sync & Balance in Surround: one row per speaker with calibration offset (ms) and trim, plus effects per speaker. Distance comes from the stage, not from this sheet.
 - Warning: with more than 4 Bluetooth speakers in the set (transport type `kAudioDeviceTransportTypeBluetooth`, read through `AudioHAL`), a line under the toolbar: "More than 4 Bluetooth speakers can drop out. Wired outputs are not affected." It does not block (sections 9, 11.8).

@@ -80,6 +80,7 @@ static void fill_program(void) {
 static DomineSurround *make(double sr, uint32_t n, const float *az) {
     DomineSurround *s = domine_surround_create(sr, 512);
     domine_surround_set_speakers(s, n, az);
+    domine_surround_set_surround_level(s, 0); // tests opt in to ambience
     return s;
 }
 
@@ -800,6 +801,7 @@ static void test_ioproc(void) {
 static void test_bounds_and_zeroing(void) {
     const float az[3] = { -30, 30, 110 };
     DomineSurround *s = make(48000, 3, az);
+    domine_surround_set_surround_level(s, 0.7f); // the rear speaker plays ambience
     fill_program();
     // Declared 32 frames, storage 48; speaker 2 at the last channel (offset+1 missing).
     const uint32_t ch[2] = { 3, 5 };

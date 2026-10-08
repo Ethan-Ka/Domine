@@ -546,7 +546,7 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
     memset(gT, 0, sizeof gT);
     const double srcAz[NPROG] = { -(double)width, (double)width,
                                   -(double)DOMINE_SURROUND_REAR_AZ, (double)DOMINE_SURROUND_REAR_AZ };
-    const int nsrc = nPresent >= 3 ? NPROG : 2;
+    const int nsrc = nPresent >= 2 ? NPROG : 2;
     for (int src = 0; src < nsrc; src++) pan_source(&pan, srcAz[src] + field, gT[src]);
     // The surround level is part of the ambience gains, so it ramps with the
     // matrix and a lowered level frees headroom for the direct sources.

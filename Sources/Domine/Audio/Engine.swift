@@ -1312,7 +1312,8 @@ extension Engine {
         domine_surround_set_width(surround, width)
         domine_surround_set_rotation(surround, fieldRotation)
         domine_surround_set_orbit_rate(surround, orbit)
-        domine_surround_set_surround_level(surround, surroundLevel)
+        // Stereo routing (the stereo demo) stays plain L and R.
+        domine_surround_set_surround_level(surround, stereoDemo ? 0 : surroundLevel)
         var spatial = DomineSpatialParams(amount: spatialAmount, roomMs: spatialRoomMs, highCutHz: 5000)
         domine_surround_set_spatial(surround, &spatial)
         domine_surround_set_test_tone(surround, surroundToneIndex())

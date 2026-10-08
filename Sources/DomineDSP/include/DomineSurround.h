@@ -13,9 +13,10 @@
 //   source 4..: demo voices (DomineDemo.h) while the demo plays
 //
 // Ambience comes from the spatial upmixer (DomineSpatial.h). Sources 2 and 3
-// are only used with 3 or more PRESENT speakers (absent ones, with a
-// DOMINE_NO_DEVICE offset, do not count), so 2 speakers at -width and +width
-// play L and R bit for bit, and 1 speaker plays (L + R) / 2 bit for bit
+// are only used with 2 or more PRESENT speakers (absent ones, with a
+// DOMINE_NO_DEVICE offset, do not count), so two speakers can sit front and
+// back with the ambience on the rear one. At surround level 0, 2 speakers at
+// -width and +width play L and R bit for bit, and 1 speaker plays (L + R) / 2 bit for bit
 // (computed as 0.5 * L + 0.5 * R, which equals 0.5 * (L + R) exactly).
 // Every source azimuth is offset by rotation (static) plus the orbit phase.
 // Demo voices are not rotated, so roll-call kicks sit on the speakers.

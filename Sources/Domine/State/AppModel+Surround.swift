@@ -2,10 +2,11 @@ import Foundation
 
 /// The Presets menu (SPEC 13.1). A preset assigns azimuths only.
 enum SurroundPreset: String, CaseIterable, Sendable {
-    case quad, five, seven, ring
+    case frontBack, quad, five, seven, ring
 
     var title: String {
         switch self {
+        case .frontBack: "Front and Back"
         case .quad: "Quad"
         case .five: "5 speaker"
         case .seven: "7 speaker"
@@ -13,9 +14,11 @@ enum SurroundPreset: String, CaseIterable, Sendable {
         }
     }
 
-    /// Quad, 5 and 7 need exactly that many speakers; Ring takes any number.
+    /// Front and Back needs 2; Quad, 5 and 7 need exactly that many speakers;
+    /// Ring takes any number.
     func isEnabled(speakerCount: Int) -> Bool {
         switch self {
+        case .frontBack: speakerCount == 2
         case .quad: speakerCount == 4
         case .five: speakerCount == 5
         case .seven: speakerCount == 7
@@ -27,6 +30,7 @@ enum SurroundPreset: String, CaseIterable, Sendable {
     func azimuths(count: Int) -> [Float]? {
         guard isEnabled(speakerCount: count) else { return nil }
         switch self {
+        case .frontBack: return [0, 180]
         case .quad: return [-30, 30, -110, 110]
         case .five: return [-30, 0, 30, -110, 110]
         case .seven: return [-30, 0, 30, -90, 90, -150, 150]
@@ -52,8 +56,8 @@ extension AppModel {
         catalog.outputs.filter { $0.outputChannels >= 2 }
     }
 
-    /// Fewest connected speakers Surround routes (SPEC 13.6). Two speakers
-    /// get the panning, width, orbit and rotation; ambience needs three.
+    /// Fewest connected speakers Surround routes (SPEC 13.6). Two can sit
+    /// front and back: the Surround slider sends ambience to the rear one.
     static let surroundMinimumSpeakers = 2
 
     /// Surround can be chosen: at least two distinct eligible outputs are

@@ -13,6 +13,8 @@ struct SurroundKernelTests {
     static func make(_ azimuths: [Float], sampleRate: Double = 48000) -> OpaquePointer {
         let s = domine_surround_create(sampleRate, 512)!
         azimuths.withUnsafeBufferPointer { domine_surround_set_speakers(s, UInt32(azimuths.count), $0.baseAddress) }
+        // Tests opt in to ambience with domine_surround_set_surround_level.
+        domine_surround_set_surround_level(s, 0)
         return s
     }
 
@@ -114,6 +116,31 @@ struct SurroundKernelTests {
         let out = Self.run(s, offsets: [0], buffers: [2])
         #expect(out.channel(0) == mono)
         #expect(out.channel(1) == mono)
+    }
+
+    @Test func twoSpeakersFrontAndBackSendAmbienceToTheRear() {
+        // Mirror ambience (amount 0): RL = L and RR = R, at -110 and +110.
+        func rearEnergy(level: Float) -> Float {
+            let s = Self.make([0, 180])
+            defer { domine_surround_destroy(s) }
+            var sp = DomineSpatialParams(amount: 0, roomMs: 15, highCutHz: 5000)
+            domine_surround_set_spatial(s, &sp)
+            domine_surround_set_surround_level(s, level)
+            _ = Self.run(s, offsets: [0, 2], buffers: [4])
+            let out = Self.run(s, offsets: [0, 2], buffers: [4])
+            return out.channel(2).reduce(0) { $0 + $1 * $1 }
+        }
+        let off = rearEnergy(level: 0), on = rearEnergy(level: 1)
+        #expect(on > off * 4)
+    }
+
+    @Test func oneSpeakerIgnoresSurroundLevel() {
+        let s = Self.make([77])
+        defer { domine_surround_destroy(s) }
+        domine_surround_set_surround_level(s, 1)
+        let mono = zip(Self.left, Self.right).map { 0.5 * ($0 + $1) }
+        let out = Self.run(s, offsets: [0], buffers: [2])
+        #expect(out.channel(0) == mono)
     }
 
     @Test func quadLayoutMatchesQuadMirror() {
