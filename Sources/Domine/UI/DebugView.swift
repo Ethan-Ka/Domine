@@ -71,7 +71,7 @@ struct DebugContentView: View {
                         } label: {
                             HStack(spacing: 6) {
                                 Text(speaker.label)
-                                Text(String(speaker.uid.prefix(17).suffix(5)))
+                                Text(OutputDevice.suffix(forUID: speaker.uid))
                                     .foregroundStyle(.secondary)
                                     .monospaced()
                             }
