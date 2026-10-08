@@ -870,6 +870,38 @@ static void test_bounds_and_zeroing(void) {
     CHECK(domine_surround_create(0, 512) == NULL);
 }
 
+// Mirror of twoSpeakersFrontAndBackSendAmbienceToTheRear in SurroundKernelTests.swift.
+static float rear_energy(float level) {
+    static const float l[8] = { 0.5f, -0.25f, 1.0f, 0.125f, -1.0f, 0.75f, 0.0f, 0.25f };
+    static const float r[8] = { -0.5f, 0.25f, -1.0f, 0.5f, 1.0f, -0.75f, 0.5f, 0.125f };
+    const float az[2] = { 0.0f, 180.0f };
+    const uint32_t off[2] = { 0, 2 };
+    DomineSurround *s = make(48000, 2, az);
+    DomineSpatialParams sp = { .amount = 0.0f, .roomMs = 15.0f, .highCutHz = 5000.0f };
+    domine_surround_set_spatial(s, &sp);
+    domine_surround_set_surround_level(s, level);
+    Buf out = out_new(4, 8);
+    run(s, l, r, 8, &out, off);
+    buf_free(&out);
+    out = out_new(4, 8);
+    run(s, l, r, 8, &out, off);
+    float e = 0.0f, peak = 0.0f;
+    for (uint32_t f = 0; f < 8; f++) {
+        const float v = *buf_at(&out, 2, f);
+        e += v * v;
+        for (uint32_t c = 0; c < 4; c++) if (fabsf(*buf_at(&out, c, f)) > peak) peak = fabsf(*buf_at(&out, c, f));
+    }
+    CHECK(peak <= 1.0f + 1e-6f);
+    buf_free(&out);
+    domine_surround_destroy(s);
+    return e;
+}
+static void test_front_back_ambience(void) {
+    const float off = rear_energy(0.0f), on = rear_energy(1.0f);
+    CHECK(off > 0.0f);
+    CHECK(on > off * 4.0f);
+}
+
 int main(void) {
     test_vbap_rules();
     test_vbap_unit_power_sweep();
@@ -886,6 +918,7 @@ int main(void) {
     test_orbit();
     test_width();
     test_headroom();
+    test_front_back_ambience();
     test_demo();
     test_test_tone();
     test_click_test();
