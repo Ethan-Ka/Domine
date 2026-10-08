@@ -16,6 +16,12 @@
 #define SURROUND_LEVEL_DEFAULT 0.7f
 #define SPATIAL_AMOUNT_DEFAULT 0.6f
 #define ON_SPEAKER_EPS 1e-9
+#define KEEP_ALIVE_THRESHOLD 1.0e-4f // -80 dBFS
+#define KEEP_ALIVE_AMPLITUDE 1.0e-3  // -60 dBFS
+#define KEEP_ALIVE_HZ 15.0
+#define KEEP_ALIVE_HOLD_S 2.0
+#define KEEP_ALIVE_FADE_IN_S 0.05
+#define KEEP_ALIVE_FADE_OUT_S 0.01
 
 typedef struct {
     float applied, start, target;
@@ -49,6 +55,7 @@ struct DomineSurround {
     _Atomic uint32_t delaySamples[NSPK];
     _Atomic uint32_t peakBits[NSPK];
     _Atomic int muted;
+    _Atomic int keepAlive;
     _Atomic int toneSpeaker; // -1 off
     _Atomic int clickOn;
     _Atomic uint32_t calPair; // a | b << 16, CAL_OFF when off
@@ -76,6 +83,10 @@ struct DomineSurround {
     float gPrev[NPROG][NSPK];
     uint32_t fadeLength;   // samples in a full mute fade (also the demo crossfade)
     uint32_t fadePosition; // 0 = silent, fadeLength = full gain
+    // Keep-alive, render thread state only (see domine_surround_set_keep_alive).
+    uint32_t kaSilent;     // consecutive frames below the threshold
+    float kaLevel;         // fade 0..1
+    double kaPhase;        // cycles, 0..1
     GainState gain[NSPK];
     float *ring[NSPK];
     uint32_t ringMask;
@@ -281,6 +292,7 @@ DomineSurround *domine_surround_create(double sampleRate, uint32_t maxFrames) {
     atomic_init(&s->mono, 0);
     atomic_init(&s->orbitPhaseBits, f2u(0.0f));
     atomic_init(&s->muted, 0);
+    atomic_init(&s->keepAlive, 0);
     atomic_init(&s->demoStartReq, 0);
     atomic_init(&s->demoWanted, 0);
     atomic_init(&s->demoPlayingPub, 0);
@@ -411,6 +423,11 @@ void domine_surround_set_bass(DomineSurround *s, uint32_t speaker, const DomineB
 }
 void domine_surround_set_compressor(DomineSurround *s, uint32_t speaker, const DomineCompressorParams *p) {
     if (s != NULL && speaker < NSPK) domine_compressor_set_params(s->comp[speaker], p);
+}
+
+void domine_surround_set_keep_alive(DomineSurround *s, int on) {
+    if (s == NULL) return;
+    atomic_store_explicit(&s->keepAlive, on != 0, memory_order_relaxed);
 }
 
 void domine_surround_set_muted(DomineSurround *s, int muted) {
@@ -627,6 +644,7 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
     const uint32_t calReq = atomic_load_explicit(&s->calPair, memory_order_relaxed);
     const uint32_t tfull = s->toneFadeLength;
     const int mono = atomic_load_explicit(&s->mono, memory_order_relaxed);
+    const int keepAlive = atomic_load_explicit(&s->keepAlive, memory_order_relaxed);
     float peak[NSPK] = { 0 };
     for (uint32_t f = 0; f < frames; f++) {
         if (s->fadePosition < fadeTarget) s->fadePosition++;
@@ -740,6 +758,33 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
             if (s->chirpLevel == 0 && target == 0) s->playingPair = CAL_OFF;
         }
 
+        // Keep-alive (kernel.c): a 15 Hz sine at -60 dBFS on every speaker
+        // after 2 s of silence, so speakers do not power off.
+        float ka = 0.0f;
+        if (keepAlive) {
+            const float lvl = fabsf(L) > fabsf(R) ? fabsf(L) : fabsf(R);
+            if (lvl > KEEP_ALIVE_THRESHOLD) s->kaSilent = 0;
+            else if (s->kaSilent < UINT32_MAX) s->kaSilent++;
+        } else {
+            s->kaSilent = 0;
+        }
+        if (keepAlive || s->kaLevel > 0.0f) {
+            const int quiet = keepAlive && fadeTarget != 0 && !toneActive && !clickActive && !chirpActive
+                && !demoActive;
+            const uint32_t hold = (uint32_t)lround(s->sampleRate * KEEP_ALIVE_HOLD_S);
+            if (quiet && s->kaSilent >= hold) {
+                s->kaLevel += (float)(1.0 / (s->sampleRate * KEEP_ALIVE_FADE_IN_S));
+                if (s->kaLevel > 1.0f) s->kaLevel = 1.0f;
+            } else {
+                s->kaLevel -= (float)(1.0 / (s->sampleRate * KEEP_ALIVE_FADE_OUT_S));
+                if (s->kaLevel < 0.0f) s->kaLevel = 0.0f;
+            }
+            if (s->kaLevel > 0.0f)
+                ka = (float)(KEEP_ALIVE_AMPLITUDE * sin(2.0 * M_PI * s->kaPhase)) * s->kaLevel;
+            s->kaPhase += KEEP_ALIVE_HZ / s->sampleRate;
+            if (s->kaPhase >= 1.0) s->kaPhase -= 1.0;
+        }
+
         for (uint32_t k = 0; k < n; k++) {
             float x = 0.0f;
             for (int j = 0; j < loopSrc; j++) {
@@ -775,6 +820,7 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
                 if (toneFull) o = mine ? tone : 0.0f;
                 else o = mine ? tone * toneE + o * toneKeep : o * toneKeep;
             }
+            if (ka != 0.0f) o += ka;
             if (fade != 1.0f) o *= fade;
             if (present[k]) {
                 const float a = fabsf(o);

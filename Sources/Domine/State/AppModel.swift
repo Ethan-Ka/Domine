@@ -202,6 +202,7 @@ final class AppModel {
         applyPairSettingsToEngine()
         volumeLink.onExternalChange = { [weak self] volume in self?.adoptHardwareVolume(volume) }
         engine.onRoutingEnded = { [weak self] in self?.engineEndedRouting() }
+        engine.keepAlive = store.keepSpeakersAwake
         let engine = engine
         exclusionResolver.onChange = { [weak self] processes in
             self?.outputRestorer.setExclusionsActive(!processes.isEmpty)

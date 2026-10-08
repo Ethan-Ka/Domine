@@ -40,6 +40,9 @@ final class Engine {
             applyControls()
         }
     }
+    /// Inaudible tone during silence so speakers do not power off. Pushed to
+    /// whichever kernel is running, and to the next start.
+    var keepAlive = true { didSet { if keepAlive != oldValue { applyControls() } } }
     var testTone: TestTone = .off { didSet { applyControls() } }
     /// Clicks on both speakers through the delay line, to line them up by
     /// ear. Every stop turns it off.
@@ -1122,6 +1125,7 @@ final class Engine {
     private func applyControls() {
         if let surround = resources.surround { return applySurroundControls(surround) }
         guard let kernel = resources.kernel else { return }
+        domine_kernel_set_keep_alive(kernel, keepAlive ? 1 : 0)
         domine_kernel_set_mode(kernel, monoPerSpeaker ? 1 : 0, swapSides ? 1 : 0, kernelMonoFallback ? 1 : 0)
         domine_kernel_set_test_tone(kernel, testTone.rawValue)
         domine_kernel_set_click_test(kernel, calibrationChirps ? 2 : (clickTest ? 1 : 0))
@@ -1321,6 +1325,7 @@ extension Engine {
     /// offsets (SPEC 13.4), effects, field controls, test tone, click test,
     /// and mute. While the demo plays, rotation and orbit are 0 (SPEC 14.3).
     fileprivate func applySurroundControls(_ surround: OpaquePointer) {
+        domine_surround_set_keep_alive(surround, keepAlive ? 1 : 0)
         let entries = surroundEntries()
         let count = entries.count
         guard count > 0 else { return }
