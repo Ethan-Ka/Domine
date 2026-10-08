@@ -156,16 +156,17 @@ final class SurroundModelTests {
 
     // MARK: The set
 
-    @Test func firstSwitchSeedsFromThePairAndNextOutput() {
+    @Test func firstSwitchSeedsFromThePairOnly() {
         let devices = (1...3).map { Self.device($0) }
-        start(devices)
+        start(devices + [Self.builtIn])
         model.assign(devices[0].uid, to: .frontLeft)
         model.assign(devices[1].uid, to: .frontRight)
         #expect(model.isSurroundAvailable)
         model.setRoutingMode(.surround)
-        #expect(model.surroundSpeakers.map(\.uid) == uids(devices))
-        #expect(model.surroundSpeakers.map(\.azimuth) == [-30, 30, -110])
-        #expect(model.store.lastSurroundUIDs == uids(devices))
+        let pair = [devices[0].uid, devices[1].uid]
+        #expect(model.surroundSpeakers.map(\.uid) == pair)
+        #expect(model.surroundSpeakers.map(\.azimuth) == [-30, 30])
+        #expect(model.store.lastSurroundUIDs == pair)
     }
 
     @Test func firstSwitchAppliesSwap() {
@@ -175,14 +176,25 @@ final class SurroundModelTests {
         model.assign(devices[1].uid, to: .frontRight)
         model.engine.swapSides = true
         model.setRoutingMode(.surround)
-        #expect(model.surroundSpeakers.map(\.uid) == [devices[1].uid, devices[0].uid, devices[2].uid])
+        #expect(model.surroundSpeakers.map(\.uid) == [devices[1].uid, devices[0].uid])
     }
 
-    @Test func surroundNeedsThreeTwoChannelOutputs() {
-        start([Self.device(1), Self.device(2), Self.device(3, channels: 1)])
+    @Test func surroundNeedsTwoTwoChannelOutputs() {
+        start([Self.device(1), Self.device(2, channels: 1)])
         #expect(!model.isSurroundAvailable)
-        model.addSurroundSpeaker(uid: Self.device(3).uid)
+        model.addSurroundSpeaker(uid: Self.device(2).uid)
         #expect(model.surroundSpeakers.isEmpty)
+    }
+
+    @Test func twoSpeakersAreEnoughForSurround() {
+        let devices = (1...2).map { Self.device($0) }
+        start(devices)
+        model.assign(devices[0].uid, to: .frontLeft)
+        model.assign(devices[1].uid, to: .frontRight)
+        #expect(model.isSurroundAvailable)
+        model.setRoutingMode(.surround)
+        #expect(model.surroundSpeakers.map(\.uid) == uids(devices))
+        #expect(model.surroundSpeakers.map(\.azimuth) == [-30, 30])
     }
 
     @Test func addAndRemoveKeepOrderSkipDuplicatesAndCap() {
@@ -310,13 +322,42 @@ final class SurroundModelTests {
         #expect(model.demoSectionTitle == nil)
     }
 
-    @Test func fewerThanThreeConnectedRoutesStereo() async {
+    @Test func twoConnectedRouteSurround() async {
+        let devices = (1...2).map { Self.device($0) }
+        start(devices + [Self.builtIn])
+        model.assign(devices[0].uid, to: .frontLeft)
+        model.assign(devices[1].uid, to: .frontRight)
+        model.setRoutingMode(.surround)
+        #expect(model.surroundRouteSpeakers?.map(\.uid) == uids(devices))
+        await model.startRouting()
+        #expect(model.engine.state == .running)
+        #expect(model.engine.surroundRoute == uids(devices))
+    }
+
+    @Test func testSpeakersChimesEachSpeakerInTurn() async {
         let devices = (1...3).map { Self.device($0) }
         start(devices + [Self.builtIn])
         model.assign(devices[0].uid, to: .frontLeft)
         model.assign(devices[1].uid, to: .frontRight)
         model.setRoutingMode(.surround)
         model.changeSurroundSet(uids(devices))
+        await model.startRouting()
+        #expect(model.mainWindowState.canPlayTestTones)
+        model.testSurroundSpeakers()
+        for _ in 0..<100 where model.engine.surroundTestTone == nil { await Task.yield() }
+        #expect(model.engine.surroundTestTone == devices[0].uid)
+        #expect(model.surroundTestToneUID == devices[0].uid)
+        model.cancelTone()
+        #expect(model.engine.surroundTestTone == nil)
+    }
+
+    @Test func fewerThanTwoConnectedRoutesStereo() async {
+        let devices = (1...3).map { Self.device($0) }
+        start(devices + [Self.builtIn])
+        model.assign(devices[0].uid, to: .frontLeft)
+        model.assign(devices[1].uid, to: .frontRight)
+        model.setRoutingMode(.surround)
+        model.changeSurroundSet([devices[0].uid, devices[2].uid])
         hal.remove(uid: devices[2].uid)
         model.syncWithCatalog()
         #expect(model.surroundRouteSpeakers == nil)

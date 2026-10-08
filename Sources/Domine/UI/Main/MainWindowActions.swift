@@ -6,6 +6,8 @@ struct MainWindowActions: Sendable {
     var setMasterVolume: @MainActor @Sendable (Double) -> Void = { _ in }
     /// Plays one short tone on that side.
     var playTestTone: @MainActor @Sendable (StereoSide) -> Void = { _ in }
+    /// "Test Speakers" in Surround: one chime per speaker, in turn.
+    var testSurroundSpeakers: @MainActor @Sendable () -> Void = {}
     /// A card was clicked; the owner presents `AssignSheet`.
     var selectSpeaker: @MainActor @Sendable (SpeakerPosition) -> Void = { _ in }
     /// "Sync & Balance…" was clicked; the owner presents `TuningSheet`.

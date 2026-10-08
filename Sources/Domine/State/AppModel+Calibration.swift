@@ -2,7 +2,7 @@
 extension AppModel {
     /// Starts routing if it is off, records the chirps through the built-in
     /// microphone, and writes the measured offset to the delay setting.
-    /// In Surround routing with three or more speakers it measures the ring
+    /// In Surround routing with two or more speakers it measures the ring
     /// of pairs instead (`autoCalibrateSurround`).
     func autoCalibrate() {
         guard calibrationTask == nil else { return }

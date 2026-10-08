@@ -17,7 +17,8 @@ struct MainWindowState: Equatable, Sendable {
     var isMuted: Bool
     /// The side whose test tone is playing, if any.
     var testToneSide: StereoSide?
-    /// Tones need the engine running; Test L and Test R are disabled otherwise.
+    /// Stereo: Test L and Test R need the engine running or a speaker
+    /// assigned. Surround: Test Speakers needs a connected speaker in the set.
     var canPlayTestTones: Bool
     /// Surround controls, shown in Surround mode only.
     var surround: SurroundControls

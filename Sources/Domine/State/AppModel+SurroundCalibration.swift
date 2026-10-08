@@ -22,8 +22,8 @@ extension AppModel {
                 return
             }
             let speakers = self.engine.surroundPresentSpeakers
-            guard speakers.count >= 3 else {
-                self.calibrationStatus = .failed("Needs three connected speakers")
+            guard speakers.count >= Self.surroundMinimumSpeakers else {
+                self.calibrationStatus = .failed("Needs two connected speakers")
                 return
             }
             self.cancelTone()

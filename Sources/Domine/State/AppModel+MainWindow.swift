@@ -29,8 +29,9 @@ extension AppModel {
             masterVolume: Double(pairSettings.masterVolume),
             isMuted: isMuted,
             testToneSide: testToneSide,
-            canPlayTestTones: engine.state.isRouting
-                || anyAssigned,
+            canPlayTestTones: isSurround
+                ? !connectedSurroundSpeakers.isEmpty
+                : engine.state.isRouting || anyAssigned,
             bannerMessage: monoFallbackBanner ?? (showsGripPairingHint ? Self.gripPairingHint : nil),
             surround: SurroundControls(
                 width: Double(settings.width),
@@ -60,6 +61,7 @@ extension AppModel {
                 self?.setMuted(false)
             },
             playTestTone: { [weak self] in self?.playTestTone($0) },
+            testSurroundSpeakers: { [weak self] in self?.testSurroundSpeakers() },
             selectSpeaker: { [weak self] in self?.openAssign($0) },
             openTuning: { [weak self] in self?.openTuning() },
             openSound: { [weak self] in self?.openSound() },

@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Master volume, test tones, and "Sync & Balance…" under the
+/// Master volume, test tones (Test L and Test R, or Test Speakers in
+/// Surround), and "Sync & Balance…" under the
 /// stage. Surround adds its sliders, "Add Speaker…" and Presets above.
 struct MainBottomBar: View {
     var state: MainWindowState
@@ -105,9 +106,17 @@ struct MainBottomBar: View {
                     .accessibilityHidden(true)
             }
 
-            HStack(spacing: 6) {
-                testButton("Test L", side: .left)
-                testButton("Test R", side: .right)
+            if state.mode == .surround {
+                // Test L and Test R mean nothing once the field is panned
+                // around the room; this chimes each speaker in turn instead.
+                Button("Test Speakers", action: actions.testSurroundSpeakers)
+                    .disabled(!state.canPlayTestTones)
+                    .help("Play a chime on each speaker, one at a time")
+            } else {
+                HStack(spacing: 6) {
+                    testButton("Test L", side: .left)
+                    testButton("Test R", side: .right)
+                }
             }
 
             Button("Sound…", action: actions.openSound)

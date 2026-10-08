@@ -52,10 +52,14 @@ extension AppModel {
         catalog.outputs.filter { $0.outputChannels >= 2 }
     }
 
-    /// Surround can be chosen: at least three distinct eligible outputs are
+    /// Fewest connected speakers Surround routes (SPEC 13.6). Two speakers
+    /// get the panning, width, orbit and rotation; ambience needs three.
+    static let surroundMinimumSpeakers = 2
+
+    /// Surround can be chosen: at least two distinct eligible outputs are
     /// connected (SPEC 13.6, the toolbar's enable rule).
     var isSurroundAvailable: Bool {
-        Set(surroundEligibleOutputs.map(\.uid)).count >= 3
+        Set(surroundEligibleOutputs.map(\.uid)).count >= Self.surroundMinimumSpeakers
     }
 
     /// Speakers of the set that are connected and eligible.
@@ -65,12 +69,12 @@ extension AppModel {
         }
     }
 
-    /// The set to route when Surround is chosen and three of its speakers
+    /// The set to route when Surround is chosen and two of its speakers
     /// are connected; otherwise routing is stereo on the pair. Speakers that
     /// are not connected stay in (they rejoin when they return); a connected
     /// output with one channel is left out.
     var surroundRouteSpeakers: [SurroundSpeaker]? {
-        guard routingMode == .surround, connectedSurroundSpeakers.count >= 3 else { return nil }
+        guard routingMode == .surround, connectedSurroundSpeakers.count >= Self.surroundMinimumSpeakers else { return nil }
         return surroundSpeakers.filter { speaker in
             catalog.device(uid: speaker.uid).map { $0.outputChannels >= 2 } ?? true
         }
@@ -138,14 +142,14 @@ extension AppModel {
     }
 
     /// The first switch to Surround (SPEC 13.6): the stereo pair at -30 and
-    /// +30 (swap applied: the speaker playing left is first) plus the next
-    /// eligible output at its default azimuth.
+    /// +30 (swap applied: the speaker playing left is first). Nothing else
+    /// joins on its own; the Mac's speakers or AirPods would be an odd pick,
+    /// so more speakers come from "Add Speaker…".
     func seedSurroundSetIfEmpty() {
         guard surroundSpeakers.isEmpty else { return }
         var uids: [String] = []
         let pair = engine.swapSides ? [rightUID, leftUID] : [leftUID, rightUID]
         for uid in pair.compactMap({ $0 }) where !uids.contains(uid) { uids.append(uid) }
-        if let next = surroundEligibleOutputs.first(where: { !uids.contains($0.uid) }) { uids.append(next.uid) }
         guard !uids.isEmpty else { return }
         surroundSettings = store.surroundSettings(uids: uids) ?? SurroundSettings(uids: uids)
         saveSurroundSettings()
@@ -271,21 +275,50 @@ extension AppModel {
 
     // MARK: - Test tone
 
+    /// Pause between speakers in "Test Speakers", so each chime stands alone.
+    static let speakerTestGap: Duration = .milliseconds(250)
+
     /// The chime on one surround speaker: through the engine while it routes
     /// that speaker, otherwise directly on the device.
     func playTestTone(surroundUID uid: String) {
-        guard engine.state.isRouting, engine.surroundRoute?.contains(uid) == true else {
-            if catalog.device(uid: uid) != nil { tones.play(uid: uid) }
-            return
-        }
         tones.stop()
         cancelTone()
-        engine.surroundTestTone = uid
+        guard startSurroundTone(uid: uid) else { return }
         toneTask = Task { [weak self] in
             try? await Task.sleep(for: DeviceTonePlayer.duration)
             if Task.isCancelled { return }
             self?.engine.surroundTestTone = nil
         }
+    }
+
+    /// "Test Speakers": the chime on every connected speaker of the set, one
+    /// at a time in list order. Each card lights up while its chime plays.
+    func testSurroundSpeakers() {
+        tones.stop()
+        cancelTone()
+        let uids = connectedSurroundSpeakers.map(\.uid)
+        guard !uids.isEmpty else { return }
+        toneTask = Task { [weak self] in
+            for uid in uids {
+                guard let self, !Task.isCancelled else { return }
+                guard self.startSurroundTone(uid: uid) else { continue }
+                try? await Task.sleep(for: DeviceTonePlayer.duration)
+                if Task.isCancelled { return }
+                self.engine.surroundTestTone = nil
+                try? await Task.sleep(for: Self.speakerTestGap)
+            }
+        }
+    }
+
+    /// Starts the chime on one speaker and returns whether it sounds.
+    private func startSurroundTone(uid: String) -> Bool {
+        if engine.state.isRouting, engine.surroundRoute?.contains(uid) == true {
+            engine.surroundTestTone = uid
+            return true
+        }
+        guard catalog.device(uid: uid) != nil else { return false }
+        tones.play(uid: uid)
+        return true
     }
 
     /// The surround speaker whose test tone is sounding, if any.
