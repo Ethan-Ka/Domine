@@ -9,13 +9,16 @@ struct DebugView: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { _ in
             let snapshot = model.engine.diagnostics?.snapshot()
-            DebugContentView(snapshot: snapshot, report: { report(snapshot) })
+            DebugContentView(snapshot: snapshot, report: { report(snapshot) },
+                             onResetCounts: { model.engine.diagnostics?.resetDropoutCounts() })
         }
     }
 
     private func report(_ snapshot: DebugSnapshot?) -> String {
         let info = Bundle.main.infoDictionary
-        let uids = [model.leftUID, model.rightUID, model.rearLeftUID, model.rearRightUID].compactMap { $0 }
+        let uids = model.routingMode == .surround
+            ? model.surroundSpeakers.map(\.uid)
+            : [model.leftUID, model.rightUID].compactMap { $0 }
         let speakers = uids.map { uid -> DiagnosticsReport.SpeakerInfo in
             let device = model.catalog.device(uid: uid)
             return .init(uid: uid, name: device?.name ?? "unknown",
@@ -42,6 +45,7 @@ struct DebugView: View {
 struct DebugContentView: View {
     let snapshot: DebugSnapshot?
     var report: (() -> String)?
+    var onResetCounts: () -> Void = {}
     @State private var copied = false
 
     var body: some View {
@@ -52,6 +56,32 @@ struct DebugContentView: View {
                         row("UID", speaker.uid)
                         row("Sample rate", Self.hz(speaker.sampleRate))
                         row("Latency", Self.latency(speaker.latency, rate: speaker.sampleRate))
+                    }
+                }
+                Section("Dropouts") {
+                    ForEach(Array(snapshot.speakers.enumerated()), id: \.offset) { _, speaker in
+                        let entry = snapshot.dropouts[uid: speaker.uid]
+                        LabeledContent {
+                            HStack(spacing: 12) {
+                                Text("Overloads \(entry.overloads)")
+                                Text("Disconnects \(entry.disconnects)")
+                                    .foregroundStyle(entry.disconnects > 0 ? Color.red : Color.primary)
+                            }
+                            .monospacedDigit()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text(speaker.label)
+                                Text(String(speaker.uid.prefix(17).suffix(5)))
+                                    .foregroundStyle(.secondary)
+                                    .monospaced()
+                            }
+                        }
+                    }
+                    HStack {
+                        Text("Since \(snapshot.dropouts.sessionStart.formatted(date: .omitted, time: .standard))")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Reset Counts", action: onResetCounts)
                     }
                 }
                 Section("Aggregate") {
