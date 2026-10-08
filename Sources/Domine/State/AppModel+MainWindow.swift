@@ -1,7 +1,7 @@
 /// Main window state and actions (docs/mockups/Main.dc.html).
 extension AppModel {
     static let routingErrorMessage = "Could not start routing"
-    nonisolated static let gripPairingHint = "Only one JBL Grip found. Turn off stereo pairing in the JBL Portable app."
+    nonisolated static let gripPairingHint = "Only one JBL Grip is showing up. If the two are paired to each other in the JBL Portable app, unpair them there."
 
     /// One Grip is visible and the selected pair is not both present, so the
     /// second Grip is probably still stereo-paired to the first (SPEC 9).
@@ -32,7 +32,7 @@ extension AppModel {
             canPlayTestTones: isSurround
                 ? !connectedSurroundSpeakers.isEmpty
                 : engine.state.isRouting || anyAssigned,
-            bannerMessage: monoFallbackBanner ?? (showsGripPairingHint ? Self.gripPairingHint : nil),
+            bannerMessage: monoFallbackBanner ?? phoneTakeoverHint ?? (showsGripPairingHint ? Self.gripPairingHint : nil),
             surround: SurroundControls(
                 width: Double(settings.width),
                 level: Double(settings.surroundLevel),
@@ -227,6 +227,24 @@ extension AppModel {
         case .some(.left): return .frontLeft
         case .some: return .frontRight
         }
+    }
+
+    /// Surround speakers that dropped out while routing and others play on.
+    /// A phone connected to a speaker can take it over (SPEC 9).
+    var phoneTakeoverHint: String? {
+        guard routingMode == .surround, engine.state.isRouting else { return nil }
+        let connected = connectedSurroundSpeakers
+        let missing = surroundSpeakers.filter { s in !connected.contains(where: { $0.uid == s.uid }) }
+        guard !connected.isEmpty, !missing.isEmpty else { return nil }
+        return Self.phoneTakeoverHint(missing: missing)
+    }
+
+    nonisolated static func phoneTakeoverHint(missing: [SurroundSpeaker]) -> String {
+        guard missing.count == 1, let one = missing.first else {
+            return "Some speakers dropped out. A phone connected to one can take over, so check for one."
+        }
+        let side = one.azimuth <= -1 ? "left" : one.azimuth >= 1 ? "right" : "center"
+        return "The \(side) speaker dropped out. A phone connected to it can take over, so check for one."
     }
 
     /// Stage banner during mono fallback (docs/mockups/Disconnected.dc.html).
