@@ -252,6 +252,20 @@ static void test_two_speakers_bit_exact(void) {
     domine_surround_destroy(s);
 }
 
+static void test_orbit_phase(void) {
+    const float az[2] = { -30, 30 };
+    DomineSurround *s = make(1000, 2, az);
+    const uint32_t off[2] = { 0, 2 };
+    static float zero[1000];
+    CHECK(domine_surround_orbit_phase(s) == 0.0f);
+    domine_surround_set_orbit_rate(s, 90);
+    Buf out = out_new(4, 1000);
+    run(s, zero, zero, 1000, &out, off);
+    CHECK(domine_surround_orbit_phase(s) == 90.0f);
+    buf_free(&out);
+    domine_surround_destroy(s);
+}
+
 static void test_mono(void) {
     const float az[2] = { -30, 30 };
     DomineSurround *s = make(48000, 2, az);
@@ -863,6 +877,7 @@ int main(void) {
     test_two_speakers_bit_exact();
     test_one_speaker_bit_exact();
     test_mono();
+    test_orbit_phase();
     test_quad_layout_matches_quad_mirror();
     test_absent_speaker_redistribution();
     test_gain_ramp();

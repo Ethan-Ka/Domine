@@ -128,18 +128,32 @@ struct ExclusionTests {
         hal.ops.filter { if case .createTap = $0 { true } else { false } }.count
     }
 
-    @Test func engineRebuildsTheTapOnlyWhenTheSetChanges() async {
+    @Test func engineUpdatesTheTapInPlaceWithoutARebuild() async {
         let engine = Engine(hal: hal, layoutAttempts: 3, layoutRetryDelay: .zero)
         hal.add(Self.gripA)
         hal.add(Self.gripB)
         engine.excludedProcesses = [7]
         await engine.start(left: Self.gripA.uid, right: Self.gripB.uid)
         #expect(hal.ops.contains(.createTap(excluding: [42, 7])))
-        let taps = tapCount()
+        let before = hal.ops.count
         await engine.setExcludedProcesses([7])
-        #expect(tapCount() == taps)
+        #expect(hal.ops.count == before)
         await engine.setExcludedProcesses([7, 9])
-        #expect(hal.ops.contains(.createTap(excluding: [42, 7, 9])))
+        // Only the in-place update: no new tap, aggregate, or stop.
+        #expect(Array(hal.ops.dropFirst(before)) == [.setTapExclusions(excluding: [42, 7, 9])])
+        #expect(engine.state == .running)
+        engine.stop()
+    }
+
+    @Test func engineRebuildsTheTapWhenTheInPlaceUpdateFails() async {
+        let engine = Engine(hal: hal, layoutAttempts: 3, layoutRetryDelay: .zero)
+        hal.add(Self.gripA)
+        hal.add(Self.gripB)
+        await engine.start(left: Self.gripA.uid, right: Self.gripB.uid)
+        hal.failures[.setTapExclusions] = kAudioHardwareUnspecifiedError
+        await engine.setExcludedProcesses([9])
+        #expect(hal.ops.contains(.createTap(excluding: [42, 9])))
+        #expect(engine.state == .running)
         engine.stop()
     }
 }

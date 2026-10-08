@@ -25,6 +25,9 @@ struct MainWindowActions: Sendable {
     var removeSurroundSpeaker: @MainActor @Sendable (_ uid: String) -> Void = { _ in }
     /// Live while a card is dragged: degrees and metres.
     var moveSurroundSpeaker: @MainActor @Sendable (_ uid: String, _ azimuth: Double, _ distance: Double) -> Void = { _, _, _ in }
+    /// The orbit phase in degrees as the speakers play it; nil when no
+    /// surround routing runs (the stage then keeps its own clock).
+    var heardOrbitPhase: @MainActor @Sendable () -> Double? = { nil }
     /// Returns the orbit to its starting angle.
     var resetSurroundOrbit: @MainActor @Sendable () -> Void = {}
     /// The card's "Play Test Tone".

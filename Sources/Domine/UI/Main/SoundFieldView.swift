@@ -3,12 +3,15 @@ import SwiftUI
 /// What the Surround sliders do, drawn on the stage under the cards.
 /// Width is the band in front between the L and R sources, Surround is how
 /// strongly the ambience pair behind the listener shows, Rotation turns the
-/// whole field, and Orbit spins it at the orbit rate. Matches the kernel's
+/// whole field, and Orbit spins it in time with the audio (the kernel's
+/// phase, moved back by the output latency). Matches the kernel's
 /// sources (DomineSurround.h): L at -width, R at +width, ambience at
 /// -110 and +110, all offset by rotation plus the orbit phase.
 struct SoundFieldView: View {
     var controls: SurroundControls
     var layout: StageLayout
+    /// The orbit phase the speakers are playing; nil when not routing.
+    var heardPhase: @MainActor () -> Double? = { nil }
 
     /// Ambience source azimuth, DOMINE_SURROUND_REAR_AZ.
     static let rearAzimuth: Double = 110
@@ -17,8 +20,9 @@ struct SoundFieldView: View {
 
     var body: some View {
         TimelineView(.animation(paused: controls.orbitRate <= 0)) { timeline in
-            let phase = orbit.phase(at: timeline.date, turnsPerSecond: controls.orbitRate,
+            let local = orbit.phase(at: timeline.date, turnsPerSecond: controls.orbitRate,
                                     resets: controls.orbitResetCount)
+            let phase = heardPhase() ?? local
             Canvas { context, _ in
                 draw(in: &context, field: controls.rotation + phase)
             }
@@ -72,9 +76,9 @@ struct SoundFieldView: View {
     }
 }
 
-/// The orbit phase for drawing, integrated from the rate so a slider move
-/// does not make the field jump. Reset with the Reset button and at rate 0,
-/// as the kernel does.
+/// The orbit phase for drawing while no audio runs, integrated from the rate
+/// so a slider move does not make the field jump. Reset with the Reset
+/// button and at rate 0, as the kernel does.
 @MainActor
 final class OrbitClock {
     private var degrees: Double = 0

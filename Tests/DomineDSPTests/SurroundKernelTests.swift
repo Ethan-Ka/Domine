@@ -222,6 +222,19 @@ struct SurroundKernelTests {
         #expect(second.channel(2)[999] == 0.5)
     }
 
+    @Test func orbitPhaseIsPublished() {
+        let s = Self.make([-30, 30], sampleRate: 1000)
+        defer { domine_surround_destroy(s) }
+        #expect(domine_surround_orbit_phase(s) == 0)
+        domine_surround_set_orbit_rate(s, 90)
+        let zero = [Float](repeating: 0, count: 1000)
+        _ = Self.run(s, offsets: [0, 2], left: zero, right: zero, buffers: [4])
+        #expect(domine_surround_orbit_phase(s) == 90)
+        domine_surround_reset_orbit(s)
+        _ = Self.run(s, offsets: [0, 2], left: Array(zero.prefix(1)), right: Array(zero.prefix(1)), buffers: [4])
+        #expect(abs(domine_surround_orbit_phase(s) - 0.09) < 1e-5)
+    }
+
     @Test func fullScaleInputNeverExceedsFullScale() {
         let s = Self.make([-20, 35, 100, 180, -120])
         defer { domine_surround_destroy(s) }

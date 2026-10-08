@@ -72,6 +72,7 @@ extension AppModel {
             moveSurroundSpeaker: { [weak self] uid, azimuth, distance in
                 self?.moveSurroundSpeaker(uid: uid, azimuth: Float(azimuth), distance: Float(distance))
             },
+            heardOrbitPhase: { [weak self] in self?.engine.heardOrbitPhase() },
             resetSurroundOrbit: { [weak self] in self?.resetSurroundOrbit() },
             playSurroundTestTone: { [weak self] in self?.playTestTone(surroundUID: $0) },
             applySurroundPreset: { [weak self] in self?.applySurroundPreset($0) },

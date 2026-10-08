@@ -43,6 +43,7 @@ struct DomineSurround {
     _Atomic uint32_t widthBits, rotationBits, orbitRateBits, levelBits;
     _Atomic uint32_t orbitResetReq;
     _Atomic int mono;
+    _Atomic uint32_t orbitPhaseBits;
     // Per speaker.
     _Atomic uint32_t gainBits[NSPK];
     _Atomic uint32_t delaySamples[NSPK];
@@ -278,6 +279,7 @@ DomineSurround *domine_surround_create(double sampleRate, uint32_t maxFrames) {
     atomic_init(&s->levelBits, f2u(SURROUND_LEVEL_DEFAULT));
     atomic_init(&s->orbitResetReq, 0);
     atomic_init(&s->mono, 0);
+    atomic_init(&s->orbitPhaseBits, f2u(0.0f));
     atomic_init(&s->muted, 0);
     atomic_init(&s->demoStartReq, 0);
     atomic_init(&s->demoWanted, 0);
@@ -366,6 +368,11 @@ void domine_surround_set_orbit_rate(DomineSurround *s, float degreesPerSecond) {
 void domine_surround_set_mono(DomineSurround *s, int on) {
     if (s == NULL) return;
     atomic_store_explicit(&s->mono, on != 0, memory_order_relaxed);
+}
+
+float domine_surround_orbit_phase(DomineSurround *s) {
+    if (s == NULL) return 0.0f;
+    return u2f(atomic_load_explicit(&s->orbitPhaseBits, memory_order_relaxed));
 }
 
 void domine_surround_reset_orbit(DomineSurround *s) {
@@ -546,6 +553,7 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
     const uint32_t resetReq = atomic_load_explicit(&s->orbitResetReq, memory_order_relaxed);
     if (resetReq != s->seenOrbitReset) { s->seenOrbitReset = resetReq; s->orbitPhase = 0.0; }
     if (rate != 0.0f) s->orbitPhase = wrap180(s->orbitPhase + (double)rate * (double)frames / s->sampleRate);
+    atomic_store_explicit(&s->orbitPhaseBits, f2u((float)s->orbitPhase), memory_order_relaxed);
     const double field = (double)rotation + s->orbitPhase;
 
     // Target pan matrix with headroom.

@@ -282,6 +282,27 @@ final class CoreAudioHAL: AudioHAL {
         }
     }
 
+    func setProcessTapExclusions(_ tap: AudioObjectID, excluding processes: [AudioObjectID]) throws(HALError) {
+        var addr = address(kAudioTapPropertyDescription)
+        var size = UInt32(MemoryLayout<Unmanaged<CATapDescription>?>.size)
+        var value: Unmanaged<CATapDescription>?
+        let read = withUnsafeMutablePointer(to: &value) {
+            AudioObjectGetPropertyData(tap, &addr, 0, nil, &size, $0)
+        }
+        try HALError.check(read, "AudioObjectGetPropertyData", selector: addr.mSelector)
+        guard let description = value?.takeRetainedValue() else {
+            throw HALError(kAudioHardwareUnspecifiedError, "AudioObjectGetPropertyData", selector: addr.mSelector)
+        }
+        description.processes = processes
+        var ref: Unmanaged<CATapDescription>? = Unmanaged.passUnretained(description)
+        let write = withExtendedLifetime(description) {
+            withUnsafeMutablePointer(to: &ref) {
+                AudioObjectSetPropertyData(tap, &addr, 0, nil, size, $0)
+            }
+        }
+        try HALError.check(write, "AudioObjectSetPropertyData", selector: addr.mSelector)
+    }
+
     func destroyProcessTap(_ tap: AudioObjectID) throws(HALError) {
         try HALError.check(AudioHardwareDestroyProcessTap(tap), "AudioHardwareDestroyProcessTap")
     }

@@ -15,6 +15,15 @@ struct TapController: Sendable {
         }
     }
 
+    /// Points a running tap at a new exclusion list without rebuilding it.
+    func updateExclusions(of tap: ProcessTap, alsoExcluding excluded: [AudioObjectID]) throws(EngineError) {
+        let own = try EngineError.hal { () throws(HALError) in try hal.ownProcessObject() }
+        guard own != kAudioObjectUnknown else { throw .noOwnProcessObject }
+        try EngineError.hal { () throws(HALError) in
+            try hal.setProcessTapExclusions(tap.id, excluding: [own] + excluded)
+        }
+    }
+
     /// A muting tap of one app's processes, mixed into the aggregate beside the global tap.
     func createApp(processes: [AudioObjectID]) throws(EngineError) -> ProcessTap {
         try EngineError.hal { () throws(HALError) in try hal.createProcessTap(including: processes) }

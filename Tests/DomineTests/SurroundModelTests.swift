@@ -266,7 +266,7 @@ final class SurroundModelTests {
         #expect(SurroundPreset.seven.isEnabled(speakerCount: 7))
         #expect(!SurroundPreset.seven.isEnabled(speakerCount: 6))
         #expect(SurroundPreset.ring.azimuths(count: 3) == [-120, 0, 120])
-        #expect(SurroundPreset.allCases.map(\.title) == ["Quad", "5 speaker", "7 speaker", "Ring"])
+        #expect(SurroundPreset.allCases.map(\.title) == ["Front and Back", "Quad", "5 speaker", "7 speaker", "Ring"])
     }
 
     @Test func fieldControlsClampPersistAndReachTheEngine() {

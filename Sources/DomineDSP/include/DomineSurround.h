@@ -87,6 +87,9 @@ void domine_surround_set_rotation(DomineSurround *s, float degrees);
 /// phase to 0 at the next process call.
 void domine_surround_set_orbit_rate(DomineSurround *s, float degreesPerSecond);
 void domine_surround_reset_orbit(DomineSurround *s);
+/// The orbit phase in degrees (-180...180] after the last process call, so
+/// the UI can draw the field where the audio has it. 0 before any call.
+float domine_surround_orbit_phase(DomineSurround *s);
 /// Mono: L and R are both replaced by 0.5 * L + 0.5 * R before panning and
 /// the spatial upmixer, so every speaker plays the whole mix. Default off.
 void domine_surround_set_mono(DomineSurround *s, int on);

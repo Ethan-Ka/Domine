@@ -242,15 +242,30 @@ struct EngineFormatTests {
         #expect(chain.conversions == ["Device B (48000 Hz to 44100 Hz)"])
     }
 
-    @Test func formatChangeWhileRunningRebuilds() async {
+    @Test func defaultOutputMoveAtTheSameRateKeepsPlaying() async {
         await start()
+        let before = hal.ops.count
+        hal.setDefault(uid: Self.gripA.uid) // default output moved to a Grip, already at 48 kHz
+        #expect(await engine.checkFormat() == false)
+        #expect(engine.state == .running)
+        // No new tap, aggregate, or stop.
+        #expect(hal.ops.count == before)
+        // The previous default output got its own rate back.
+        #expect(hal.sampleRate(uid: Self.speakers.uid) == 44_100)
+        #expect(await engine.checkFormat() == false)
+    }
+
+    @Test func formatChangeWhileRunningRebuilds() async {
+        let dac = FakeHAL.Device(uid: "USB-DAC", name: "DAC", transportType: kAudioDeviceTransportTypeUSB,
+                                 sampleRate: 44_100, availableSampleRates: [44_100...44_100])
+        await start()
+        hal.add(dac)
         let tapsBefore = hal.ops.filter { if case .createTap = $0 { true } else { false } }.count
-        hal.setDefault(uid: Self.gripA.uid) // default output moved to a Grip
+        hal.setDefault(uid: dac.uid) // the tap now delivers 44.1 kHz
         #expect(await engine.checkFormat())
         #expect(engine.state == .running)
         let tapsAfter = hal.ops.filter { if case .createTap = $0 { true } else { false } }.count
         #expect(tapsAfter == tapsBefore + 1)
-        // The previous default output got its own rate back.
         #expect(hal.sampleRate(uid: Self.speakers.uid) == 44_100)
         // Nothing changed since: no further rebuild.
         #expect(await engine.checkFormat() == false)

@@ -755,6 +755,21 @@ final class Engine {
             formatRebuilds = 0
             return false
         }
+        // Only the default output moved (excluded apps switch it, SPEC 3b)
+        // and it already runs at the tap's rate: nothing the tap delivers
+        // changed, so keep playing instead of rebuilding.
+        if !formatChanged, let rate = defaultOutputRate(), rate == format.mSampleRate {
+            if let restore = resources.defaultRateRestore, restore.uid != defaultUID {
+                restoreDefaultOutputRate()
+                resources.defaultRateRestore = nil
+            }
+            resources.defaultOutputUID = defaultUID
+            if let id = try? hal.defaultOutputDevice(), id != kAudioObjectUnknown {
+                watch([.nominalSampleRate(id)]) { [weak self] in self?.scheduleFormatCheck() }
+            }
+            Self.log.info("Default output is now \(defaultUID ?? "none", privacy: .public) at the tap's rate; no rebuild")
+            return false
+        }
         guard formatRebuilds < Self.maxFormatRebuilds else {
             Self.log.error("Tap format keeps changing; not rebuilding again")
             return false
@@ -799,12 +814,22 @@ final class Engine {
     }
 
     /// Runs `checkSpeakers` now, or again after the check in progress.
-    /// Applies a new set of excluded processes (SPEC 3b). Rebuilds the tap
-    /// only when the set changed and the engine is routing; otherwise the
-    /// set is used by the next build.
+    /// Applies a new set of excluded processes (SPEC 3b). While routing, the
+    /// running tap takes the new list in place, so audio keeps playing; only
+    /// if that fails is the tap rebuilt. Otherwise the set is used by the
+    /// next build.
     func setExcludedProcesses(_ processes: [AudioObjectID]) async {
         guard processes != excludedProcesses else { return }
         excludedProcesses = processes
+        if state.isRouting, let tap = resources.tap {
+            do {
+                try taps.updateExclusions(of: tap, alsoExcluding: globalExclusions)
+                Self.log.info("Excluded processes changed to \(processes.count, privacy: .public); tap updated in place")
+                return
+            } catch {
+                Self.log.error("Could not update the tap in place: \(error.description, privacy: .public); rebuilding")
+            }
+        }
         if state.isRouting, let route = surroundRoute {
             await rebuildSurround(uids: route, ids: resources.surroundIDs)
             return
@@ -1047,6 +1072,34 @@ final class Engine {
         }
         guard state.isRouting, let kernel = resources.kernel else { return (0, 0) }
         return (domine_kernel_peak(kernel, 0), domine_kernel_peak(kernel, 1))
+    }
+
+    /// The orbit phase in degrees as it is heard: the kernel's phase moved
+    /// back by the time its output takes to reach the ears (each speaker's
+    /// delay plus its reported latency, the longest of them). nil unless a
+    /// surround kernel is routing.
+    func heardOrbitPhase() -> Double? {
+        guard state.isRouting, let surround = resources.surround, surroundRoute != nil else { return nil }
+        let phase = Double(domine_surround_orbit_phase(surround))
+        guard orbitRate != 0, !demoRequested, !stereoDemo else { return phase }
+        return phase - Double(orbitRate) * orbitOutputDelaySeconds()
+    }
+
+    @ObservationIgnored private var orbitDelayCache: (key: [String], delaysMs: [Float], seconds: Double)?
+
+    /// Read once per route and delay set; latency reads go to the HAL.
+    private func orbitOutputDelaySeconds() -> Double {
+        let uids = resources.surroundUIDs
+        let delays = pushedSurround?.delaysMs ?? []
+        if let cache = orbitDelayCache, cache.key == uids, cache.delaysMs == delays { return cache.seconds }
+        var longest = 0.0
+        for (index, uid) in uids.enumerated() where index < resources.surroundPresent.count && resources.surroundPresent[index] {
+            let delay = index < delays.count ? Double(delays[index]) : 0
+            longest = max(longest, delay + (reportedLatencyMs(uid: uid) ?? 0))
+        }
+        let seconds = longest / 1000
+        orbitDelayCache = (uids, delays, seconds)
+        return seconds
     }
 
     /// Total output latency the device reports, in ms at its nominal rate.

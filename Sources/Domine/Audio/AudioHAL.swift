@@ -78,6 +78,10 @@ protocol AudioHAL: AnyObject, Sendable {
     func createProcessTap(excluding processes: [AudioObjectID], muted: Bool) throws(HALError) -> ProcessTap
     /// A private stereo muting tap of just `processes` (per-app volume).
     func createProcessTap(including processes: [AudioObjectID]) throws(HALError) -> ProcessTap
+    /// Changes which processes a global tap leaves out, in place
+    /// (kAudioTapPropertyDescription). The tap keeps its ID and UID, so the
+    /// aggregate built on it keeps playing.
+    func setProcessTapExclusions(_ tap: AudioObjectID, excluding processes: [AudioObjectID]) throws(HALError)
     func destroyProcessTap(_ tap: AudioObjectID) throws(HALError)
     func tapFormat(of tap: AudioObjectID) throws(HALError) -> AudioStreamBasicDescription
 

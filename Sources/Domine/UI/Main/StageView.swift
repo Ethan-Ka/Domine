@@ -95,7 +95,7 @@ struct StageView: View {
 
         // The demo plays with rotation and orbit off, and draws its own marker.
         if !state.demo.isPlaying {
-            SoundFieldView(controls: state.surround, layout: layout)
+            SoundFieldView(controls: state.surround, layout: layout, heardPhase: actions.heardOrbitPhase)
         }
 
         Text("FRONT")
