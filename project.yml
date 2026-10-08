@@ -22,6 +22,8 @@ targets:
     platform: macOS
     sources:
       - Sources/Domine
+      - path: scripts/uninstall.sh
+        buildPhase: resources
     dependencies:
       - target: DomineDSP
       - sdk: IOBluetooth.framework

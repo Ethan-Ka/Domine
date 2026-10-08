@@ -7,6 +7,7 @@ struct UpdateCommands: Commands {
     var body: some Commands {
         CommandGroup(after: .appInfo) {
             Button("Check for Updates…") { checker.checkManually() }
+            Button("Uninstall Domine…") { UninstallPrompt.run() }
         }
     }
 }
