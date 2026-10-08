@@ -585,12 +585,21 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
     if (nsrc > 2 && level != 1.0f)
         for (int src = 2; src < nsrc; src++)
             for (uint32_t k = 0; k < n; k++) gT[src][k] *= level;
+    // Headroom (13.3): one scale for the whole matrix, from the loudest
+    // speaker's sum. Scaling each speaker by its own sum would leave quiet
+    // speakers untouched while louder ones drop, so with two speakers front
+    // and back the rear kept the L/R spill at full gain and ambience could
+    // barely rise above it.
+    float worst = 0.0f;
     for (uint32_t k = 0; k < n; k++) {
         float sum = 0.0f;
         for (int src = 0; src < nsrc; src++) sum += fabsf(gT[src][k]);
-        if (sum > 1.0f) {
-            for (int src = 0; src < nsrc; src++) gT[src][k] /= sum;
-        }
+        if (sum > worst) worst = sum;
+    }
+    if (worst > 1.0f) {
+        const float scale = 1.0f / worst;
+        for (int src = 0; src < nsrc; src++)
+            for (uint32_t k = 0; k < n; k++) gT[src][k] *= scale;
     }
     if (!s->matrixInit) { memcpy(s->gPrev, gT, sizeof gT); s->matrixInit = 1; }
     float gStep[NPROG][NSPK];
