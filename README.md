@@ -24,9 +24,23 @@ macOS can combine devices into a Multi-Output Device, but then every speaker pla
 Domine captures system audio with a Core Audio process tap, sends it to a private aggregate device, and writes left to one speaker and right to the other. 
 The aggregate corrects clock drift between the two speakers, and a delay slider (1 ms steps) lines up their Bluetooth latency.
 
-## Status: v0.1.0
+## Status: v0.2.0
 
 Tested daily on a MacBook Pro with two JBL Grips.
+
+**New in 0.2.0**
+- Surround mode replaces Quad. Use 2 to 16 speakers, drag each one to where it stands on a top-down stage, or pick a preset (Front and Back, Quad, 5 speaker, 7 speaker, Ring). Quad setups carry over.
+- Two speakers work in Surround too: put one in front and one behind, and the Surround slider sends the room sound to the back one.
+- Width, Surround, Orbit and Rotation sliders, drawn on the stage so you can see what each one does. The orbit drawing follows the audio.
+- Mono in the Sound sheet for Surround, off by default.
+- Test Speakers chimes each speaker in turn. Test L and Test R stay in Stereo.
+- Play Demo: a short showcase that moves sound around every speaker.
+- Auto-calibrate in Surround measures the speakers in pairs around the room.
+- Saved rooms: store a speaker setup and switch back to it from the window or the menu bar.
+- Per-app volume and exclude from the menu bar's list of playing apps.
+- Starting an excluded app no longer cuts the sound for a moment.
+- Reopening the window never starts a second engine.
+- Licensed under the GNU AGPL 3.0.
 
 **Works**
 - Left to one speaker, right to the other, each speaker getting its side on both channels.
@@ -35,18 +49,14 @@ Tested daily on a MacBook Pro with two JBL Grips.
 - Auto-calibrate: the built-in microphone hears both speakers and sets the delay between them. Manual delay and balance in Sync & Balance.
 - One speaker drops out: the other plays both sides until it returns. Sleep and wake are handled.
 - Sound sheet: presets, 5-band EQ, bass enhancer, compressor, per speaker or linked.
-- Quad mode for four speakers, with rear mirror or matrix and rear effects.
 - Menu bar panel, background playback with the window closed, app exclusions for calls.
 - Update check against GitHub Releases.
-
-**In progress**
-- Spatial upmix for quad, per-app volume, saved room setups.
 
 This build is signed for development, not notarized. Other Macs need right-click, Open the first time.
 
 ## Install
 
-Download `Domine-0.1.0.pkg` from [Releases](https://github.com/Ethan-Ka/Domine/releases) and run it. It installs the app in Applications and the audio driver, then restarts macOS audio for a few seconds. To update, run the newer installer. To remove everything, run `scripts/uninstall.sh`.
+Download `Domine-0.2.0.pkg` from [Releases](https://github.com/Ethan-Ka/Domine/releases) and run it. It installs the app in Applications and the audio driver, then restarts macOS audio for a few seconds. To update, run the newer installer. To remove everything, run `scripts/uninstall.sh`.
 
 ## Requirements
 
