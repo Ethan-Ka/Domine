@@ -25,6 +25,7 @@ Domine is a small macOS windowed app that splits system stereo audio across two 
 - Surround mode: 3 to 16 speakers placed anywhere around the listener, positions dragged on a top-down stage, sound panned between them like a surround system (section 13). Stereo mode stays as it is.
 - A built-in showcase demo, "Play Demo", that moves bass and kicks around the room so the user hears and feels each speaker, the left/right split, and a full orbit (section 14).
 - A Linux port on PipeWire with the same routing idea, the same render kernel, and the same stage (section 15).
+- Speaker care and extras: battery levels, automatic reconnect, keep-alive tone, hints, crossfeed, night mode, delay nudge, Now Playing, rooms export and import, and diagnostics (section 16).
 
 ### Non-goals (v1)
 - Per-app routing (only system-wide audio).
@@ -356,8 +357,8 @@ States: `idle`, `starting`, `running`, `degraded(reason)`, `stopping`, `error(me
 - **Two Bluetooth audio links at once.** macOS can hold several A2DP connections, but bandwidth is shared with Wi-Fi on 2.4 GHz and with other Bluetooth devices. Expect occasional dropouts on some Macs. Document this; do not try to fix it in software.
 - **Headset profile switch.** If any app opens a Bluetooth speaker's microphone, the speaker drops to the low-quality hands-free profile. Domine must never use a Bluetooth device as an input.
 - **Reported latency is unreliable** for Bluetooth. Manual trim is the real fix.
-- **Grip stereo pairing left on.** If the Grips are still stereo-paired in the JBL app, only one appears as a Mac output. Detect "only one device named JBL Grip is present" and show a hint to unpair them in the JBL Portable app.
-- **Multipoint steal.** A phone connected to one Grip can interrupt it. The Mac sees this as the device going silent or dropping; show the side that stopped.
+- **Grip stereo pairing left on.** If the Grips are still stereo-paired in the JBL app, only one appears as a Mac output. Detect "only one device named JBL Grip is present" and show a hint to unpair them in the JBL Portable app (section 16.4).
+- **Multipoint steal.** A phone connected to one Grip can interrupt it. The Mac sees this as the device going silent or dropping; show the side that stopped (section 16.4).
 - **Inactivity power-off.** A Grip that powers down mid-session disappears from Core Audio. Handled by the rebuild logic; the menu shows "Left speaker off" rather than a generic error.
 - **More than two Bluetooth links.** Surround mode can hold up to 16 outputs, but every extra A2DP link shares the same radio. Past four Bluetooth speakers dropouts are likely on most Macs; the UI warns (section 13.6) but does not block. Wired, USB and HDMI outputs do not count toward this.
 - **Tap edge cases.** Some apps with exclusive or hog-mode output may bypass the tap. Log and document rather than work around.
@@ -617,3 +618,51 @@ JBL Grips roll off below about 70 to 80 Hz (section 1a: 70 Hz at -6 dB, one smal
 - `cd linux && make` builds `./domine`.
 - `cd linux && make check` builds and runs the headless engine self-test (no audio hardware needed).
 - The macOS build is not affected; `linux/` is not part of `project.yml`.
+
+## 16. Speaker care and extras
+
+### 16.1 Battery
+- Read through `IOBluetoothDevice` using the KVC keys `batteryPercentSingle` and `batteryPercentCombined`, every 60 s and whenever the device list changes.
+- The Bluetooth address comes from the Core Audio UID (the `BluetoothAddress` part before the suffix).
+- Shown on the card's status line. Red at 15% or less. Hidden when the value is unknown.
+
+### 16.2 Reconnect
+- `SpeakerReconnector` calls `IOBluetoothDevice.openConnection` 5 s after an assigned Bluetooth speaker disappears, then every 30 s, and gives up after 10 minutes.
+- Setting "Reconnect speakers that drop", default on.
+- A disconnected card shows a Reconnect button that tries once immediately.
+
+### 16.3 Keep-alive
+- `domine_kernel_set_keep_alive(enabled)`. After 2 s of output below -80 dBFS, the kernel adds a 15 Hz sine at -60 dBFS. 15 Hz is below the Grip's 70 Hz range, so it is not audible, but it keeps the speaker from powering off.
+- 50 ms fade in. 10 ms fade out when audio returns.
+- Skipped during the test tone, click and chirp, and while muted.
+- Bit-exact when off. Setting "Keep speakers from turning off", default on.
+
+### 16.4 Hints
+- Grip pairing hint: shown when only one "JBL Grip" is present (section 9).
+- Phone takeover hints: in stereo the text is appended to the mono fallback banner. In surround the text names the missing side.
+- Priority when several apply: mono fallback, phone takeover, pairing.
+
+### 16.5 Crossfeed and same sound on both
+- `domine_kernel_set_crossfeed(a)` with a from 0 to 1. Side A output is `A = (1 - a/2)L + (a/2)R`, and side B mirrors it.
+- Changes ramp over 20 ms. Ignored in mono fallback.
+- a = 1 gives the same sound on both speakers, labelled "Same sound on both speakers" in the UI.
+
+### 16.6 Night mode
+- A per-side effects flag. While on, it overrides the compressor (threshold about -30 dB, ratio 6:1, +6 dB makeup, limiter on) and adds the Loudness EQ curve.
+- The user's own compressor and EQ settings are stored unchanged and restored when night mode is turned off.
+
+### 16.7 Delay nudge
+- Buttons -5, -1, +1 and +5 ms in Tuning. Arrow keys nudge by 1 ms, Shift with an arrow by 5 ms.
+- Results are clamped to the current slider range (4).
+
+### 16.8 Now Playing
+- Read through MediaRemote, loaded with `dlopen`.
+- The row is hidden when the framework returns nothing. Recent macOS versions restrict it for third-party apps, so this is expected on some systems.
+
+### 16.9 Rooms export and import
+- Export writes a `.domine-rooms` file, JSON of the form `{"version":1,"rooms":[...]}`.
+- Import adds the rooms. A name that already exists gets " 2", then " 3", and so on.
+
+### 16.10 Diagnostics
+- Copy Report puts a fenced plain text report on the clipboard.
+- Per-speaker dropout counts: sub-device processor overloads and disconnects. Reset Counts clears them.
