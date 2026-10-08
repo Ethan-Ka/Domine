@@ -6,13 +6,10 @@ struct BackgroundMenu: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
 
-    @State private var nowPlaying = NowPlayingModel(source: MediaRemoteNowPlaying())
-
     var body: some View {
         StatusMenu(
             state: Binding(get: { model.statusMenuState }, set: { model.applyStatusMenuEdit($0) }),
-            actions: actions,
-            nowPlaying: nowPlaying)
+            actions: actions)
             .onAppear {
                 model.presentMainWindow = { [openWindow] in openWindow(id: "main") }
             }

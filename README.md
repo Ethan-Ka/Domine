@@ -24,9 +24,13 @@ macOS can combine devices into a Multi-Output Device, but then every speaker pla
 Domine captures system audio with a Core Audio process tap, sends it to a private aggregate device, and writes left to one speaker and right to the other. 
 The aggregate corrects clock drift between the two speakers, and a delay slider (1 ms steps) lines up their Bluetooth latency.
 
-## Status: v0.2.1
+## Status: v0.2.2
 
 Tested daily on a MacBook Pro with two JBL Grips.
+
+**New in 0.2.2**
+- Pause playback if Domine quits while playing: if Domine quits or crashes while routing, music and video players get a pause command, so nothing suddenly plays from the Mac's own speakers. On by default, in Settings > General.
+- The Now Playing row is gone. macOS no longer gives that information to other apps, so it never showed.
 
 **New in 0.2.1**
 - Battery level on the speaker card for speakers that report it to macOS, in red at 15% or less. The JBL Grip does not.
@@ -73,7 +77,7 @@ This build is signed for development, not notarized. Other Macs need right-click
 
 ## Install
 
-Download `Domine-0.2.1.pkg` from [Releases](https://github.com/Ethan-Ka/Domine/releases) and run it. It installs the app in Applications and the audio driver, then restarts macOS audio for a few seconds. To update, run the newer installer. To remove everything (app, driver, settings and permissions), choose "Uninstall Domine…" in the app menu or run `scripts/uninstall.sh`.
+Download `Domine-0.2.2.pkg` from [Releases](https://github.com/Ethan-Ka/Domine/releases) and run it. It installs the app in Applications and the audio driver, then restarts macOS audio for a few seconds. To update, run the newer installer. To remove everything (app, driver, settings and permissions), choose "Uninstall Domine…" in the app menu or run `scripts/uninstall.sh`.
 
 ## Requirements
 

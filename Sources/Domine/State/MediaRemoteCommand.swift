@@ -1,8 +1,7 @@
 import Darwin
 import Foundation
 
-/// MRMediaRemoteSendCommand through dlopen, shared by the Now Playing row
-/// and the pause watchdog. Uses no AppKit, so the watchdog can call it
+/// MRMediaRemoteSendCommand through dlopen, for the pause watchdog. Uses no AppKit, so the watchdog can call it
 /// before any app setup.
 enum MediaRemoteCommand: UInt32 {
     // MRMediaRemoteCommand values.

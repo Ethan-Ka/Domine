@@ -25,7 +25,7 @@ Domine is a small macOS windowed app that splits system stereo audio across two 
 - Surround mode: 3 to 16 speakers placed anywhere around the listener, positions dragged on a top-down stage, sound panned between them like a surround system (section 13). Stereo mode stays as it is.
 - A built-in showcase demo, "Play Demo", that moves bass and kicks around the room so the user hears and feels each speaker, the left/right split, and a full orbit (section 14).
 - A Linux port on PipeWire with the same routing idea, the same render kernel, and the same stage (section 15).
-- Speaker care and extras: battery levels, automatic reconnect, keep-alive tone, hints, crossfeed, night mode, delay nudge, Now Playing, rooms export and import, and diagnostics (section 16).
+- Speaker care and extras: battery levels, automatic reconnect, keep-alive tone, hints, crossfeed, night mode, delay nudge, pause on exit, rooms export and import, and diagnostics (section 16).
 
 ### Non-goals (v1)
 - Per-app routing (only system-wide audio).
@@ -656,8 +656,7 @@ JBL Grips roll off below about 70 to 80 Hz (section 1a: 70 Hz at -6 dB, one smal
 - Results are clamped to the current slider range (section 4).
 
 ### 16.8 Now Playing
-- Read through MediaRemote, loaded with `dlopen`.
-- The row is hidden when the framework returns nothing. Recent macOS versions restrict it for third-party apps, so this is expected on some systems.
+- Removed in 0.2.2. MediaRemote returns no now playing information to third-party apps on current macOS, so the row never appeared. Only sending commands is still used (section 16.11).
 
 ### 16.9 Rooms export and import
 - Export writes a `.domine-rooms` file, JSON of the form `{"version":1,"rooms":[...]}`.
