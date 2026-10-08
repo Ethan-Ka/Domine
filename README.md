@@ -41,6 +41,9 @@ Tested daily on a MacBook Pro with two JBL Grips.
 - Copy Report and per-speaker dropout counts in the debug panel.
 - The stage keeps speakers lined up with the drawing when the window is resized.
 - Surround with one speaker in front and one behind sends the room sound to the back again.
+- "Start routing when speakers connect" waits for every speaker of the current mode, so it works in Surround too.
+- Uninstall Domine… in the app menu removes the app, the audio driver, settings and permissions.
+- About shows the version without a build number.
 
 **New in 0.2.0**
 - Surround mode replaces Quad. Use 2 to 16 speakers, drag each one to where it stands on a top-down stage, or pick a preset (Front and Back, Quad, 5 speaker, 7 speaker, Ring). Quad setups carry over.
