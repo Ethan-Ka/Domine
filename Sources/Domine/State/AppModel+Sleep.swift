@@ -39,7 +39,7 @@ extension AppModel {
         stopRouting()
     }
 
-    /// Restarts routing about 2 s after wake, once both speakers are back.
+    /// Restarts routing about 2 s after wake, once the speakers are back.
     func systemDidWake() {
         guard sleepState.resumeAfterWake else { return }
         sleepState.wakeTask?.cancel()
@@ -47,7 +47,7 @@ extension AppModel {
         state.wakeTask = Task { [weak self] in
             try? await Task.sleep(for: state.wakeDelay)
             var waited = Duration.zero
-            while let self, !Task.isCancelled, !self.bothSelectedSpeakersPresent {
+            while let self, !Task.isCancelled, !self.allSpeakersPresent {
                 guard waited < state.giveUpAfter else { return }
                 try? await Task.sleep(for: state.pollInterval)
                 waited += state.pollInterval

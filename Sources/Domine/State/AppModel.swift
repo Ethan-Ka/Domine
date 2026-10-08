@@ -30,7 +30,10 @@ final class AppModel {
     /// selected speaker disconnects and comes back (SPEC 6a).
     @ObservationIgnored var userTurnedRoutingOff = false
     /// Both selected speakers were present at the last catalog sync.
-    @ObservationIgnored var bothSpeakersWerePresent = false
+    @ObservationIgnored var speakersWerePresent = false
+    /// Which speakers `speakersWerePresent` was about: a new pair, a changed
+    /// surround set or a mode switch is not a speaker connecting.
+    @ObservationIgnored var speakersPresenceKey = ""
     /// The pending auto-start, so tests can wait for it.
     @ObservationIgnored var autoStartTask: Task<Void, Never>?
 
@@ -255,8 +258,8 @@ final class AppModel {
         let grips = catalog.outputs.filter { $0.name == DeviceCatalog.gripName }
         guard grips.count >= 2 else { return }
         setSpeakers(left: grips[0].uid, right: grips[1].uid)
-        // First launch: the pair appearing counts as both speakers connecting.
-        bothSpeakersWerePresent = false
+        // First launch: the pair appearing counts as the speakers connecting.
+        speakersWerePresent = false
     }
 
     /// Selects a pair, saves it, and loads its tuning. A running engine is
@@ -273,7 +276,8 @@ final class AppModel {
         refreshCurrentRoom()
         pairSettings = Self.loadPairSettings(store: store, left: left, right: right)
         // A new pair is not a speaker connecting, so it never auto-starts.
-        bothSpeakersWerePresent = bothSelectedSpeakersPresent
+        speakersWerePresent = allSpeakersPresent
+        speakersPresenceKey = assignedSpeakersKey
         syncVolumeLink()
         applyPairSettingsToEngine()
         if wasActive {
@@ -587,16 +591,40 @@ final class AppModel {
         reconnector.update(missing: Set(assigned.compactMap { $0 }.filter { catalog.device(uid: $0) == nil }))
     }
 
-    /// "Start routing when both speakers connect" (SPEC 6a): starts when both
-    /// selected speakers become present while routing is off. After the user
-    /// turned routing off, it waits until a speaker disconnects and returns.
+    /// Every speaker the current mode routes to: the pair in Stereo, the
+    /// whole set in Surround.
+    var assignedSpeakerUIDs: [String] {
+        routingMode == .surround
+            ? surroundSpeakers.map(\.uid)
+            : [leftUID, rightUID].compactMap { $0 }
+    }
+
+    private var assignedSpeakersKey: String {
+        "\(routingMode):" + assignedSpeakerUIDs.sorted().joined(separator: ",")
+    }
+
+    /// All of the current mode's speakers are connected: both of the pair,
+    /// or every speaker of the surround set (at least the surround minimum).
+    var allSpeakersPresent: Bool {
+        guard routingMode == .surround else { return bothSelectedSpeakersPresent }
+        let uids = Set(assignedSpeakerUIDs)
+        return uids.count >= Self.surroundMinimumSpeakers
+            && uids.allSatisfy { catalog.device(uid: $0) != nil }
+    }
+
+    /// "Start routing when the speakers connect" (SPEC 6a): starts when the
+    /// last of the current mode's speakers becomes present while routing is
+    /// off. After the user turned routing off, it waits until a speaker
+    /// disconnects and returns.
     func autoStartIfSpeakersConnected() {
-        let present = bothSelectedSpeakersPresent
-        let connected = present && !bothSpeakersWerePresent
-        bothSpeakersWerePresent = present
-        if !present, leftUID != nil, rightUID != nil { userTurnedRoutingOff = false }
+        let present = allSpeakersPresent
+        let key = assignedSpeakersKey
+        let connected = present && !speakersWerePresent && key == speakersPresenceKey
+        speakersWerePresent = present
+        speakersPresenceKey = key
+        if !present, !assignedSpeakerUIDs.isEmpty { userTurnedRoutingOff = false }
         guard connected, store.startWhenBothConnect, !userTurnedRoutingOff, !engine.state.isActive else { return }
-        Self.log.info("Both speakers connected; starting routing")
+        Self.log.info("Speakers connected; starting routing")
         autoStartTask = Task { [weak self] in await self?.startRouting() }
     }
 

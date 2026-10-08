@@ -60,6 +60,27 @@ final class RoutingSettingsTests {
         #expect(model.engine.state == .running)
     }
 
+    @Test func surroundWaitsForEverySpeakerOfTheSet() async {
+        let gripC = SurroundModelTests.device(3)
+        hal.add(Self.speakers)
+        hal.add(Self.gripA)
+        hal.add(Self.gripB)
+        hal.add(gripC)
+        model.start()
+        model.setSpeakers(left: Self.gripA.uid, right: Self.gripB.uid)
+        model.setRoutingMode(.surround)
+        model.addSurroundSpeaker(uid: gripC.uid)
+        #expect(model.surroundSpeakers.count == 3)
+        model.generalSettings.startWhenBothConnect = true
+        disconnect(Self.gripB)
+        disconnect(gripC)
+        connect(Self.gripB)
+        #expect(model.autoStartTask == nil)  // gripC is still missing
+        connect(gripC)
+        await waitForAutoStart()
+        #expect(model.engine.state == .running)
+    }
+
     @Test func startsAtLaunchWhenBothAreAlreadyConnected() async {
         model.generalSettings.startWhenBothConnect = true
         model.setSpeakers(left: Self.gripA.uid, right: Self.gripB.uid)  // remembered pair
