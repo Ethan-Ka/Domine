@@ -5,6 +5,7 @@ import SwiftUI
 struct StatusMenu: View {
     @Binding var state: StatusMenuState
     var actions = StatusMenuActions()
+    var nowPlaying: NowPlayingModel?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -24,6 +25,11 @@ struct StatusMenu: View {
             .padding(.vertical, 6)
 
             StatusMenuSeparator()
+
+            if let nowPlaying, nowPlaying.info != nil {
+                NowPlayingRow(model: nowPlaying)
+                StatusMenuSeparator()
+            }
 
             VStack(alignment: .leading, spacing: 0) {
                 speakerButton(state.left, .frontLeft)
@@ -110,6 +116,7 @@ struct StatusMenu: View {
         .buttonStyle(StatusMenuItemStyle())
         .padding(6)
         .frame(width: 300)
+        .task { await nowPlaying?.refresh() }
     }
 
     private var appsSection: some View {
