@@ -66,11 +66,124 @@ final class VolumeOffsetTests {
         link.onExternalChange = { reported.append($0) }
         link.set(0.5)
         clock = clock.advanced(by: SpeakerVolumeLink.suppression)
-        hal.pressVolume(uid: Self.gripB.uid, to: 0.8)
-        let master: Float = 0.8 - 6 / SpeakerVolumeLink.approximateSpanDb
+        hal.pressVolume(uid: Self.gripB.uid, to: 0.7)
+        let master: Float = 0.7 - 6 / SpeakerVolumeLink.approximateSpanDb
         #expect(close(reported.first, master))
         #expect(close(volume(Self.gripA.uid), master))
-        #expect(close(volume(Self.gripB.uid), 0.8))
+        #expect(close(volume(Self.gripB.uid), 0.7))
+    }
+
+    // MARK: Safety: the volume never jumps up
+
+    @Test(arguments: [FakeHAL.DecibelFault.minusInfinityAtZero, .nanBetween, .nanScalar])
+    func brokenDecibelCurveNeverYieldsFullScale(_ fault: FakeHAL.DecibelFault) {
+        var a = Self.device(Self.gripA, volume: 0.5, decibels: -60...0)
+        var b = Self.device(Self.gripB, volume: 0.5, decibels: -60...0)
+        a.decibelFault = fault
+        b.decibelFault = fault
+        let link = SpeakerVolumeLink(hal: hal, now: { [unowned self] in self.clock })
+        let idA = hal.add(a)
+        let idB = hal.add(b)
+        link.setOffsets([Self.gripB.uid: 12])
+        link.attach([(Self.gripA.uid, idA), (Self.gripB.uid, idB)])
+        #expect(link.volume.map(\.isFinite) == true)
+        link.set(0.5)
+        let hardware = volume(Self.gripB.uid)
+        #expect(hardware.isFinite)
+        #expect(hardware < 1)
+        // A rejected curve uses the capped approximate curve; a curve that
+        // goes bad mid-way falls back to the offset-free level.
+        #expect(hardware <= 0.5 + SpeakerVolumeLink.approximateMaxBoost + 0.0001)
+        #expect(!link.isAtMaximum(uid: Self.gripB.uid))
+    }
+
+    @Test func implausibleDecibelSpanFallsBackToTheApproximateCurve() {
+        let link = makeLink(offset: 6, decibels: -200...0)
+        link.set(0.5)
+        #expect(close(volume(Self.gripB.uid), 0.5 + 6 / SpeakerVolumeLink.approximateSpanDb))
+    }
+
+    @Test func approximateCurveLimitsTheOffsetEffect() {
+        let link = makeLink(offset: 12)
+        link.set(0.5)
+        #expect(close(volume(Self.gripB.uid), 0.5 + SpeakerVolumeLink.approximateMaxBoost))
+        link.setOffsets([Self.gripB.uid: -12])
+        #expect(close(volume(Self.gripB.uid), 0.5 - SpeakerVolumeLink.approximateMaxCut))
+    }
+
+    @Test func lateRoundedUpReadBacksDoNotRatchetTheMasterUp() {
+        let step: Float = 1.0 / 16
+        var a = Self.device(Self.gripA, volume: 0.5, decibels: -60...0)
+        var b = Self.device(Self.gripB, volume: 0.5, decibels: -60...0)
+        for index in [0, 1] {
+            var device = index == 0 ? a : b
+            device.volumeStep = step
+            device.volumeRoundsUp = true
+            if index == 0 { a = device } else { b = device }
+        }
+        let link = SpeakerVolumeLink(hal: hal, now: { [unowned self] in self.clock })
+        let idA = hal.add(a)
+        let idB = hal.add(b)
+        link.setOffsets([Self.gripB.uid: 6])
+        link.attach([(Self.gripA.uid, idA), (Self.gripB.uid, idB)])
+        var reported: [Float] = []
+        link.onExternalChange = { reported.append($0) }
+        link.set(0.5)
+        // B was asked for 0.6 (-24 dB) and took 0.625.
+        #expect(close(volume(Self.gripB.uid), 0.625))
+        for _ in 0..<20 {
+            clock = clock.advanced(by: SpeakerVolumeLink.suppression)
+            for uid in [Self.gripB.uid, Self.gripA.uid] {
+                hal.pressVolume(uid: uid, to: volume(uid))
+            }
+        }
+        #expect((link.volume ?? 1) <= 0.5 + step + 0.0001)
+        #expect(reported.allSatisfy { $0 <= 0.5 + step + 0.0001 })
+        #expect(volume(Self.gripB.uid) <= 0.625 + 0.0001)
+        #expect(volume(Self.gripA.uid) <= 0.5 + step + 0.0001)
+    }
+
+    @Test func oneAutomaticWriteRaisesAtMostTheCap() {
+        let link = makeLink(a: 0.3, b: 0.3, offset: 0, decibels: -60...0)
+        // +12 dB from 0.3 (-42 dB) asks for 0.5; one write may only go 0.125 up.
+        link.setOffsets([Self.gripB.uid: 12])
+        #expect(close(volume(Self.gripB.uid), 0.3 + link.maxRise))
+        #expect(close(volume(Self.gripA.uid), 0.3))
+    }
+
+    @Test func externalPressRaisesTheMasterByAtMostThePress() {
+        let link = makeLink(offset: 6, decibels: -60...0)
+        var reported: [Float] = []
+        link.onExternalChange = { reported.append($0) }
+        link.set(0.5)
+        clock = clock.advanced(by: SpeakerVolumeLink.suppression)
+        let before = volume(Self.gripB.uid)
+        hal.pressVolume(uid: Self.gripB.uid, to: before + 1.0 / 16)
+        // On a linear dB curve a +1/16 press is +1/16 in master terms too.
+        #expect(reported.count == 1)
+        #expect((reported.first ?? 1) <= 0.5 + 1.0 / 16 + 0.0001)
+        #expect((reported.first ?? 0) > 0.5)
+        #expect(volume(Self.gripA.uid) <= 0.5 + 1.0 / 16 + 0.0001)
+    }
+
+    @Test func relinkNeverRaisesASpeaker() {
+        for decibels in [nil, -60...0] as [ClosedRange<Float>?] {
+            for offset: Float in [-12, -6, 6, 12] {
+                for a: Float in [0.05, 0.5, 0.95] {
+                    for b: Float in [0.05, 0.5, 0.95] {
+                        let hal = FakeHAL()
+                        let link = SpeakerVolumeLink(hal: hal, now: { [unowned self] in self.clock })
+                        let idA = hal.add(Self.device(Self.gripA, volume: a, decibels: decibels))
+                        let idB = hal.add(Self.device(Self.gripB, volume: b, decibels: decibels))
+                        link.setOffsets([Self.gripB.uid: offset])
+                        link.attach([(Self.gripA.uid, idA), (Self.gripB.uid, idB)])
+                        link.relink()
+                        #expect((hal.volumes(uid: Self.gripA.uid)[1] ?? 1) <= a + 0.0001)
+                        #expect((hal.volumes(uid: Self.gripB.uid)[1] ?? 1) <= b + 0.0001)
+                    }
+                }
+            }
+        }
     }
 
     // MARK: Attach

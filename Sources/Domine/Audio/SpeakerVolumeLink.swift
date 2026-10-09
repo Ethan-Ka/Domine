@@ -19,6 +19,14 @@ import os
 /// curve when the device has none. Readings are compared and mirrored as
 /// master-equivalent levels (hardware minus offset).
 ///
+/// Safety (the volume must never jump up on its own): every value from a
+/// dB curve is checked for being finite, and a bad curve falls back to the
+/// offset-free level, never to full scale. A write Domine makes on its own
+/// (relink, offset change, copying a change made on a speaker, probing for
+/// the hardware step) raises a speaker by at most `maxRise` above its
+/// current reading; relink never raises one at all. A read-back within one
+/// hardware step of what Domine last wrote is quantization, not a press.
+///
 /// A speaker without a settable volume is left out; the caller applies the
 /// master volume (and a negative offset) to it as a kernel gain instead.
 @MainActor
@@ -33,6 +41,24 @@ final class SpeakerVolumeLink {
     /// Without the device's own dB curve, the scalar is taken as linear in
     /// dB over this span (scalar 1 is the top).
     nonisolated static let approximateSpanDb: Float = 48
+    /// On the approximate curve the offset moves the scalar by at most this
+    /// much down and up.
+    nonisolated static let approximateMaxCut: Float = 0.25
+    nonisolated static let approximateMaxBoost: Float = 0.125
+    /// Assumed hardware step when none was learned (AVRCP has 16 or so).
+    nonisolated static let defaultStep: Float = 1.0 / 16
+    /// A device dB curve is trusted only when its span is in this range.
+    nonisolated static let curveSpanDb: ClosedRange<Float> = 6...120
+
+    /// Who asked for a write, which decides how far it may raise a speaker.
+    private enum WriteKind {
+        /// A master change the user asked for: up to master plus offset.
+        case user
+        /// Domine's own follow-up: at most `maxRise` above the reading.
+        case automatic
+        /// Linking on attach: never above the reading.
+        case relink
+    }
 
     private struct Speaker {
         let uid: String
@@ -53,6 +79,9 @@ final class SpeakerVolumeLink {
     private(set) var offsets: [String: Float] = [:]
     /// Speakers at full hardware volume that still cannot reach their offset.
     private(set) var atMaximum: Set<String> = []
+    /// The hardware value Domine last wrote to each speaker (or last saw
+    /// it changed to from outside), by UID.
+    private var lastHardware: [String: Float] = [:]
 
     /// Called with the new volume after a speaker changed on its own and the
     /// change was copied to the others.
@@ -86,7 +115,7 @@ final class SpeakerVolumeLink {
         }
         guard cleaned != offsets else { return }
         offsets = cleaned
-        if let volume { write(volume) }
+        if let volume { write(volume, kind: .automatic) }
     }
 
     /// Reads the speakers, links them to the lowest volume, and starts
@@ -127,7 +156,7 @@ final class SpeakerVolumeLink {
         if differs {
             let text = readings.map { "\($0.speaker.uid) \($0.hardware)" }.joined(separator: ", ")
             Self.log.info("Speaker volumes differ (\(text, privacy: .public)); linking them to \(lowest)")
-            write(lowest)
+            write(lowest, kind: .relink)
         } else {
             updateAtMaximum(lowest)
         }
@@ -137,8 +166,9 @@ final class SpeakerVolumeLink {
 
     /// Sets every attached speaker to `volume`.
     func set(_ volume: Float) {
+        guard volume.isFinite else { return }
         let clamped = min(max(volume, 0), 1)
-        write(clamped)
+        write(clamped, kind: .user)
         self.volume = clamped
     }
 
@@ -150,6 +180,7 @@ final class SpeakerVolumeLink {
     /// the difference with kernel gain. Learns the step size from read-backs.
     @discardableResult
     func setAtOrAbove(_ volume: Float) -> Float? {
+        guard volume.isFinite else { return self.volume }
         let target = min(max(volume, 0), 1)
         let slack: Float = 0.0001
         if let current = self.volume, let step,
@@ -159,8 +190,9 @@ final class SpeakerVolumeLink {
         var attempt = target
         if let step { attempt = min(1, (target / step - 0.001).rounded(.up) * step) }
         var last: Float?
-        for _ in 0..<20 {
-            write(attempt)
+        for attemptIndex in 0..<20 {
+            // The first write is the user's request; probing past it is Domine's own.
+            write(attempt, kind: attemptIndex == 0 ? .user : .automatic)
             // The speaker with the lowest offset is the least likely to be clamped.
             guard let speaker = speakers.min(by: { offset($0.uid) < offset($1.uid) }),
                   let reading = read(speaker) else { return self.volume }
@@ -179,6 +211,7 @@ final class SpeakerVolumeLink {
             speakers[index].listeners.forEach { $0.cancel() }
         }
         speakers = []
+        lastHardware = [:]
         attachedDevices = [:]
         atMaximum = []
         volume = nil
@@ -205,14 +238,39 @@ final class SpeakerVolumeLink {
     private func volumeChanged(uid: String) {
         guard let speaker = speakers.first(where: { $0.uid == uid }) else { return }
         if let until = speaker.suppressedUntil, now() < until { return }
-        guard let reading = read(speaker) else { return }
+        guard let reading = read(speaker), reading.isFinite else { return }
+        let previous = lastHardware[uid] ?? volume.map { hardware(forMaster: $0, speaker).value }
         if let volume, abs(reading - hardware(forMaster: volume, speaker).value) <= Self.tolerance { return }
-        let value = masterEquivalent(of: reading, speaker)
+        // A late read-back of Domine's own write, rounded to the hardware
+        // step, is not a press; taking it as one would ratchet the master up.
+        if let written = lastHardware[uid], abs(reading - written) < quantum - Self.exactTolerance {
+            // Remember what the speaker actually took, so a later press is measured from it.
+            lastHardware[uid] = reading
+            return
+        }
+        var value = masterEquivalent(of: reading, speaker)
+        // A press raises the master by at most what the speaker itself moved.
+        if let volume, value > volume {
+            let moved = previous.map { value - masterEquivalent(of: $0, speaker) } ?? 0
+            let limited = volume + max(0, min(moved, value - volume))
+            if limited < value {
+                Self.log.info("\(uid, privacy: .public) moved less than its master level suggests; raising the master to \(limited), not \(value)")
+            }
+            value = limited
+        }
+        guard value.isFinite else { return }
         Self.log.info("\(uid, privacy: .public) changed to \(reading) outside Domine; master is now \(value)")
-        write(value, except: uid)
+        lastHardware[uid] = reading
+        write(value, except: uid, kind: .automatic)
         volume = value
         onExternalChange?(value)
     }
+
+    /// One hardware volume step: learned, or the AVRCP default.
+    private var quantum: Float { step ?? Self.defaultStep }
+
+    /// The most a write Domine makes on its own may raise a speaker.
+    var maxRise: Float { 2 * quantum }
 
     // MARK: Offsets
 
@@ -222,29 +280,42 @@ final class SpeakerVolumeLink {
     /// and whether full scale is not enough for it.
     private func hardware(forMaster master: Float, _ speaker: Speaker) -> (value: Float, atMaximum: Bool) {
         let offset = offset(speaker.uid)
+        guard master.isFinite else { return (0, false) }
         guard offset != 0, master > 0 else { return (master, false) }
         if let curve = curve(speaker), let db = try? curve.toDb(master) {
+            // Any non-finite step falls back to the offset-free level, never to 1.
             let target = db + offset
+            guard db.isFinite, target.isFinite else { return (master, false) }
             if target >= curve.maxDb { return (1, target > curve.maxDb + 0.01) }
             if target <= curve.minDb { return (0, false) }
-            if let scalar = try? curve.toScalar(target) { return (min(max(scalar, 0), 1), false) }
+            guard let scalar = try? curve.toScalar(target), scalar.isFinite else { return (master, false) }
+            return (min(max(scalar, 0), 1), false)
         }
-        let scalar = master + offset / Self.approximateSpanDb
+        let scalar = master + Self.approximateDelta(offset)
         return (min(max(scalar, 0), 1), scalar > 1 + Self.exactTolerance)
+    }
+
+    /// The scalar shift of an offset on the approximate curve, kept to
+    /// `-approximateMaxCut...approximateMaxBoost`.
+    private static func approximateDelta(_ offset: Float) -> Float {
+        min(max(offset / approximateSpanDb, -approximateMaxCut), approximateMaxBoost)
     }
 
     /// The master level a hardware reading stands for: the reading minus
     /// the speaker's offset.
     private func masterEquivalent(of hardware: Float, _ speaker: Speaker) -> Float {
         let offset = offset(speaker.uid)
+        guard hardware.isFinite else { return 0 }
         guard offset != 0, hardware > 0 else { return hardware }
         if let curve = curve(speaker), let db = try? curve.toDb(hardware) {
             let target = db - offset
+            guard db.isFinite, target.isFinite else { return hardware }
             if target <= curve.minDb { return 0 }
             if target >= curve.maxDb { return 1 }
-            if let scalar = try? curve.toScalar(target) { return min(max(scalar, 0), 1) }
+            guard let scalar = try? curve.toScalar(target), scalar.isFinite else { return hardware }
+            return min(max(scalar, 0), 1)
         }
-        return min(max(hardware - offset / Self.approximateSpanDb, 0), 1)
+        return min(max(hardware - Self.approximateDelta(offset), 0), 1)
     }
 
     private struct Curve {
@@ -265,7 +336,8 @@ final class SpeakerVolumeLink {
         let toScalar: (Float) throws(HALError) -> Float = { db throws(HALError) in
             try hal.volumeScalar(fromDecibels: db, of: id, element: element)
         }
-        guard let minDb = try? toDb(0), let maxDb = try? toDb(1), maxDb > minDb else { return nil }
+        guard let minDb = try? toDb(0), let maxDb = try? toDb(1),
+              minDb.isFinite, maxDb.isFinite, Self.curveSpanDb.contains(maxDb - minDb) else { return nil }
         return Curve(minDb: minDb, maxDb: maxDb, toDb: toDb, toScalar: toScalar)
     }
 
@@ -288,10 +360,27 @@ final class SpeakerVolumeLink {
     }
 
     /// Sets every speaker (but `skipped`) to the master `value` moved by its offset.
-    private func write(_ value: Float, except skipped: String? = nil) {
+    /// `kind` limits how far a speaker may go up (see `WriteKind`).
+    private func write(_ value: Float, except skipped: String? = nil, kind: WriteKind) {
+        guard value.isFinite else { return }
         updateAtMaximum(value)
         for index in speakers.indices where speakers[index].uid != skipped {
-            let target = hardware(forMaster: value, speakers[index]).value
+            let uid = speakers[index].uid
+            var target = hardware(forMaster: value, speakers[index]).value
+            guard target.isFinite else { continue }
+            target = min(max(target, 0), 1)
+            if kind != .user {
+                guard let current = read(speakers[index]) ?? lastHardware[uid], current.isFinite else {
+                    Self.log.error("Not setting volume of \(uid, privacy: .public): its current volume is unknown")
+                    continue
+                }
+                let ceiling = kind == .relink ? current : min(1, current + maxRise)
+                if target > ceiling {
+                    Self.log.info("Limiting volume of \(uid, privacy: .public) to \(ceiling) (asked \(target), reading \(current))")
+                    target = ceiling
+                }
+            }
+            lastHardware[uid] = target
             // Set before writing: the HAL may notify while the write is in progress.
             speakers[index].suppressedUntil = now().advanced(by: Self.suppression)
             let speaker = speakers[index]
