@@ -61,12 +61,14 @@ struct CalibrationChirpTests {
         #expect(Array(b[Self.fade...]) == Array(Self.template(rising: false).prefix(300)))
     }
 
-    @Test func gainsApply() {
+    /// Chirps play at full amplitude whatever the gains, so a quiet trim
+    /// never makes a speaker too soft to measure (SPEC 12).
+    @Test func gainsAreBypassed() {
         let kernel = Kernel()
-        domine_kernel_set_gains(kernel.raw, 0.5, 0.25)
+        domine_kernel_set_gains(kernel.raw, 0.38, 0.25)
         domine_kernel_set_click_test(kernel.raw, 2)
         let (a, b) = ClickTestTests.run(kernel, frames: Self.fade + 300)
-        #expect(Array(a[Self.fade...]) == Self.template(rising: true).prefix(300).map { $0 * 0.5 })
-        #expect(Array(b[Self.fade...]) == Self.template(rising: false).prefix(300).map { $0 * 0.25 })
+        #expect(Array(a[Self.fade...]) == Array(Self.template(rising: true).prefix(300)))
+        #expect(Array(b[Self.fade...]) == Array(Self.template(rising: false).prefix(300)))
     }
 }

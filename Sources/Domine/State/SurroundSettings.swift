@@ -39,6 +39,10 @@ struct SurroundSettings: Codable, Equatable, Sendable {
     /// hold the whole arrival difference, so distance sets level only.
     /// Manual offset edits keep it; Reset and a change of speakers clear it.
     var timingMeasured = false
+    /// The trims were measured with the microphone (SPEC 12, 13.4): they
+    /// hold the whole level difference at the Mac, so distance no longer
+    /// changes gain. Manual trim edits keep it; cleared like `timingMeasured`.
+    var levelMeasured = false
 
     init() {}
 
@@ -76,7 +80,10 @@ struct SurroundSettings: Codable, Equatable, Sendable {
         copy.effects = effects.filter { kept.contains($0.key) }
         copy.volumeOffsetsDb = volumeOffsetsDb.filter { kept.contains($0.key) }
         // A different set needs its timing measured again.
-        if kept != Set(uids) { copy.timingMeasured = false }
+        if kept != Set(uids) {
+            copy.timingMeasured = false
+            copy.levelMeasured = false
+        }
         return copy
     }
 
@@ -151,7 +158,7 @@ struct SurroundSettings: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case speakers, width, surroundLevel, orbitRate, rotation, spatialAmount, spatialRoomMs
-        case trims, offsetsMs, effects, linkEffects, timingMeasured, mono, volumeOffsetsDb
+        case trims, offsetsMs, effects, linkEffects, timingMeasured, levelMeasured, mono, volumeOffsetsDb
     }
 
     /// Missing or mistyped fields fall back to their defaults one by one; a
@@ -173,6 +180,7 @@ struct SurroundSettings: Codable, Equatable, Sendable {
         volumeOffsetsDb = (try? c.decodeIfPresent([String: Float].self, forKey: .volumeOffsetsDb)) ?? [:]
         linkEffects = (try? c.decodeIfPresent(Bool.self, forKey: .linkEffects)) ?? d.linkEffects
         timingMeasured = (try? c.decodeIfPresent(Bool.self, forKey: .timingMeasured)) ?? d.timingMeasured
+        levelMeasured = (try? c.decodeIfPresent(Bool.self, forKey: .levelMeasured)) ?? d.levelMeasured
         mono = (try? c.decodeIfPresent(Bool.self, forKey: .mono)) ?? d.mono
         sanitize()
     }

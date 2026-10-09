@@ -34,6 +34,20 @@ struct TuningState: Equatable, Sendable {
         speakerVolumes.first { $0.uid == uid }
     }
 
+    /// Surround: the trims were measured with the microphone (SPEC 13.4).
+    var isSurroundLevelMeasured = false
+
+    /// The Sync & Balance note on what the microphone measured and what
+    /// distances still set, or nil when nothing was measured.
+    var surroundMeasuredNote: String? {
+        switch (isSurroundTimingMeasured, isSurroundLevelMeasured) {
+        case (true, true): "Timing and levels measured with the microphone."
+        case (true, false): "Timing measured with the microphone; distances set level only."
+        case (false, true): "Levels measured with the microphone; distances set timing only."
+        case (false, false): nil
+        }
+    }
+
     var isDemoButtonEnabled: Bool { isDemoPlaying || canPlayDemo }
 
     var demoButtonTitle: String { isDemoPlaying ? "Stop Demo" : "Play Demo" }

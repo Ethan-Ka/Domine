@@ -109,6 +109,7 @@ extension AppModel {
                     offsetMs: Double(settings.offsetMs(for: speaker.uid)))
             }
             state.isSurroundTimingMeasured = settings.timingMeasured
+            state.isSurroundLevelMeasured = settings.levelMeasured
             state.speakerVolumes = state.surroundRows?.map { speakerVolumeRow(uid: $0.uid, title: $0.title) } ?? []
         } else {
             state.speakerVolumes = stereoSpeakerVolumeRows

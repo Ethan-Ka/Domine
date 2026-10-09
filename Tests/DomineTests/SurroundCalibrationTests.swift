@@ -11,6 +11,7 @@ final class SurroundCalibrationTests {
     final class Next: @unchecked Sendable {
         var delta: Double = 0
         var fail = false
+        var levels: ChirpLevels?
     }
 
     let suiteName = UUID().uuidString
@@ -34,7 +35,8 @@ final class SurroundCalibrationTests {
 
     /// Routes the four speakers in Surround with fake arrivals per speaker
     /// (list order) and a fake error added to each pair's delta.
-    private func setUp(arrivals: [Double], errors: [Double] = [0, 0, 0, 0], failingPair: Int? = nil) async {
+    private func setUp(arrivals: [Double], errors: [Double] = [0, 0, 0, 0], failingPair: Int? = nil,
+                       levels: [Double]? = nil) async {
         for device in Self.devices + [SurroundModelTests.builtIn, CalibrationControllerTests.mic] { hal.add(device) }
         SettingsStore(defaults: defaults).startWhenBothConnect = false
         let model = AppModel(hal: hal, defaults: defaults, services: system.services)
@@ -49,6 +51,7 @@ final class SurroundCalibrationTests {
 
         let next = next
         model.calibration.requestMicAccess = { true }
+        model.calibration.waitQuiet = {}
         model.calibration.wait = { [unowned self] in
             guard let pair = self.model.engine.surroundCalibrationPair else {
                 next.fail = true
@@ -58,9 +61,10 @@ final class SurroundCalibrationTests {
             self.pairs.append([pair.rising, pair.falling])
             next.fail = k == failingPair
             next.delta = arrivals[pair.falling] - arrivals[pair.rising] + errors[k]
+            next.levels = levels.map { ChirpLevels(rising: $0[pair.rising], falling: $0[pair.falling]) }
         }
         model.calibration.analyze = { _, _, _, _ in
-            next.fail ? .failure(reason: "Too noisy") : .success(offsetMs: next.delta, windows: 5)
+            next.fail ? .failure(reason: "Inconsistent") : .success(offsetMs: next.delta, windows: 5, levels: next.levels)
         }
     }
 
@@ -157,5 +161,77 @@ final class SurroundCalibrationTests {
         #expect(model.surroundSettings.timingMeasured)
         model.removeSurroundSpeaker(uid: uids[3])
         #expect(!model.surroundSettings.timingMeasured)
+    }
+
+    // MARK: Levels
+
+    @Test func ringOfPairsSetsEveryTrim() async {
+        await setUp(arrivals: [0, 12, -5, 30], levels: [2, 1, 4, 50])
+        await calibrate()
+        let trims = uids.map { model.surroundSettings.trim(for: $0) }
+        #expect(abs(trims[0] - 0.5) < 0.0001)
+        #expect(trims[1] == 1)
+        #expect(abs(trims[2] - 0.25) < 0.0001)
+        #expect(trims[3] == Float(ChirpLevels.minTrim))
+        #expect(model.surroundSettings.levelMeasured)
+        #expect(model.surroundSettings.timingMeasured)
+        #expect(model.tuningState.calibrationStatus == .done("Delays and levels set for 4 speakers."))
+        #expect(model.tuningSheetState.surroundMeasuredNote == "Timing and levels measured with the microphone.")
+    }
+
+    @Test func timingOnlyLeavesTrimsAndNote() async {
+        await setUp(arrivals: [0, 12, -5, 30])
+        model.setSurroundTrim(uid: uids[0], 0.7)
+        await calibrate()
+        #expect(model.surroundSettings.trim(for: uids[0]) == 0.7)
+        #expect(!model.surroundSettings.levelMeasured)
+        #expect(model.tuningSheetState.surroundMeasuredNote == "Timing measured with the microphone; distances set level only.")
+    }
+
+    @Test func ringTrimsMath() {
+        // Levels 0, -6.02, +6.02, +33.98 dB relative to s0: quietest is s1.
+        let d = [-6.0206, 12.0412, 27.9588, -33.9794]
+        guard let trims = AppModel.ringTrims(pairLevelDeltasDb: d) else { Issue.record("expected trims"); return }
+        let want = [0.5, 1, 0.25, ChirpLevels.minTrim]
+        for (got, w) in zip(trims, want) { #expect(abs(got - w) < 0.0001) }
+        #expect(trims[1] == 1)
+        #expect(trims.allSatisfy { $0 <= 1 && $0 >= ChirpLevels.minTrim })
+        // A closure error is spread, not fatal.
+        #expect(AppModel.ringTrims(pairLevelDeltasDb: [1, 1, 1, 1]) == [1, 1, 1, 1])
+        #expect(AppModel.ringTrims(pairLevelDeltasDb: [.nan, 0]) == nil)
+    }
+
+    @Test func measuredLevelsIgnoreDistanceGain() async {
+        await setUp(arrivals: [0, 0, 0, 0])
+        let first = model.surroundSpeakers[0]
+        model.moveSurroundSpeaker(uid: first.uid, azimuth: first.azimuth, distance: 1)
+        model.applySurroundCalibration(uids: uids, offsetsMs: [0, 0, 0, 0], trims: [1, 1, 1, 0.5])
+        let gains = model.engine.pushedSurround?.gains ?? []
+        #expect(gains.count == 4)
+        // Gain is trim only: the 1 m speaker is no longer halved.
+        if gains.count == 4, gains[1] > 0 {
+            #expect(abs(gains[0] / gains[1] - 1) < 0.001)
+            #expect(abs(gains[3] / gains[1] - 0.5) < 0.001)
+        }
+        #expect(gains.allSatisfy { $0 <= 1 })
+        model.setSurroundTrim(uid: uids[0], 0.8)
+        #expect(model.surroundSettings.levelMeasured) // manual trim edits keep it
+        model.tuningSheetActions.resetSurround()
+        #expect(!model.surroundSettings.levelMeasured)
+        model.applySurroundCalibration(uids: uids, offsetsMs: [0, 0, 0, 0], trims: [1, 1, 1, 1])
+        model.removeSurroundSpeaker(uid: uids[3])
+        #expect(!model.surroundSettings.levelMeasured)
+    }
+
+    @Test func oldJSONDecodesWithoutLevelMark() throws {
+        let old = #"{"speakers":[{"uid":"a","azimuth":-30,"distance":2}],"trims":{"a":0.5},"timingMeasured":true}"#
+        let s = try JSONDecoder().decode(SurroundSettings.self, from: Data(old.utf8))
+        #expect(!s.levelMeasured)
+        #expect(s.timingMeasured)
+        #expect(s.trim(for: "a") == 0.5)
+        var marked = s
+        marked.levelMeasured = true
+        let round = try JSONDecoder().decode(SurroundSettings.self, from: JSONEncoder().encode(marked))
+        #expect(round.levelMeasured)
     }
 }
