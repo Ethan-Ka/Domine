@@ -170,7 +170,7 @@ final class CalibrationController {
     private static func logAttempt(_ tag: String, name: String, gain: Double, peak: Float, clipped: Bool, quiet: Bool) {
         let db = ChirpGains.db(gain)
         let verdict = clipped ? "clipped" : quiet ? "quiet" : "ok"
-        log.info("\(tag, privacy: .public): \(name, privacy: .public) test volume \(db, format: .fixed(precision: 1), privacy: .public) dB, peak \(peak, format: .fixed(precision: 3), privacy: .public), \(verdict, privacy: .public)")
+        log.notice("\(tag, privacy: .public): \(name, privacy: .public) test volume \(db, format: .fixed(precision: 1), privacy: .public) dB, peak \(peak, format: .fixed(precision: 3), privacy: .public), \(verdict, privacy: .public)")
     }
 
     /// `run` plus the chirp peaks of the capture (nil when nothing was analyzed).
@@ -216,7 +216,7 @@ final class CalibrationController {
             let chirps = Array(recording[split...])
             return (analyze(chirps, rate, rising, falling), floor, inspectPeaks(chirps, rate, rising, falling))
         }.value
-        Self.log.info("Analyzer result for \(label, privacy: .public): \(String(describing: result), privacy: .public)")
+        Self.log.notice("Analyzer result for \(label, privacy: .public): \(String(describing: result), privacy: .public)")
         let outcome = Self.outcome(result, noiseFloor: noiseFloor, label: label)
         var failed = true
         if case .measured = outcome, !peaks.anyClipped { failed = false }
@@ -257,14 +257,14 @@ final class CalibrationController {
             let floorDb = 20 * log10(noiseFloor)
             let a = CalibrationNoiseCheck.snrDb(level: levels.rising, noiseFloor: noiseFloor)
             let b = CalibrationNoiseCheck.snrDb(level: levels.falling, noiseFloor: noiseFloor)
-            log.info("\(label, privacy: .public): noise floor \(floorDb, privacy: .public) dB, SNR rising \(a, privacy: .public) dB, falling \(b, privacy: .public) dB")
+            log.notice("\(label, privacy: .public): noise floor \(floorDb, privacy: .public) dB, SNR rising \(a, privacy: .public) dB, falling \(b, privacy: .public) dB")
             switch CalibrationNoiseCheck.verdict(levels: levels, noiseFloor: noiseFloor) {
             case .ok: return .measured(offsetMs: offset, levels: levels)
             case .tooNoisy: return .tooNoisy
             case .tooQuiet(let rising): return .speakerTooQuiet(rising: rising)
             }
         case .failure(let reason):
-            if let noiseFloor { log.info("\(label, privacy: .public): noise floor \(20 * log10(noiseFloor), privacy: .public) dB") }
+            if let noiseFloor { log.notice("\(label, privacy: .public): noise floor \(20 * log10(noiseFloor), privacy: .public) dB") }
             switch reason {
             case "Inconsistent": return .failed("Results varied. Move the Mac and try again.")
             case CalibrationAnalyzer.weakRising: return .speakerTooQuiet(rising: true)

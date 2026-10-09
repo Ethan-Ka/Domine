@@ -130,7 +130,7 @@ extension AppModel {
         let count = deltas.count
         guard count >= 2, deltas.allSatisfy(\.isFinite) else { return nil }
         let closure = deltas.reduce(0, +)
-        calibrationLog.info("Ring closure \(closure, privacy: .public) ms over \(count, privacy: .public) pairs, spread evenly")
+        calibrationLog.notice("Ring closure \(closure, privacy: .public) ms over \(count, privacy: .public) pairs, spread evenly")
         let corrected = deltas.map { $0 - closure / Double(count) }
         var arrivals = [0.0]
         for k in 0..<(count - 1) { arrivals.append(arrivals[k] + corrected[k]) }
@@ -142,6 +142,11 @@ extension AppModel {
     /// Writes every offset at once and marks the timing as measured; with
     /// `trims`, also every trim, marking the levels as measured (SPEC 13.4).
     func applySurroundCalibration(uids: [String], offsetsMs: [Double], trims: [Double]? = nil) {
+        let summary = uids.indices.map { i in
+            let trim = trims.map { String(format: "%.1f dB", 20 * log10(max($0[i], 1e-6))) } ?? "unchanged"
+            return "\(uids[i]) delay \(String(format: "%.1f", offsetsMs[i])) ms, level \(trim)"
+        }.joined(separator: "; ")
+        Self.calibrationLog.notice("Surround calibration applied: \(summary, privacy: .public)")
         updateSurroundSettings { s in
             for (uid, ms) in zip(uids, offsetsMs) { s.offsetsMs[uid] = Float(ms) }
             s.timingMeasured = true

@@ -58,7 +58,7 @@ struct CalibrationAnalyzer {
         var strongA = 0, strongB = 0
         // Per-window details, logged only when the analysis fails.
         var details: [String] = []
-        func logDetails() { for line in details { log.info("\(line, privacy: .public)") } }
+        func logDetails() { for line in details { log.notice("\(line, privacy: .public)") } }
         for w in 0..<(recording.count / windowLen) {
             let range = (w * windowLen)..<((w + 1) * windowLen)
             let a = peak(corrA, in: range), b = peak(corrB, in: range)
@@ -74,7 +74,7 @@ struct CalibrationAnalyzer {
         }
         guard windows.count >= minAcceptedWindows else {
             logDetails()
-            log.info("Detected \(windows.count, privacy: .public) windows, too few; strong rising \(strongA, privacy: .public), falling \(strongB, privacy: .public)")
+            log.notice("Detected \(windows.count, privacy: .public) windows, too few; strong rising \(strongA, privacy: .public), falling \(strongB, privacy: .public)")
             // One speaker heard clearly and the other not: that one was too quiet.
             if strongA >= minAcceptedWindows, strongB < minAcceptedWindows { return .failure(reason: weakFalling) }
             if strongB >= minAcceptedWindows, strongA < minAcceptedWindows { return .failure(reason: weakRising) }
@@ -84,10 +84,10 @@ struct CalibrationAnalyzer {
         guard kept.count >= minAcceptedWindows,
               Double(kept.count) >= minKeptFraction * Double(windows.count) else {
             logDetails()
-            log.info("Kept \(kept.count, privacy: .public) of \(windows.count, privacy: .public) windows, too few")
+            log.notice("Kept \(kept.count, privacy: .public) of \(windows.count, privacy: .public) windows, too few")
             return .failure(reason: "Inconsistent")
         }
-        log.info("Kept \(kept.count, privacy: .public) of \(windows.count, privacy: .public) windows")
+        log.notice("Kept \(kept.count, privacy: .public) of \(windows.count, privacy: .public) windows")
         let levels = ChirpLevels(rising: median(kept.map(\.heightA)), falling: median(kept.map(\.heightB)))
         return .success(offsetMs: median(kept.map(\.offsetMs)), windows: kept.count, levels: levels)
     }
