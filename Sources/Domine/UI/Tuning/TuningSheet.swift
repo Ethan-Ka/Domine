@@ -198,7 +198,7 @@ struct TuningSheet: View {
     @ViewBuilder
     private var calibrationLine: some View {
         switch state.calibrationStatus {
-        case .listening, .measuringPair:
+        case .listening, .measuringPair, .adjustingVolume:
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)

@@ -153,7 +153,7 @@ struct ClickTestTests {
 
     @Test func otherModesAreOff() {
         let kernel = Kernel()
-        domine_kernel_set_click_test(kernel.raw, 3)
+        domine_kernel_set_click_test(kernel.raw, 4)
         let (a, b) = Self.run(kernel, frames: 600, left: 0.3, right: -0.2)
         #expect(a.allSatisfy { $0 == 0.3 })
         #expect(b.allSatisfy { $0 == -0.2 })

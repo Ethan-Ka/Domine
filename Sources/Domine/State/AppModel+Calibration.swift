@@ -25,23 +25,63 @@ extension AppModel {
             self.cancelTone()
             let engine = self.engine
             let wasMuted = engine.muted
-            let outcome = await self.calibration.run(kernelRate: rate, setSilent: { engine.muted = $0 || wasMuted }) {
-                engine.calibrationChirps = $0
+            let left = self.speakerName(uid: self.leftUID), right = self.speakerName(uid: self.rightUID)
+            // Two recordings with the chirps swapped: the same speaker reads a
+            // few dB louder through the rising template, so each speaker's
+            // level is the mean of its rising and falling reading (SPEC 12).
+            var gains = ChirpGains()
+            var results: [(offset: Double, levels: ChirpLevels?)] = []
+            for swapped in [false, true] {
+                engine.calibrationChirpsSwapped = swapped
+                let (outcome, used) = await self.calibration.runAdjusting(
+                    kernelRate: rate, label: swapped ? "stereo-swapped" : "stereo",
+                    names: swapped ? (right, left) : (left, right),
+                    gains: swapped ? ChirpGains(rising: gains.falling, falling: gains.rising) : gains,
+                    setGains: { engine.calibrationChirpGains = $0 },
+                    onRetry: { self.calibrationStatus = .adjustingVolume },
+                    setSilent: { engine.muted = $0 || wasMuted }) {
+                    engine.calibrationChirps = $0
+                }
+                engine.calibrationChirpsSwapped = false
+                engine.calibrationChirpGains = ChirpGains()
+                gains = swapped ? ChirpGains(rising: used.falling, falling: used.rising) : used
+                guard !Task.isCancelled else { return }
+                guard case .measured(let offset, let levels) = outcome else {
+                    self.reportStereoFailure(outcome, leftRising: !swapped)
+                    return
+                }
+                results.append((offset, levels))
             }
-            guard !Task.isCancelled else { return }
-            switch outcome {
-            case .measured(let offset, let levels):
-                self.applyCalibration(offsetMs: offset, levels: levels)
-            case .failed(let reason):
-                self.calibrationStatus = .failed(reason)
-            case .microphoneDenied:
-                self.calibrationStatus = .failed("Microphone access is off", offersPrivacySettings: true)
-            case .tooNoisy:
-                self.calibrationStatus = .failed(CalibrationOutcome.tooNoisyMessage)
-            case .speakerTooQuiet(let rising):
-                self.calibrationStatus = .failed(self.tooQuietMessage(uid: rising ? self.leftUID : self.rightUID))
-            }
+            // Run 2 measures arrival(left) - arrival(right).
+            let offset = (results[0].offset - results[1].offset) / 2
+            let levels = ChirpLevels.combined(leftRising: results[0].levels, rightRising: results[1].levels)
+            self.applyCalibration(offsetMs: offset, levels: levels)
         }
+    }
+
+    private func reportStereoFailure(_ outcome: CalibrationOutcome, leftRising: Bool) {
+        switch outcome {
+        case .measured:
+            break
+        case .failed(let reason):
+            calibrationStatus = .failed(reason)
+        case .microphoneDenied:
+            calibrationStatus = .failed("Microphone access is off", offersPrivacySettings: true)
+        case .tooNoisy:
+            calibrationStatus = .failed(CalibrationOutcome.tooNoisyMessage)
+        case .overloaded:
+            calibrationStatus = .failed(CalibrationOutcome.overloadedMessage)
+        case .speakerTooQuiet(let rising):
+            calibrationStatus = .failed(tooQuietMessage(uid: rising == leftRising ? leftUID : rightUID))
+        }
+    }
+
+    /// "JBL Grip (1A2B)" for the calibration log.
+    func speakerName(uid: String?) -> String {
+        guard let uid else { return "Speaker" }
+        let name = catalog.device(uid: uid)?.name ?? "Speaker"
+        let suffix = catalog.device(uid: uid)?.uidSuffix ?? OutputDevice.suffix(forUID: uid)
+        return "\(name) (\(suffix))"
     }
 
     /// Hands the run's recordings to the archive: kept only when it failed,
@@ -56,6 +96,8 @@ extension AppModel {
         calibrationTask?.cancel()
         calibrationTask = nil
         if engine.calibrationChirps { engine.calibrationChirps = false }
+        engine.calibrationChirpsSwapped = false
+        engine.calibrationChirpGains = ChirpGains()
         if engine.surroundCalibrationPair != nil { engine.surroundCalibrationPair = nil }
         if calibrationStatus?.isInProgress == true { calibrationStatus = nil }
     }
@@ -93,9 +135,7 @@ extension AppModel {
     /// Name plus UID suffix, since two speakers may share a name.
     func tooQuietMessage(uid: String?) -> String {
         guard let uid else { return "A speaker was too quiet to measure. Turn it up and try again." }
-        let name = catalog.device(uid: uid)?.name ?? "Speaker"
-        let suffix = catalog.device(uid: uid)?.uidSuffix ?? OutputDevice.suffix(forUID: uid)
-        return "\(name) (\(suffix)) was too quiet to measure. Turn it up and try again."
+        return "\(speakerName(uid: uid)) was too quiet to measure. Turn it up and try again."
     }
 
     func openMicrophoneSettings() {

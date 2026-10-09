@@ -3,6 +3,9 @@ enum CalibrationStatus: Equatable, Sendable {
     case listening
     /// Surround (SPEC 12): pair `pair` of `count` is being measured, 1-based.
     case measuringPair(Int, of: Int)
+    /// A capture clipped or came in too quiet; the pair is recorded again
+    /// at another test volume (SPEC 12).
+    case adjustingVolume
     /// e.g. "Right was 12 ms late. Delay set."
     case done(String)
     case failed(String, offersPrivacySettings: Bool = false)
@@ -10,7 +13,7 @@ enum CalibrationStatus: Equatable, Sendable {
     /// A run is in progress: the button and the click test are disabled.
     var isInProgress: Bool {
         switch self {
-        case .listening, .measuringPair: true
+        case .listening, .measuringPair, .adjustingVolume: true
         case .done, .failed: false
         }
     }
@@ -20,6 +23,7 @@ enum CalibrationStatus: Equatable, Sendable {
         switch self {
         case .listening: "Listening…"
         case .measuringPair(let pair, let count): "Measuring pair \(pair) of \(count)…"
+        case .adjustingVolume: "Adjusting test volume…"
         case .done, .failed: nil
         }
     }

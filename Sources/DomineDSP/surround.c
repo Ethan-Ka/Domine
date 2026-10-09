@@ -59,6 +59,7 @@ struct DomineSurround {
     _Atomic int toneSpeaker; // -1 off
     _Atomic int clickOn;
     _Atomic uint32_t calPair; // a | b << 16, CAL_OFF when off
+    _Atomic uint32_t chirpGainBits[NSPK]; // calibration chirp gain per speaker, 0...1
     // Demo control and status.
     _Atomic uint32_t demoStartReq;
     _Atomic int demoWanted;
@@ -322,6 +323,7 @@ DomineSurround *domine_surround_create(double sampleRate, uint32_t maxFrames) {
     atomic_init(&s->toneSpeaker, -1);
     atomic_init(&s->clickOn, 0);
     atomic_init(&s->calPair, CAL_OFF);
+    for (int i = 0; i < NSPK; i++) atomic_init(&s->chirpGainBits[i], f2u(1.0f));
     s->playingPair = CAL_OFF;
     int ok = s->spatial != NULL;
     for (int i = 0; i < NSPK; i++) ok = ok && s->ring[i] && s->eq[i] && s->bass[i] && s->comp[i];
@@ -458,6 +460,14 @@ void domine_surround_set_calibration_pair(DomineSurround *s, int a, int b) {
     const int valid = a >= 0 && b >= 0 && a != b && a < NSPK && b < NSPK;
     const uint32_t v = valid ? ((uint32_t)a | ((uint32_t)b << 16)) : CAL_OFF;
     atomic_store_explicit(&s->calPair, v, memory_order_relaxed);
+}
+
+void domine_surround_set_chirp_gain(DomineSurround *s, int index, float gain) {
+    if (s == NULL || index < 0 || index >= NSPK) return;
+    float g = gain;
+    if (!(g >= 0.0f)) g = g < 0.0f ? 0.0f : 1.0f;
+    if (g > 1.0f) g = 1.0f;
+    atomic_store_explicit(&s->chirpGainBits[index], f2u(g), memory_order_relaxed);
 }
 
 void domine_surround_set_demo(DomineSurround *s, int on) {
@@ -768,8 +778,10 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
             const uint32_t target = calReq == s->playingPair ? tfull : 0;
             if (s->chirpLevel == tfull && target == tfull) {
                 const uint32_t c = s->chirpCounter;
-                chirpUp = domine_calibration_chirp_sample(c, s->sampleRate, 1);
-                chirpDown = domine_calibration_chirp_sample(c, s->sampleRate, 0);
+                chirpUp = domine_calibration_chirp_sample(c, s->sampleRate, 1)
+                    * u2f(atomic_load_explicit(&s->chirpGainBits[chirpA], memory_order_relaxed));
+                chirpDown = domine_calibration_chirp_sample(c, s->sampleRate, 0)
+                    * u2f(atomic_load_explicit(&s->chirpGainBits[chirpB], memory_order_relaxed));
                 s->chirpCounter = c + 1 < s->clickPeriod ? c + 1 : 0;
             } else {
                 s->chirpCounter = 0;

@@ -16,8 +16,18 @@ enum CalibrationOutcome: Equatable, Sendable {
     /// One speaker was too quiet to measure: the rising (left, s_k) one or
     /// the falling (right, s(k+1)) one.
     case speakerTooQuiet(rising: Bool)
+    /// A speaker still clipped the mic at the lowest test volume (SPEC 12).
+    case overloaded
 
     static let tooNoisyMessage = "Too much background noise. Make the room quieter and try again."
+    static let overloadedMessage = "The microphone is overloaded. Turn the volume down and try again."
+
+    /// The levels as if both chirps had played at full test volume.
+    func dividingLevels(by gains: ChirpGains) -> CalibrationOutcome {
+        guard case .measured(let offset, let levels?) = self else { return self }
+        return .measured(offsetMs: offset, levels: ChirpLevels(rising: levels.rising / gains.rising,
+                                                               falling: levels.falling / gains.falling))
+    }
 }
 
 /// Records the kernel's calibration chirps through the Mac's built-in
@@ -52,6 +62,11 @@ final class CalibrationController {
     /// Runs off the main actor. Tests replace it with a fixed result.
     var analyze: @Sendable (_ recording: [Float], _ sampleRate: Double,
                             _ rising: [Float], _ falling: [Float]) -> CalibrationResult = CalibrationController.analyzeAligned
+    /// Finds clipped chirps, off the main actor. Tests replace it.
+    var inspectPeaks: @Sendable (_ recording: [Float], _ sampleRate: Double,
+                                 _ rising: [Float], _ falling: [Float]) -> ChirpPeaks = ChirpClipCheck.peaks
+    /// Extra recordings of one pair after a clipped or too quiet capture.
+    static let maxExtraAttempts = 3
 
     private nonisolated static let log = Logger(subsystem: "com.ethankawley.Domine", category: "Calibration")
     private let hal: any AudioHAL
@@ -82,15 +97,95 @@ final class CalibrationController {
     func run(kernelRate: Double, label: String = "stereo",
              setSilent: @MainActor (Bool) -> Void = { _ in },
              setChirps: @MainActor (Bool) -> Void) async -> CalibrationOutcome {
+        await runOnce(kernelRate: kernelRate, label: label, setSilent: setSilent, setChirps: setChirps).outcome
+    }
+
+    /// One pair with automatic test volume (SPEC 12): records at `gains`;
+    /// a speaker that clipped the mic is cut 12 dB, then 6 dB a step, and a
+    /// speaker too quiet below full volume goes 6 dB back up, and the pair is
+    /// recorded again, up to `maxExtraAttempts` more times. Too quiet at full
+    /// volume fails as before; still clipped at -30 dB (or out of attempts)
+    /// is `.overloaded`. Levels in the outcome are divided by the gains used,
+    /// so they read as if both chirps had played at full volume. Returns the
+    /// gains of the last recording, for the next pair that shares a speaker.
+    func runAdjusting(kernelRate: Double, label: String = "stereo",
+                      names: (rising: String, falling: String),
+                      gains start: ChirpGains = ChirpGains(),
+                      setGains: @MainActor (ChirpGains) -> Void,
+                      onRetry: @MainActor () -> Void = {},
+                      setSilent: @MainActor (Bool) -> Void = { _ in },
+                      setChirps: @MainActor (Bool) -> Void) async -> (outcome: CalibrationOutcome, gains: ChirpGains) {
+        var gains = start
+        // The lowest gain that clipped, per speaker: never raised back to it.
+        var clippedRising: Double?, clippedFalling: Double?
+        for attempt in 0...Self.maxExtraAttempts {
+            setGains(gains)
+            let tag = attempt == 0 ? label : "\(label)-retry\(attempt)"
+            let (outcome, peaks) = await runOnce(kernelRate: kernelRate, label: tag,
+                                                 setSilent: setSilent, setChirps: setChirps)
+            guard !Task.isCancelled, let peaks else { return (outcome, gains) }
+            var quietRising = false, quietFalling = false
+            if case .speakerTooQuiet(let rising) = outcome {
+                quietRising = rising
+                quietFalling = !rising
+            }
+            Self.logAttempt(tag, name: names.rising, gain: gains.rising, peak: peaks.rising,
+                            clipped: peaks.risingClipped, quiet: quietRising)
+            Self.logAttempt(tag, name: names.falling, gain: gains.falling, peak: peaks.falling,
+                            clipped: peaks.fallingClipped, quiet: quietFalling)
+            let last = attempt == Self.maxExtraAttempts
+            if peaks.anyClipped {
+                var next = gains
+                if peaks.risingClipped {
+                    clippedRising = gains.rising
+                    guard let g = ChirpGains.lowered(gains.rising) else { return (.overloaded, gains) }
+                    next.rising = g
+                }
+                if peaks.fallingClipped {
+                    clippedFalling = gains.falling
+                    guard let g = ChirpGains.lowered(gains.falling) else { return (.overloaded, gains) }
+                    next.falling = g
+                }
+                if last { return (.overloaded, gains) }
+                onRetry()
+                gains = next
+                continue
+            }
+            if !last, quietRising || quietFalling {
+                var next = gains
+                if quietRising { next.rising = ChirpGains.raised(gains.rising, clipped: clippedRising) ?? gains.rising }
+                if quietFalling { next.falling = ChirpGains.raised(gains.falling, clipped: clippedFalling) ?? gains.falling }
+                if next != gains {
+                    onRetry()
+                    gains = next
+                    continue
+                }
+            }
+            return (outcome.dividingLevels(by: gains), gains)
+        }
+        return (.overloaded, gains)
+    }
+
+    /// One line per speaker and attempt: test volume, peak, verdict.
+    private static func logAttempt(_ tag: String, name: String, gain: Double, peak: Float, clipped: Bool, quiet: Bool) {
+        let db = ChirpGains.db(gain)
+        let verdict = clipped ? "clipped" : quiet ? "quiet" : "ok"
+        log.info("\(tag, privacy: .public): \(name, privacy: .public) test volume \(db, format: .fixed(precision: 1), privacy: .public) dB, peak \(peak, format: .fixed(precision: 3), privacy: .public), \(verdict, privacy: .public)")
+    }
+
+    /// `run` plus the chirp peaks of the capture (nil when nothing was analyzed).
+    private func runOnce(kernelRate: Double, label: String,
+                         setSilent: @MainActor (Bool) -> Void,
+                         setChirps: @MainActor (Bool) -> Void) async -> (outcome: CalibrationOutcome, peaks: ChirpPeaks?) {
         guard Self.builtInMicrophone(hal: hal) != nil else {
             Self.log.error("No built-in microphone")
-            return .failed("No built-in microphone")
+            return (.failed("No built-in microphone"), nil)
         }
         let granted = await requestMicAccess()
         Self.log.info("Microphone permission granted: \(granted, privacy: .public)")
-        guard granted else { return .microphoneDenied }
-        guard !Task.isCancelled else { return .failed("Cancelled") }
-        guard let mic = Self.builtInMicrophone(hal: hal) else { return .failed("No built-in microphone") }
+        guard granted else { return (.microphoneDenied, nil) }
+        guard !Task.isCancelled else { return (.failed("Cancelled"), nil) }
+        guard let mic = Self.builtInMicrophone(hal: hal) else { return (.failed("No built-in microphone"), nil) }
 
         let recording: [Float]
         let rate: Double
@@ -101,30 +196,32 @@ final class CalibrationController {
         } catch {
             let line = setupFailure
             Self.log.error("Calibration setup failed: \(line, privacy: .public): \(error.description, privacy: .public)")
-            return .failed(line)
+            return (.failed(line), nil)
         }
-        guard !Task.isCancelled else { return .failed("Cancelled") }
+        guard !Task.isCancelled else { return (.failed("Cancelled"), nil) }
 
         Self.log.info("Recorded \(recording.count, privacy: .public) frames at \(rate, privacy: .public) Hz, \(quietFrames, privacy: .public) of them quiet")
         let frames = Int((0.001 * (DOMINE_CHIRP_MS + DOMINE_CHIRP_TAIL_MS) * rate).rounded())
         let rising = Self.chirp(frames: frames, rate: rate, rising: true)
         let falling = Self.chirp(frames: frames, rate: rate, rising: false)
         let analyze = analyze
+        let inspectPeaks = inspectPeaks
         let skipFrames = Int(Self.quietSkipSeconds * rate)
         Self.log.info("Analyzing \(label, privacy: .public)")
-        let (result, noiseFloor) = await Task.detached(priority: .userInitiated) {
+        let (result, noiseFloor, peaks) = await Task.detached(priority: .userInitiated) {
             let split = min(quietFrames, recording.count)
             let skip = min(skipFrames, split)
             let noise = Array(recording[skip..<split])
             let floor = CalibrationNoiseCheck.noiseFloor(noise, rising: rising, falling: falling)
-            return (analyze(Array(recording[split...]), rate, rising, falling), floor)
+            let chirps = Array(recording[split...])
+            return (analyze(chirps, rate, rising, falling), floor, inspectPeaks(chirps, rate, rising, falling))
         }.value
         Self.log.info("Analyzer result for \(label, privacy: .public): \(String(describing: result), privacy: .public)")
         let outcome = Self.outcome(result, noiseFloor: noiseFloor, label: label)
         var failed = true
-        if case .measured = outcome { failed = false }
+        if case .measured = outcome, !peaks.anyClipped { failed = false }
         sessionRecordings.append(.init(label: label, samples: recording, sampleRate: rate, failed: failed))
-        return outcome
+        return (outcome, peaks)
     }
 
     /// The recordings of the calibration run in progress, kept in memory
@@ -295,6 +392,17 @@ final class CalibrationController {
             return CalibrationAnalyzer.measure(recording: recording, sampleRate: sampleRate,
                                                rising: rising, falling: falling)
         }
+        let shift = alignmentShift(recording: recording, sampleRate: sampleRate, rising: rising)
+        return CalibrationAnalyzer.measure(recording: Array(recording.dropFirst(shift)), sampleRate: sampleRate,
+                                           rising: rising, falling: falling,
+                                           period: DOMINE_CLICK_PERIOD_MS / 1000)
+    }
+
+    /// How many leading samples to drop so the strongest rising chirp lands
+    /// 30% into its analysis window (0 when the recording is too short).
+    nonisolated static func alignmentShift(recording: [Float], sampleRate: Double, rising: [Float]) -> Int {
+        let window = Int(sampleRate * DOMINE_CLICK_PERIOD_MS / 1000)
+        guard window > 0, !rising.isEmpty, recording.count >= window else { return 0 }
         let n = recording.count
         let padded = recording + [Float](repeating: 0, count: rising.count - 1)
         var corr = [Float](repeating: 0, count: n)
@@ -303,9 +411,6 @@ final class CalibrationController {
         var maxIdx: vDSP_Length = 0
         vDSP_maxvi(corr, 1, &maxVal, &maxIdx, vDSP_Length(n))
         let target = window * 3 / 10
-        let shift = ((Int(maxIdx) - target) % window + window) % window
-        return CalibrationAnalyzer.measure(recording: Array(recording.dropFirst(shift)), sampleRate: sampleRate,
-                                           rising: rising, falling: falling,
-                                           period: DOMINE_CLICK_PERIOD_MS / 1000)
+        return ((Int(maxIdx) - target) % window + window) % window
     }
 }

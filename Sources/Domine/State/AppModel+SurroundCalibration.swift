@@ -1,17 +1,9 @@
 import Foundation
+import os
 
 /// Surround auto-calibration (SPEC section 12): a ring of pairs.
 extension AppModel {
-    /// The closure error each pair may add before the run is rejected, in ms.
-    /// Bluetooth latency wobbles by a few ms per measurement, and speakers of
-    /// different models can be 80 ms or more apart, so the limit grows with
-    /// the number of pairs. The error is spread evenly, so each speaker ends
-    /// within closure / N of its true offset.
-    static let ringClosureLimitPerPairMs = 3.0
-
-    static func ringClosureLimitMs(pairs: Int) -> Double {
-        ringClosureLimitPerPairMs * Double(pairs)
-    }
+    private static let calibrationLog = Logger(subsystem: "com.ethankawley.Domine", category: "Calibration")
 
     /// With present speakers s0...s(N-1) in list order, measures the pairs
     /// (s0, s1), (s1, s2), ..., (s(N-1), s0): run k plays the rising chirp on
@@ -45,26 +37,37 @@ extension AppModel {
             let count = speakers.count
             var deltas: [Double] = []
             // nil once any pair comes back without levels.
-            var levelDeltas: [Double]? = []
+            var pairLevels: [ChirpLevels]? = []
+            // Test volume chosen per speaker UID, kept for its next pair.
+            var chirpGains: [String: Double] = [:]
             for k in 0..<count {
                 guard !Task.isCancelled else { return }
                 self.calibrationStatus = .measuringPair(k + 1, of: count)
                 let pair = Engine.SurroundCalibrationPair(rising: speakers[k].index,
                                                           falling: speakers[(k + 1) % count].index)
+                let risingUID = speakers[k].uid, fallingUID = speakers[(k + 1) % count].uid
                 let wasMuted = engine.muted
-                let outcome = await self.calibration.run(kernelRate: rate, label: "pair\(k + 1)",
-                                                         setSilent: { engine.muted = $0 || wasMuted }) { on in
+                let (outcome, used) = await self.calibration.runAdjusting(
+                    kernelRate: rate, label: "pair\(k + 1)",
+                    names: (self.calibrationLabel(uid: risingUID), self.calibrationLabel(uid: fallingUID)),
+                    gains: ChirpGains(rising: chirpGains[risingUID] ?? 1, falling: chirpGains[fallingUID] ?? 1),
+                    setGains: { engine.calibrationChirpGains = $0 },
+                    onRetry: { self.calibrationStatus = .adjustingVolume },
+                    setSilent: { engine.muted = $0 || wasMuted }) { on in
                     engine.surroundCalibrationPair = on ? pair : nil
                 }
                 engine.surroundCalibrationPair = nil
+                engine.calibrationChirpGains = ChirpGains()
+                chirpGains[risingUID] = used.rising
+                chirpGains[fallingUID] = used.falling
                 guard !Task.isCancelled else { return }
                 switch outcome {
                 case .measured(let delta, let levels):
                     deltas.append(delta)
                     if let levels, levels.rising > 0, levels.falling > 0 {
-                        levelDeltas?.append(levels.fallingOverRisingDb)
+                        pairLevels?.append(levels)
                     } else {
-                        levelDeltas = nil
+                        pairLevels = nil
                     }
                 case .failed(let reason):
                     let a = self.calibrationLabel(uid: speakers[k].uid)
@@ -77,6 +80,9 @@ extension AppModel {
                 case .tooNoisy:
                     self.calibrationStatus = .failed(CalibrationOutcome.tooNoisyMessage)
                     return
+                case .overloaded:
+                    self.calibrationStatus = .failed(CalibrationOutcome.overloadedMessage)
+                    return
                 case .speakerTooQuiet(let rising):
                     let uid = rising ? speakers[k].uid : speakers[(k + 1) % count].uid
                     self.calibrationStatus = .failed(self.tooQuietMessage(uid: uid))
@@ -87,38 +93,44 @@ extension AppModel {
                 self.calibrationStatus = .failed("Results varied. Move the Mac and try again.")
                 return
             }
-            let trims = levelDeltas.flatMap { Self.ringTrims(pairLevelDeltasDb: $0) }
+            let trims = pairLevels.flatMap { Self.ringTrims(pairLevels: $0) }
             self.applySurroundCalibration(uids: speakers.map { $0.uid }, offsetsMs: offsets, trims: trims)
         }
     }
 
-    /// Trims per ring speaker from the pair level differences
-    /// level(s(k+1)) - level(s_k) in dB, or nil if any is not finite. Levels
-    /// are chained around the ring like the arrivals (closure error spread
-    /// evenly), then every speaker is cut to the quietest one
+    /// Trims per ring speaker from each pair's levels (pair k: s_k rising,
+    /// s(k+1) falling, already divided by the test volume), or nil if any
+    /// level is not finite and positive. The same speaker reads a few dB
+    /// louder through the rising template than the falling one, so levels
+    /// are never compared across templates: each speaker plays rising in
+    /// pair k and falling in pair k-1, and its level is the mean of those
+    /// two in dB. Then every speaker is cut to the quietest one
     /// (`ChirpLevels.trims`): the quietest gets 1, the floor is -20 dB.
-    static func ringTrims(pairLevelDeltasDb deltas: [Double]) -> [Double]? {
-        let count = deltas.count
-        guard count >= 2, deltas.allSatisfy(\.isFinite) else { return nil }
-        let closure = deltas.reduce(0, +)
-        let corrected = deltas.map { $0 - closure / Double(count) }
-        var levelsDb = [0.0]
-        for k in 0..<(count - 1) { levelsDb.append(levelsDb[k] + corrected[k]) }
+    static func ringTrims(pairLevels: [ChirpLevels]) -> [Double]? {
+        let count = pairLevels.count
+        guard count >= 2,
+              pairLevels.allSatisfy({ $0.rising.isFinite && $0.rising > 0 && $0.falling.isFinite && $0.falling > 0 })
+        else { return nil }
+        let levelsDb = (0..<count).map { k in
+            let rising = 20 * log10(pairLevels[k].rising)
+            let falling = 20 * log10(pairLevels[(k + count - 1) % count].falling)
+            return (rising + falling) / 2
+        }
         let quietest = levelsDb.min() ?? 0
         return levelsDb.map { max(pow(10, (quietest - $0) / 20), ChirpLevels.minTrim) }
     }
 
     /// Offsets in ms (0...300) per ring speaker from the pair deltas, or nil
-    /// when the ring does not close within `ringClosureLimitMs(pairs:)`. The closure
-    /// error is spread evenly over the pairs; the latest speaker gets 0.
+    /// for fewer than 2 pairs or a delta that is not finite. The ring never
+    /// fails for not closing: Bluetooth latency wobbles by several ms per
+    /// measurement, so the closure error is logged and spread evenly over the
+    /// pairs (each speaker ends within closure / N of its true offset). The
+    /// latest speaker gets 0.
     static func ringOffsets(pairDeltasMs deltas: [Double]) -> [Double]? {
         let count = deltas.count
         guard count >= 2, deltas.allSatisfy(\.isFinite) else { return nil }
         let closure = deltas.reduce(0, +)
-        guard abs(closure) <= ringClosureLimitMs(pairs: count) else {
-            log.info("Ring closure \(closure, privacy: .public) ms over the limit")
-            return nil
-        }
+        calibrationLog.info("Ring closure \(closure, privacy: .public) ms over \(count, privacy: .public) pairs, spread evenly")
         let corrected = deltas.map { $0 - closure / Double(count) }
         var arrivals = [0.0]
         for k in 0..<(count - 1) { arrivals.append(arrivals[k] + corrected[k]) }

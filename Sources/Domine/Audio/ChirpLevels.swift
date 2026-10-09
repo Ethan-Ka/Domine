@@ -12,6 +12,16 @@ struct ChirpLevels: Equatable, Sendable {
     /// The quietest speaker's trim floor: -20 dB.
     static let minTrim = 0.1
 
+    /// Stereo levels from two recordings with the chirps swapped
+    /// (`leftRising`: left rising, `rightRising`: right rising). Each
+    /// speaker's level is the geometric mean (mean in dB) of its rising and
+    /// falling reading, which cancels the templates' level bias. Rising is
+    /// the left in the result. Nil when either recording has no levels.
+    static func combined(leftRising a: ChirpLevels?, rightRising b: ChirpLevels?) -> ChirpLevels? {
+        guard let a, let b else { return nil }
+        return ChirpLevels(rising: (a.rising * b.falling).squareRoot(), falling: (a.falling * b.rising).squareRoot())
+    }
+
     /// level(B) / level(A) in dB.
     var fallingOverRisingDb: Double { 20 * log10(falling / rising) }
 

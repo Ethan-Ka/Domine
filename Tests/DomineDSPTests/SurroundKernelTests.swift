@@ -360,6 +360,29 @@ struct SurroundKernelTests {
         }
     }
 
+    /// Chirp gains scale only the chirp of each speaker (SPEC 12, test volume).
+    @Test func calibrationChirpGainScalesEachSpeaker() {
+        let sr = 8000.0
+        let s = Self.make([-30, 30, 180], sampleRate: sr)
+        defer { domine_surround_destroy(s) }
+        domine_surround_set_chirp_gain(s, 0, 0.25)
+        domine_surround_set_chirp_gain(s, 2, 0.5)
+        domine_surround_set_chirp_gain(s, 1, 7) // clamped to 1, and silent anyway
+        domine_surround_set_chirp_gain(s, 99, 0) // ignored
+        let zero = [Float](repeating: 0, count: 2000)
+        _ = Self.run(s, offsets: [0, 2, 4], left: zero, right: zero, buffers: [6])
+        domine_surround_set_calibration_pair(s, 0, 2)
+        let out = Self.run(s, offsets: [0, 2, 4], left: zero, right: zero, buffers: [6])
+        let full = 320
+        for f in full..<2000 {
+            let n = UInt32(f - full)
+            #expect(out.channel(0)[f] == domine_calibration_chirp_sample(n, sr, 1) * 0.25)
+            #expect(out.channel(1)[f] == domine_calibration_chirp_sample(n, sr, 1) * 0.25)
+            #expect(out.channel(2)[f] == 0)
+            #expect(out.channel(4)[f] == domine_calibration_chirp_sample(n, sr, 0) * 0.5)
+        }
+    }
+
     // MARK: IOProc and buffers
 
     @Test func ioprocSkipsSubDeviceInputsAndUsesLayout() {

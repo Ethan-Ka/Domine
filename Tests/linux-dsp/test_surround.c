@@ -740,6 +740,29 @@ static void test_calibration_pair(void) {
     buf_free(&out);
     domine_surround_destroy(s);
 
+    // Chirp gains scale only each speaker's chirp (SPEC 12, test volume).
+    {
+        DomineSurround *g = make(sr, 3, az);
+        domine_surround_set_chirp_gain(g, 0, 0.25f);
+        domine_surround_set_chirp_gain(g, 2, 0.5f);
+        domine_surround_set_chirp_gain(g, 1, 7.0f); // clamped, silent anyway
+        domine_surround_set_chirp_gain(g, 99, 0.0f); // ignored
+        Buf o = out_new(6, N);
+        run(g, zero, zero, 400, &o, off);
+        domine_surround_set_calibration_pair(g, 0, 2);
+        run(g, zero, zero, N, &o, off);
+        int scaled = 1;
+        for (uint32_t f = full; f < N; f++) {
+            const uint32_t n = (f - full) % period;
+            scaled &= *buf_at(&o, 0, f) == domine_calibration_chirp_sample(n, sr, 1) * 0.25f;
+            scaled &= *buf_at(&o, 4, f) == domine_calibration_chirp_sample(n, sr, 0) * 0.5f;
+            scaled &= *buf_at(&o, 2, f) == 0.0f;
+        }
+        CHECK(scaled);
+        buf_free(&o);
+        domine_surround_destroy(g);
+    }
+
     // Off by default and for invalid pairs: two speakers pass L and R.
     const float az2[2] = { -30, 30 };
     const uint32_t off2[2] = { 0, 2 };

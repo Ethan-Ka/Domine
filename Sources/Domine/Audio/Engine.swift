@@ -51,6 +51,19 @@ final class Engine {
     /// left, falling on the right, once a second. Wins over `clickTest`.
     /// Every stop turns it off.
     var calibrationChirps = false { didSet { if calibrationChirps != oldValue { applyControls() } } }
+    /// Stereo calibration chirps with the templates swapped (click test
+    /// mode 3): falling on the left, rising on the right (SPEC 12, level
+    /// bias). Every stop turns it off.
+    var calibrationChirpsSwapped = false {
+        didSet { if calibrationChirpsSwapped != oldValue { applyControls() } }
+    }
+    /// Test volume of the calibration chirps (SPEC 12), for the speaker
+    /// playing the rising and the falling chirp: in Stereo the left and the
+    /// right (swapped with `calibrationChirpsSwapped`); in Surround the
+    /// speakers of `surroundCalibrationPair`. Every stop resets it to full.
+    var calibrationChirpGains = ChirpGains() {
+        didSet { if calibrationChirpGains != oldValue { applyControls() } }
+    }
     var crossfeed: Float = 0 { didSet { if crossfeed != oldValue { applyControls() } } }
     var leftGain: Float = 1 { didSet { applyControls() } }
     var rightGain: Float = 1 { didSet { applyControls() } }
@@ -398,6 +411,8 @@ final class Engine {
         clickTest = false
         calibrationChirps = false
         surroundCalibrationPair = nil
+        calibrationChirpGains = ChirpGains()
+        calibrationChirpsSwapped = false
         formatCheck?.cancel()
         formatCheck = nil
         formatRebuilds = 0
@@ -1131,7 +1146,11 @@ final class Engine {
         domine_kernel_set_keep_alive(kernel, keepAlive ? 1 : 0)
         domine_kernel_set_mode(kernel, monoPerSpeaker ? 1 : 0, swapSides ? 1 : 0, kernelMonoFallback ? 1 : 0)
         domine_kernel_set_test_tone(kernel, testTone.rawValue)
-        domine_kernel_set_click_test(kernel, calibrationChirps ? 2 : (clickTest ? 1 : 0))
+        let chirpGains = calibrationChirpGains
+        let swapped = calibrationChirpsSwapped
+        domine_kernel_set_chirp_gains(kernel, Float(swapped ? chirpGains.falling : chirpGains.rising),
+                                      Float(swapped ? chirpGains.rising : chirpGains.falling))
+        domine_kernel_set_click_test(kernel, calibrationChirps ? (swapped ? 3 : 2) : (clickTest ? 1 : 0))
         domine_kernel_set_crossfeed(kernel, crossfeed)
         domine_kernel_set_gains(kernel, leftGain, rightGain)
         domine_kernel_set_delay_ms(kernel, delayMs)
@@ -1387,6 +1406,11 @@ extension Engine {
         domine_surround_set_test_tone(surround, surroundToneIndex())
         domine_surround_set_click_test(surround, clickTest ? 1 : 0)
         let pair = surroundCalibrationPair
+        for i in 0..<count {
+            let gain = i == pair?.rising ? calibrationChirpGains.rising
+                : i == pair?.falling ? calibrationChirpGains.falling : 1
+            domine_surround_set_chirp_gain(surround, Int32(i), Float(gain))
+        }
         domine_surround_set_calibration_pair(surround, Int32(pair?.rising ?? -1), Int32(pair?.falling ?? -1))
         domine_surround_set_muted(surround, muted || fadingOut ? 1 : 0)
         pushedSurround = PushedSurround(azimuths: azimuths, gains: gains, delaysMs: totals,

@@ -25,6 +25,18 @@ final class CalibrationControllerTests {
     let model: AppModel
     var chirpsDuringWait: [Bool] = []
     var runningDuringWait = false
+    /// Test volume during each recording.
+    var gainsDuringWait: [ChirpGains] = []
+    let script = Script()
+
+    /// What the fake analysis sees, set by `wait` from the engine.
+    final class Script: @unchecked Sendable {
+        var swapped = false
+        var levels: ChirpLevels?
+        var peakCalls = 0
+        /// Inspections (0-based) whose rising speaker clipped.
+        var clippedRising: Set<Int> = []
+    }
 
     init() {
         defaults = UserDefaults(suiteName: suiteName)!
@@ -44,11 +56,22 @@ final class CalibrationControllerTests {
         model.start()
         model.calibration.requestMicAccess = { granted }
         model.calibration.waitQuiet = {}
+        let script = script
         model.calibration.wait = { [unowned self] in
             chirpsDuringWait.append(model.engine.calibrationChirps)
+            gainsDuringWait.append(model.engine.calibrationChirpGains)
+            script.swapped = model.engine.calibrationChirpsSwapped
             runningDuringWait = hal.isRunning
         }
-        model.calibration.analyze = { _, _, _, _ in .success(offsetMs: offset, windows: 5) }
+        // The swapped recording measures arrival(left) - arrival(right).
+        model.calibration.analyze = { _, _, _, _ in
+            .success(offsetMs: script.swapped ? -offset : offset, windows: 5, levels: script.levels)
+        }
+        model.calibration.inspectPeaks = { _, _, _, _ in
+            defer { script.peakCalls += 1 }
+            let clipped = script.clippedRising.contains(script.peakCalls)
+            return ChirpPeaks(rising: clipped ? 1 : 0.5, falling: 0.5, risingClipped: clipped)
+        }
     }
 
     private func calibrate() async {
@@ -96,17 +119,18 @@ final class CalibrationControllerTests {
         let before = hal.ops.count
         await calibrate()
         let ops = Array(hal.ops.dropFirst(before))
-        #expect(ops == [
+        let once: [FakeHAL.Op] = [
             .setSampleRate(uid: Self.mic.uid), .createIOProc, .start,
             .stop, .destroyIOProc, .setSampleRate(uid: Self.mic.uid),
-        ])
+        ]
+        #expect(ops == once + once) // the plain and the swapped recording
         #expect(hal.sampleRate(uid: Self.mic.uid) == 48_000)
     }
 
     @Test func chirpModeOnlyWhileRecording() async {
         setUp()
         await calibrate()
-        #expect(chirpsDuringWait == [true])
+        #expect(chirpsDuringWait == [true, true])
         #expect(runningDuringWait)
         #expect(!model.engine.calibrationChirps)
         #expect(model.engine.state == .running)
@@ -148,6 +172,57 @@ final class CalibrationControllerTests {
         #expect(model.tuningState.calibrationStatus == .failed(expected))
         #expect(expected.hasSuffix(" was too quiet to measure. Turn it up and try again."))
         #expect(expected.contains("(\(OutputDevice.suffix(forUID: model.rightUID ?? "")))"))
+        #expect(chirpsDuringWait.count == 1) // too quiet at full test volume: no retry
+    }
+
+    /// A clipped capture is recorded again 12 dB down; the next recording of
+    /// that speaker keeps the lower test volume (SPEC 12, test volume).
+    @Test func clippedCaptureRetriesTwelveDecibelsDown() async {
+        setUp(offset: 12)
+        script.clippedRising = [0]
+        await calibrate()
+        let down = ChirpGains.gain(db: -12)
+        #expect(gainsDuringWait == [ChirpGains(), ChirpGains(rising: down, falling: 1),
+                                    ChirpGains(rising: 1, falling: down)])
+        #expect(model.tuningState.calibrationStatus == .done("Right was 12 ms late. Delay set."))
+        #expect(model.engine.calibrationChirpGains == ChirpGains())
+        #expect(!model.engine.calibrationChirpsSwapped)
+    }
+
+    /// Levels are divided by the test volume: the left arrived as loud as the
+    /// right while playing 12 dB softer, so it is 12 dB louder and is cut.
+    @Test func levelsAreCorrectedForTestVolume() async {
+        setUp(offset: 0)
+        script.clippedRising = [0]
+        script.levels = ChirpLevels(rising: 1, falling: 1)
+        await calibrate()
+        #expect(abs(Double(model.pairSettings.balance) - (1 - ChirpGains.gain(db: -12))) < 0.0001)
+    }
+
+    /// The rising template reads hot; swapping the chirps cancels it.
+    @Test func templateBiasCancels() async {
+        setUp(offset: 0)
+        script.levels = ChirpLevels(rising: 2, falling: 1)
+        await calibrate()
+        #expect(model.pairSettings.balance == 0)
+        #expect(model.tuningState.calibrationStatus == .done("Speakers are in sync. Delay and balance set."))
+    }
+
+    @Test func clippedAtTheFloorIsOverloaded() async {
+        setUp()
+        script.clippedRising = Set(0..<10)
+        await calibrate()
+        #expect(model.tuningState.calibrationStatus == .failed(CalibrationOutcome.overloadedMessage))
+        #expect(gainsDuringWait.map { ChirpGains.db($0.rising).rounded() } == [0, -12, -18, -24])
+    }
+
+    @Test func clipCheckFindsFlatTops() {
+        #expect(ChirpClipCheck.clippedSamples([0.5, 0.99, 0.91, 0.92, 0.5, -0.95, -0.95, 0.2]) == [1, 2, 3])
+        #expect(ChirpClipCheck.clippedSamples([0.9, 0.9, 0.5, -0.97]).isEmpty)
+        #expect(abs((ChirpGains.lowered(1).map { ChirpGains.db($0) } ?? 0) + 12) < 1e-9)
+        #expect(ChirpGains.lowered(ChirpGains.gain(db: -30)) == nil)
+        #expect(ChirpGains.raised(1, clipped: nil) == nil)
+        #expect(ChirpGains.raised(ChirpGains.gain(db: -18), clipped: ChirpGains.gain(db: -12)) == nil)
     }
 
     @Test func noisyRoomSaysSo() async {

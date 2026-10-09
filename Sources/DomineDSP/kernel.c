@@ -49,7 +49,9 @@ struct DomineKernel {
     _Atomic int toneSide;
     _Atomic int muted;
     _Atomic int keepAlive;
-    _Atomic int clickTest; // click test mode: 0 off, 1 clicks
+    _Atomic int clickTest; // 0 off, 1 clicks, 2 chirps, 3 chirps swapped
+    _Atomic uint32_t chirpGainABits; // calibration chirp gains, 0...1
+    _Atomic uint32_t chirpGainBBits;
     _Atomic uint32_t layoutInFirstBuffer;
     _Atomic uint32_t layoutOutA;
     _Atomic uint32_t layoutOutB;
@@ -314,6 +316,8 @@ DomineKernel *domine_kernel_create(double sampleRate, uint32_t maxFrames) {
     if (k->clickPeriod <= k->chirpLength) k->clickPeriod = k->chirpLength + 1;
     atomic_init(&k->keepAlive, 0);
     atomic_init(&k->clickTest, 0);
+    atomic_init(&k->chirpGainABits, float_bits(1.0f));
+    atomic_init(&k->chirpGainBBits, float_bits(1.0f));
     atomic_init(&k->layoutInFirstBuffer, 0);
     atomic_init(&k->layoutOutA, 0);
     atomic_init(&k->layoutOutB, 2);
@@ -342,6 +346,18 @@ void domine_kernel_destroy(DomineKernel *k) {
     free(k->fifoL);
     free(k->fifoR);
     free(k);
+}
+
+// Chirp gains: 0...1, anything not a number counts as 1.
+static inline float sanitize_chirp_gain(float g) {
+    if (!(g >= 0.0f)) return g < 0.0f ? 0.0f : 1.0f;
+    return g > 1.0f ? 1.0f : g;
+}
+
+void domine_kernel_set_chirp_gains(DomineKernel *k, float gainA, float gainB) {
+    if (k == NULL) return;
+    atomic_store_explicit(&k->chirpGainABits, float_bits(sanitize_chirp_gain(gainA)), memory_order_relaxed);
+    atomic_store_explicit(&k->chirpGainBBits, float_bits(sanitize_chirp_gain(gainB)), memory_order_relaxed);
 }
 
 void domine_kernel_set_gains(DomineKernel *k, float leftGain, float rightGain) {
@@ -383,7 +399,7 @@ void domine_kernel_set_test_tone(DomineKernel *k, int side) {
 
 void domine_kernel_set_click_test(DomineKernel *k, int mode) {
     if (k == NULL) return;
-    atomic_store_explicit(&k->clickTest, (mode == 1 || mode == 2) ? mode : 0, memory_order_relaxed);
+    atomic_store_explicit(&k->clickTest, (mode >= 1 && mode <= 3) ? mode : 0, memory_order_relaxed);
 }
 
 // EFFECTS BLOCK (SPEC 5a): setters.
@@ -620,6 +636,8 @@ static RenderResult render(DomineKernel *k,
     const int toneSide = atomic_load_explicit(&k->toneSide, memory_order_relaxed);
     const int muted = atomic_load_explicit(&k->muted, memory_order_relaxed);
     const int clickTest = atomic_load_explicit(&k->clickTest, memory_order_relaxed);
+    const float chirpGainA = bits_float(atomic_load_explicit(&k->chirpGainABits, memory_order_relaxed));
+    const float chirpGainB = bits_float(atomic_load_explicit(&k->chirpGainBBits, memory_order_relaxed));
     const int keepAlive = atomic_load_explicit(&k->keepAlive, memory_order_relaxed);
 
     const uint32_t delayA = delay < 0 ? (uint32_t)(-delay) : 0;
@@ -736,16 +754,18 @@ static RenderResult render(DomineKernel *k,
 
         // Calibration chirps (click test mode 2): replace both positions after
         // the gains, bypassing the delay line and the gains (always full
-        // amplitude, so a quiet trim never hides a speaker from the mic).
-        // Rising on A, falling on B, both
+        // amplitude, so a quiet trim never hides a speaker from the mic),
+        // scaled only by the calibration chirp gains. Rising on A, falling on B (mode 3
+        // swaps them), both
         // starting on the same sample.
-        if (clickTest == 2 || k->chirpLevel != 0) {
+        const int chirpsOn = clickTest == 2 || clickTest == 3;
+        if (chirpsOn || k->chirpLevel != 0) {
             const uint32_t full = k->toneFadeLength;
             float chirpA = 0.0f, chirpB = 0.0f;
-            if (clickTest == 2 && k->chirpLevel == full) {
+            if (chirpsOn && k->chirpLevel == full) {
                 const uint32_t n = k->chirpCounter;
-                chirpA = (float)chirp_sample(n, k->chirpLength, k->sampleRate, 1);
-                chirpB = (float)chirp_sample(n, k->chirpLength, k->sampleRate, 0);
+                chirpA = (float)chirp_sample(n, k->chirpLength, k->sampleRate, clickTest != 3) * chirpGainA;
+                chirpB = (float)chirp_sample(n, k->chirpLength, k->sampleRate, clickTest == 3) * chirpGainB;
                 k->chirpCounter = n + 1 < k->clickPeriod ? n + 1 : 0;
             } else {
                 k->chirpCounter = 0;
@@ -758,7 +778,7 @@ static RenderResult render(DomineKernel *k,
                 outA = outA * keep + chirpA;
                 outB = outB * keep + chirpB;
             }
-            const uint32_t chirpTarget = clickTest == 2 ? full : 0;
+            const uint32_t chirpTarget = chirpsOn ? full : 0;
             if (k->chirpLevel < chirpTarget) k->chirpLevel++;
             else if (k->chirpLevel > chirpTarget) k->chirpLevel--;
         }

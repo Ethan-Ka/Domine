@@ -145,6 +145,10 @@ void domine_surround_set_click_test(DomineSurround *s, int on);
 /// arrival time. 40 ms crossfade with program audio like the click test.
 /// a < 0, b < 0, a == b, or an index out of range turns it off. Default off.
 void domine_surround_set_calibration_pair(DomineSurround *s, int a, int b);
+/// Calibration chirp gain for speaker `index` (SPEC 12, test volume): its
+/// chirp is multiplied by gain, clamped to 0...1 (NaN counts as 1). Only the
+/// chirp samples are scaled. Default 1. Out-of-range indexes are ignored.
+void domine_surround_set_chirp_gain(DomineSurround *s, int index, float gain);
 
 /// Demo (DomineDemo.h). on nonzero starts it from 0 s (restarts if playing);
 /// 0 stops it. Program audio crossfades out over 50 ms while the demo plays

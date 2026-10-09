@@ -71,4 +71,33 @@ struct CalibrationChirpTests {
         #expect(Array(a[Self.fade...]) == Array(Self.template(rising: true).prefix(300)))
         #expect(Array(b[Self.fade...]) == Array(Self.template(rising: false).prefix(300)))
     }
+
+    /// Chirp gains scale each chirp exactly, clamped to 0...1 (SPEC 12, test volume).
+    @Test func chirpGainsScaleEachSide() {
+        let kernel = Kernel()
+        domine_kernel_set_chirp_gains(kernel.raw, 0.25, 3)
+        domine_kernel_set_click_test(kernel.raw, 2)
+        let (a, b) = ClickTestTests.run(kernel, frames: Self.fade + 300)
+        #expect(Array(a[Self.fade...]) == Self.template(rising: true).prefix(300).map { $0 * 0.25 })
+        #expect(Array(b[Self.fade...]) == Array(Self.template(rising: false).prefix(300)))
+    }
+
+    /// Mode 3 swaps the templates; the gains stay with their positions.
+    @Test func swappedModePlaysFallingOnA() {
+        let kernel = Kernel()
+        domine_kernel_set_chirp_gains(kernel.raw, 0.5, 1)
+        domine_kernel_set_click_test(kernel.raw, 3)
+        let (a, b) = ClickTestTests.run(kernel, frames: Self.fade + 300)
+        #expect(Array(a[Self.fade...]) == Self.template(rising: false).prefix(300).map { $0 * 0.5 })
+        #expect(Array(b[Self.fade...]) == Array(Self.template(rising: true).prefix(300)))
+    }
+
+    @Test func negativeChirpGainSilencesTheChirp() {
+        let kernel = Kernel()
+        domine_kernel_set_chirp_gains(kernel.raw, 0.5, -1)
+        domine_kernel_set_click_test(kernel.raw, 2)
+        let (a, b) = ClickTestTests.run(kernel, frames: Self.fade + 300)
+        #expect(Array(a[Self.fade...]) == Self.template(rising: true).prefix(300).map { $0 * 0.5 })
+        #expect(b[Self.fade...].allSatisfy { $0 == 0 })
+    }
 }

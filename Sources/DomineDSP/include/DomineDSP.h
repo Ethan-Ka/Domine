@@ -93,6 +93,11 @@ void domine_kernel_destroy(DomineKernel *_Nullable k);
 /// not ramp. The first process call applies the gains at once.
 void domine_kernel_set_gains(DomineKernel *k, float leftGain, float rightGain);
 
+/// Calibration chirp gains (SPEC 12, test volume): the rising chirp on A is
+/// multiplied by gainA, the falling one on B by gainB, each clamped to 0...1
+/// (NaN counts as 1). Only the chirp samples are scaled. Default 1.
+void domine_kernel_set_chirp_gains(DomineKernel *k, float gainA, float gainB);
+
 /// Signed delay offset in milliseconds, clamped to +-300 ms.
 ///   signedDelayMs > 0: position B (right speaker) is delayed. Use this when
 ///                      the right speaker plays early.
@@ -141,7 +146,9 @@ void domine_kernel_set_crossfeed(DomineKernel *k, float amount);
 /// request takes over (program alone, or the new position from phase 0).
 void domine_kernel_set_test_tone(DomineKernel *k, int side);
 
-/// Click test mode: 0 off, 1 clicks, 2 calibration chirps. Other values are treated as 0 (reserved
+/// Click test mode: 0 off, 1 clicks, 2 calibration chirps, 3 calibration
+/// chirps swapped (falling on A, rising on B; chirp gains stay per position,
+/// used to cancel the templates' level bias, SPEC 12). Other values are treated as 0 (reserved
 /// for later modes). Used to line the two speakers up by ear. While mode 1 is
 /// on, the same click is fed to both positions in place of program
 /// audio, before the delay line, so each position's delay and trim gain apply
