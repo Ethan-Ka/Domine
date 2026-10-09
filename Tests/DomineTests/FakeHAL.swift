@@ -7,6 +7,16 @@ import Foundation
 /// simulated; every call that creates, destroys, or changes something is
 /// recorded in `ops`.
 final class FakeHAL: AudioHAL, @unchecked Sendable {
+    /// Ways a device's dB curve can be broken.
+    enum DecibelFault {
+        /// Scalar 0 converts to -inf dB.
+        case minusInfinityAtZero
+        /// Scalars strictly inside 0...1 convert to NaN dB.
+        case nanBetween
+        /// Every dB value converts to a NaN scalar.
+        case nanScalar
+    }
+
     struct Device {
         var uid: String
         var name: String
@@ -31,6 +41,10 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
         /// When set, a written volume snaps to the nearest multiple of this
         /// step, like a Bluetooth speaker's AVRCP volume.
         var volumeStep: Float? = nil
+        /// With `volumeStep`, a write rounds up to the next step instead of to the nearest.
+        var volumeRoundsUp = false
+        /// Makes the dB curve misbehave, for the safety tests.
+        var decibelFault: DecibelFault? = nil
         /// When set, the device converts between scalar and dB linearly over
         /// this range (scalar 0 is the lower end). Nil means no dB curve.
         var decibelRange: ClosedRange<Float>? = nil
@@ -455,11 +469,17 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
 
     func volumeDecibels(fromScalar scalar: Float, of device: AudioObjectID, element: AudioObjectPropertyElement) throws(HALError) -> Float {
         let range = try decibelRange(device, kAudioDevicePropertyVolumeScalarToDecibels)
+        switch try self.device(device, kAudioDevicePropertyVolumeScalarToDecibels).decibelFault {
+        case .minusInfinityAtZero where scalar <= 0: return -.infinity
+        case .nanBetween where scalar > 0 && scalar < 1: return .nan
+        default: break
+        }
         return range.lowerBound + min(max(scalar, 0), 1) * (range.upperBound - range.lowerBound)
     }
 
     func volumeScalar(fromDecibels decibels: Float, of device: AudioObjectID, element: AudioObjectPropertyElement) throws(HALError) -> Float {
         let range = try decibelRange(device, kAudioDevicePropertyVolumeDecibelsToScalar)
+        if try self.device(device, kAudioDevicePropertyVolumeDecibelsToScalar).decibelFault == .nanScalar { return .nan }
         return min(max((decibels - range.lowerBound) / (range.upperBound - range.lowerBound), 0), 1)
     }
 
@@ -477,7 +497,10 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
                 throw HALError(kAudioHardwareUnknownPropertyError, "AudioObjectSetPropertyData", selector: kAudioDevicePropertyVolumeScalar)
             }
             var stored = volume
-            if let step = d.volumeStep { stored = min(1, (volume / step).rounded() * step) }
+            if let step = d.volumeStep {
+                let steps = d.volumeRoundsUp ? (volume / step - 0.0001).rounded(.up) : (volume / step).rounded()
+                stored = min(1, steps * step)
+            }
             devices[device]?.volumes[element] = stored
             _volumeWrites.append(VolumeWrite(uid: d.uid, element: element, volume: volume))
         }
