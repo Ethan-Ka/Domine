@@ -117,6 +117,9 @@ final class Engine {
     /// The offsets were measured with the microphone (SPEC 13.4): they
     /// already include acoustic travel, so distance sets level only.
     var surroundTimingMeasured = false { didSet { if surroundTimingMeasured != oldValue { applyControls() } } }
+    /// The trims were measured with the microphone (SPEC 13.4): they already
+    /// include the level difference at the Mac, so distance no longer changes gain.
+    var surroundLevelMeasured = false { didSet { if surroundLevelMeasured != oldValue { applyControls() } } }
     /// Surround calibration chirps (SPEC 12): kernel speaker indexes (list
     /// order) of the rising and falling speaker; nil is off. Every stop turns it off.
     var surroundCalibrationPair: SurroundCalibrationPair? = nil {
@@ -1351,7 +1354,9 @@ extension Engine {
         let earliest = presentIndexes.map { totals[$0] }.min() ?? 0
         let maxDelay = PairSettings.delayLimitMs
         totals = totals.map { min(max($0 - earliest, 0), maxDelay) }
-        let gains = (0..<count).map { min(max(entries[$0].gain, 0), 1) * distanceGain[$0] }
+        // Measured trims already include the level difference (SPEC 13.4).
+        let levelMeasured = surroundLevelMeasured && !stereoDemo
+        let gains = (0..<count).map { min(max(entries[$0].gain, 0), 1) * (levelMeasured ? 1 : distanceGain[$0]) }
 
         let azimuths = entries.map(\.azimuth)
         domine_surround_set_speakers(surround, UInt32(count), azimuths)

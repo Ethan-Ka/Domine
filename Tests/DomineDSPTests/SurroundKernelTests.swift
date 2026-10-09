@@ -319,8 +319,8 @@ struct SurroundKernelTests {
         let sr = 8000.0
         let s = Self.make([-30, 30, 180], sampleRate: sr)
         defer { domine_surround_destroy(s) }
-        domine_surround_set_gain(s, 0, 0.5)
-        domine_surround_set_delay_ms(s, 0, 1) // the chirp bypasses the delay line
+        domine_surround_set_gain(s, 0, 0.38) // the chirp bypasses the gain
+        domine_surround_set_delay_ms(s, 0, 1) // and the delay line
         let zero = [Float](repeating: 0, count: 2000)
         _ = Self.run(s, offsets: [0, 2, 4], left: zero, right: zero, buffers: [6])
         domine_surround_set_calibration_pair(s, 0, 2)
@@ -330,7 +330,7 @@ struct SurroundKernelTests {
             let n = UInt32(max(f - full, 0))
             let up: Float = f >= full ? domine_calibration_chirp_sample(n, sr, 1) : 0
             let down: Float = f >= full ? domine_calibration_chirp_sample(n, sr, 0) : 0
-            #expect(out.channel(0)[f] == up * 0.5)
+            #expect(out.channel(0)[f] == up)
             #expect(out.channel(2)[f] == 0)
             #expect(out.channel(4)[f] == down)
         }

@@ -735,7 +735,9 @@ static RenderResult render(DomineKernel *k,
         if (gainNowB != 1.0f) outB *= gainNowB;
 
         // Calibration chirps (click test mode 2): replace both positions after
-        // the gains, bypassing the delay line. Rising on A, falling on B, both
+        // the gains, bypassing the delay line and the gains (always full
+        // amplitude, so a quiet trim never hides a speaker from the mic).
+        // Rising on A, falling on B, both
         // starting on the same sample.
         if (clickTest == 2 || k->chirpLevel != 0) {
             const uint32_t full = k->toneFadeLength;
@@ -748,8 +750,6 @@ static RenderResult render(DomineKernel *k,
             } else {
                 k->chirpCounter = 0;
             }
-            if (gainNowA != 1.0f) chirpA *= gainNowA;
-            if (gainNowB != 1.0f) chirpB *= gainNowB;
             if (k->chirpLevel == full) {
                 outA = chirpA;
                 outB = chirpB;

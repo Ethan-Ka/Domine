@@ -711,7 +711,7 @@ static void test_calibration_pair(void) {
     const double sr = 8000;
     const float az[3] = { -30, 30, 180 };
     DomineSurround *s = make(sr, 3, az);
-    domine_surround_set_gain(s, 0, 0.5f);
+    domine_surround_set_gain(s, 0, 0.38f); // must not scale the chirp
     domine_surround_set_delay_ms(s, 0, 1.0f); // must not shift the chirp
     const uint32_t off[3] = { 0, 2, 4 };
     enum { N = 9000 };
@@ -729,7 +729,7 @@ static void test_calibration_pair(void) {
             up = domine_calibration_chirp_sample(n, sr, 1);
             down = domine_calibration_chirp_sample(n, sr, 0);
         }
-        ok &= *buf_at(&out, 0, f) == up * 0.5f && *buf_at(&out, 1, f) == up * 0.5f;
+        ok &= *buf_at(&out, 0, f) == up && *buf_at(&out, 1, f) == up;
         ok &= *buf_at(&out, 4, f) == down && *buf_at(&out, 5, f) == down;
         silent &= *buf_at(&out, 2, f) == 0.0f && *buf_at(&out, 3, f) == 0.0f;
     }

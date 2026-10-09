@@ -6,10 +6,18 @@ import os
 
 /// What one auto-calibration run found (SPEC section 12).
 enum CalibrationOutcome: Equatable, Sendable {
-    /// arrival(right) - arrival(left), in ms.
-    case measured(offsetMs: Double)
+    /// arrival(right) - arrival(left), in ms, and how loud each chirp
+    /// arrived (nil when not measured).
+    case measured(offsetMs: Double, levels: ChirpLevels? = nil)
     case failed(String)
     case microphoneDenied
+    /// The room is too loud to measure (noise check, SPEC 12).
+    case tooNoisy
+    /// One speaker was too quiet to measure: the rising (left, s_k) one or
+    /// the falling (right, s(k+1)) one.
+    case speakerTooQuiet(rising: Bool)
+
+    static let tooNoisyMessage = "Too much background noise. Make the room quieter and try again."
 }
 
 /// Records the kernel's calibration chirps through the Mac's built-in
@@ -22,12 +30,20 @@ enum CalibrationOutcome: Equatable, Sendable {
 @MainActor
 final class CalibrationController {
     static let recordSeconds = 5.5
+    /// The silent stretch recorded before the chirps for the noise check.
+    static let quietSeconds = 0.7
+    /// The start of the silent stretch that is skipped (mute fade, settling).
+    static let quietSkipSeconds = 0.15
     static let privacySettingsURL = URL(
         string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!
 
     /// Asks for microphone access. Tests replace it.
     var requestMicAccess: @Sendable () async -> Bool = {
         await AVCaptureDevice.requestAccess(for: .audio)
+    }
+    /// Runs while the mic records the silent room before the chirps. Tests replace it.
+    var waitQuiet: @MainActor () async -> Void = {
+        try? await Task.sleep(for: .seconds(CalibrationController.quietSeconds))
     }
     /// Runs while the mic records with the chirps on. Tests replace it to feed the IOProc.
     var wait: @MainActor () async -> Void = {
@@ -37,7 +53,7 @@ final class CalibrationController {
     var analyze: @Sendable (_ recording: [Float], _ sampleRate: Double,
                             _ rising: [Float], _ falling: [Float]) -> CalibrationResult = CalibrationController.analyzeAligned
 
-    private static let log = Logger(subsystem: "com.ethankawley.Domine", category: "Calibration")
+    private nonisolated static let log = Logger(subsystem: "com.ethankawley.Domine", category: "Calibration")
     private let hal: any AudioHAL
     /// Sheet line for the setup step that is running; read when `record` throws.
     private var setupFailure = "Could not use the microphone"
@@ -60,8 +76,12 @@ final class CalibrationController {
     var isAvailable: Bool { Self.builtInMicrophone(hal: hal) != nil }
 
     /// One run: permission, recording with chirps on, analysis.
-    /// `setChirps` turns the kernel's click-test mode 2 on and off.
-    func run(kernelRate: Double, setChirps: @MainActor (Bool) -> Void) async -> CalibrationOutcome {
+    /// `setChirps` turns the kernel's click-test mode 2 on and off. `label`
+    /// names the pair in the log and the saved recording.
+    /// `setSilent` mutes program audio for the noise check before the chirps.
+    func run(kernelRate: Double, label: String = "stereo",
+             setSilent: @MainActor (Bool) -> Void = { _ in },
+             setChirps: @MainActor (Bool) -> Void) async -> CalibrationOutcome {
         guard Self.builtInMicrophone(hal: hal) != nil else {
             Self.log.error("No built-in microphone")
             return .failed("No built-in microphone")
@@ -74,8 +94,10 @@ final class CalibrationController {
 
         let recording: [Float]
         let rate: Double
+        let quietFrames: Int
         do {
-            (recording, rate) = try await record(mic: mic, kernelRate: kernelRate, setChirps: setChirps)
+            (recording, rate, quietFrames) = try await record(mic: mic, kernelRate: kernelRate,
+                                                             setSilent: setSilent, setChirps: setChirps)
         } catch {
             let line = setupFailure
             Self.log.error("Calibration setup failed: \(line, privacy: .public): \(error.description, privacy: .public)")
@@ -83,22 +105,75 @@ final class CalibrationController {
         }
         guard !Task.isCancelled else { return .failed("Cancelled") }
 
-        Self.log.info("Recorded \(recording.count, privacy: .public) frames at \(rate, privacy: .public) Hz")
+        Self.log.info("Recorded \(recording.count, privacy: .public) frames at \(rate, privacy: .public) Hz, \(quietFrames, privacy: .public) of them quiet")
         let frames = Int((0.001 * (DOMINE_CHIRP_MS + DOMINE_CHIRP_TAIL_MS) * rate).rounded())
         let rising = Self.chirp(frames: frames, rate: rate, rising: true)
         let falling = Self.chirp(frames: frames, rate: rate, rising: false)
         let analyze = analyze
-        let result = await Task.detached(priority: .userInitiated) {
-            analyze(recording, rate, rising, falling)
+        let skipFrames = Int(Self.quietSkipSeconds * rate)
+        Self.log.info("Analyzing \(label, privacy: .public)")
+        let (result, noiseFloor) = await Task.detached(priority: .userInitiated) {
+            let split = min(quietFrames, recording.count)
+            let skip = min(skipFrames, split)
+            let noise = Array(recording[skip..<split])
+            let floor = CalibrationNoiseCheck.noiseFloor(noise, rising: rising, falling: falling)
+            return (analyze(Array(recording[split...]), rate, rising, falling), floor)
         }.value
-        Self.log.info("Analyzer result: \(String(describing: result), privacy: .public)")
+        Self.log.info("Analyzer result for \(label, privacy: .public): \(String(describing: result), privacy: .public)")
+        let outcome = Self.outcome(result, noiseFloor: noiseFloor, label: label)
+        var failed = true
+        if case .measured = outcome { failed = false }
+        sessionRecordings.append(.init(label: label, samples: recording, sampleRate: rate, failed: failed))
+        return outcome
+    }
+
+    /// The recordings of the calibration run in progress, kept in memory
+    /// until `endSession` knows whether the run failed.
+    private var sessionRecordings: [CalibrationRecordingArchive.Recording] = []
+
+    /// Starts a calibration run (one or more `run` calls).
+    func beginSession() {
+        sessionRecordings = []
+    }
+
+    /// Ends the run: a failed run's recordings replace whatever the log
+    /// folder held; a successful one empties it; a cancelled one leaves it.
+    /// The files are written off the main actor.
+    func endSession(failed: Bool, cancelled: Bool = false) {
+        let recordings = sessionRecordings
+        sessionRecordings = []
+        guard !cancelled else { return }
+        Task.detached(priority: .utility) {
+            if failed {
+                CalibrationRecordingArchive.replace(with: recordings)
+            } else {
+                CalibrationRecordingArchive.clear()
+            }
+        }
+    }
+
+    /// Turns the analysis and the noise floor into an outcome (SPEC 12).
+    nonisolated static func outcome(_ result: CalibrationResult, noiseFloor: Double?, label: String = "") -> CalibrationOutcome {
         switch result {
-        case .success(let offset, _):
-            return .measured(offsetMs: offset)
+        case .success(let offset, _, let levels):
+            guard let levels, let noiseFloor else { return .measured(offsetMs: offset, levels: levels) }
+            let floorDb = 20 * log10(noiseFloor)
+            let a = CalibrationNoiseCheck.snrDb(level: levels.rising, noiseFloor: noiseFloor)
+            let b = CalibrationNoiseCheck.snrDb(level: levels.falling, noiseFloor: noiseFloor)
+            log.info("\(label, privacy: .public): noise floor \(floorDb, privacy: .public) dB, SNR rising \(a, privacy: .public) dB, falling \(b, privacy: .public) dB")
+            switch CalibrationNoiseCheck.verdict(levels: levels, noiseFloor: noiseFloor) {
+            case .ok: return .measured(offsetMs: offset, levels: levels)
+            case .tooNoisy: return .tooNoisy
+            case .tooQuiet(let rising): return .speakerTooQuiet(rising: rising)
+            }
         case .failure(let reason):
-            return .failed(reason == "Inconsistent"
-                ? "Results varied. Move the Mac and try again."
-                : "Too noisy. Lower background noise and try again.")
+            if let noiseFloor { log.info("\(label, privacy: .public): noise floor \(20 * log10(noiseFloor), privacy: .public) dB") }
+            switch reason {
+            case "Inconsistent": return .failed("Results varied. Move the Mac and try again.")
+            case CalibrationAnalyzer.weakRising: return .speakerTooQuiet(rising: true)
+            case CalibrationAnalyzer.weakFalling: return .speakerTooQuiet(rising: false)
+            default: return .tooNoisy
+            }
         }
     }
 
@@ -111,9 +186,12 @@ final class CalibrationController {
     }
 
     /// Records at the kernel rate when the mic supports it, else at the mic's
-    /// own rate. Returns the samples and the rate they were recorded at.
+    /// own rate. First records the room with program audio muted (noise
+    /// check), then with the chirps on. Returns the samples, the rate they
+    /// were recorded at, and how many leading frames are the quiet room.
     private func record(mic: AudioObjectID, kernelRate: Double,
-                        setChirps: @MainActor (Bool) -> Void) async throws(EngineError) -> ([Float], Double) {
+                        setSilent: @MainActor (Bool) -> Void,
+                        setChirps: @MainActor (Bool) -> Void) async throws(EngineError) -> ([Float], Double, Int) {
         setupFailure = "Could not read the microphone rate"
         let original = try EngineError.hal { () throws(HALError) in try hal.nominalSampleRate(of: mic) }
         var changedRate = false
@@ -142,14 +220,17 @@ final class CalibrationController {
         setupFailure = "Could not use the microphone"
         guard rate > 0, rate.isFinite else { throw .invalidSampleRate(rate) }
 
-        guard let recorder = domine_recorder_create(UInt32(Self.recordSeconds * rate)) else {
+        guard let recorder = domine_recorder_create(UInt32((Self.recordSeconds + Self.quietSeconds) * rate)) else {
             Self.log.error("Recorder allocation failed")
             throw .kernelUnavailable
         }
         var proc: IOProcHandle?
         var started = false
         var chirpsOn = false
+        var silent = false
+        var quietFrames = 0
         func teardown() -> Bool {
+            if silent { setSilent(false); silent = false }
             if chirpsOn { setChirps(false); chirpsOn = false; Self.log.info("Chirps off") }
             guard let p = proc else { return true }
             if started { release("stop mic") { () throws(HALError) in try hal.stopDevice(p) } }
@@ -165,6 +246,12 @@ final class CalibrationController {
             try EngineError.hal { () throws(HALError) in try hal.startDevice(proc!) }
             started = true
             Self.log.info("Mic IOProc started")
+            setSilent(true)
+            silent = true
+            await waitQuiet()
+            quietFrames = Int(domine_recorder_frames_written(recorder))
+            setSilent(false)
+            silent = false
             setChirps(true)
             chirpsOn = true
             Self.log.info("Chirps on")
@@ -184,7 +271,7 @@ final class CalibrationController {
         } else {
             Self.log.fault("Mic IOProc survived teardown; leaking the recorder")
         }
-        return (samples, rate)
+        return (samples, rate, quietFrames)
     }
 
     @discardableResult

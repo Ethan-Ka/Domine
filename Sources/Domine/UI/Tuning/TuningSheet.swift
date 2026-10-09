@@ -160,8 +160,8 @@ struct TuningSheet: View {
                 clickTestButton
                 autoCalibrateButton
             }
-            if state.isSurroundTimingMeasured {
-                Text("Timing measured with the microphone; distances set level only.")
+            if let note = state.surroundMeasuredNote {
+                Text(note)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

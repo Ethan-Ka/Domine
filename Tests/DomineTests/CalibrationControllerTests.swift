@@ -43,6 +43,7 @@ final class CalibrationControllerTests {
         hal.add(Self.gripB)
         model.start()
         model.calibration.requestMicAccess = { granted }
+        model.calibration.waitQuiet = {}
         model.calibration.wait = { [unowned self] in
             chirpsDuringWait.append(model.engine.calibrationChirps)
             runningDuringWait = hal.isRunning
@@ -139,6 +140,23 @@ final class CalibrationControllerTests {
         #expect(!reason.isEmpty)
     }
 
+    @Test func weakSpeakerIsNamedWithItsSuffix() async {
+        setUp()
+        model.calibration.analyze = { _, _, _, _ in .failure(reason: CalibrationAnalyzer.weakFalling) }
+        await calibrate()
+        let expected = model.tooQuietMessage(uid: model.rightUID)
+        #expect(model.tuningState.calibrationStatus == .failed(expected))
+        #expect(expected.hasSuffix(" was too quiet to measure. Turn it up and try again."))
+        #expect(expected.contains("(\(OutputDevice.suffix(forUID: model.rightUID ?? "")))"))
+    }
+
+    @Test func noisyRoomSaysSo() async {
+        setUp()
+        model.calibration.analyze = { _, _, _, _ in .failure(reason: "Too noisy") }
+        await calibrate()
+        #expect(model.tuningState.calibrationStatus == .failed(CalibrationOutcome.tooNoisyMessage))
+    }
+
     @Test func permissionDeniedOffersSettings() async {
         setUp(granted: false)
         await calibrate()
@@ -153,6 +171,7 @@ final class CalibrationControllerTests {
         hal.add(Self.mic)
         let controller = CalibrationController(hal: hal)
         controller.requestMicAccess = { true }
+        controller.waitQuiet = {}
         controller.wait = { [hal] in
             let input = FakeBufferList(channelsPerBuffer: [1], frames: 4, fill: 0.25)
             let output = FakeBufferList(channelsPerBuffer: [1], frames: 0)
@@ -194,7 +213,7 @@ final class CalibrationControllerTests {
         }
         let result = CalibrationController.analyzeAligned(recording: recording, sampleRate: rate,
                                                           rising: rising, falling: falling)
-        guard case .success(let offset, _) = result else {
+        guard case .success(let offset, _, _) = result else {
             Issue.record("expected success, got \(result)")
             return
         }

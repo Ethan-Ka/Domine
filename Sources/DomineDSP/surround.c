@@ -821,7 +821,6 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
             float o = delay[k] > 0 ? s->ring[k][(s->ringPos - delay[k]) & s->ringMask] : x;
             if (chirpActive) {
                 float c = (int)k == chirpA ? chirpUp : (int)k == chirpB ? chirpDown : 0.0f;
-                if (g->applied != 1.0f) c *= g->applied;
                 o = chirpKeep == 0.0f ? c : o * chirpKeep + c;
             }
             if (toneActive) {

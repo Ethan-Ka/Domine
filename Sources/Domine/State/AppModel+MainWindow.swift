@@ -109,6 +109,7 @@ extension AppModel {
                     offsetMs: Double(settings.offsetMs(for: speaker.uid)))
             }
             state.isSurroundTimingMeasured = settings.timingMeasured
+            state.isSurroundLevelMeasured = settings.levelMeasured
         }
         return state
     }

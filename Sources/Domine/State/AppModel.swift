@@ -507,6 +507,7 @@ final class AppModel {
         engine.surroundGains = gains
         engine.surroundDelaysMs = s.offsetsMs
         engine.surroundTimingMeasured = s.timingMeasured
+        engine.surroundLevelMeasured = s.levelMeasured
         engine.setSurroundEffects(effects)
         engine.surroundWidth = s.width
         engine.surroundLevel = s.surroundLevel
