@@ -92,7 +92,10 @@ final class SurroundCalibrationTests {
 
     @Test func pairDeltasMatchTheRingFormula() {
         #expect(AppModel.ringOffsets(pairDeltasMs: [12, -17, 35, -30]) == [30, 18, 35, 0])
-        #expect(AppModel.ringOffsets(pairDeltasMs: [12, -17, 40, -30]) == nil)
+        // Closure 15 ms over 4 pairs is past the 12 ms limit.
+        #expect(AppModel.ringOffsets(pairDeltasMs: [12, -17, 50, -30]) == nil)
+        // A real run: two Grips and a JBL Go 4 about 82 ms behind, closure 4.9 ms.
+        #expect(AppModel.ringOffsets(pairDeltasMs: [6.04, -82.38, 81.24]) != nil)
     }
 
     @Test func openRingFailsAndKeepsOffsets() async {

@@ -2,8 +2,16 @@ import Foundation
 
 /// Surround auto-calibration (SPEC section 12): a ring of pairs.
 extension AppModel {
-    /// The closure error a ring may have before the run is rejected, in ms.
-    static let ringClosureLimitMs = 2.0
+    /// The closure error each pair may add before the run is rejected, in ms.
+    /// Bluetooth latency wobbles by a few ms per measurement, and speakers of
+    /// different models can be 80 ms or more apart, so the limit grows with
+    /// the number of pairs. The error is spread evenly, so each speaker ends
+    /// within closure / N of its true offset.
+    static let ringClosureLimitPerPairMs = 3.0
+
+    static func ringClosureLimitMs(pairs: Int) -> Double {
+        ringClosureLimitPerPairMs * Double(pairs)
+    }
 
     /// With present speakers s0...s(N-1) in list order, measures the pairs
     /// (s0, s1), (s1, s2), ..., (s(N-1), s0): run k plays the rising chirp on
@@ -101,13 +109,16 @@ extension AppModel {
     }
 
     /// Offsets in ms (0...300) per ring speaker from the pair deltas, or nil
-    /// when the ring does not close within `ringClosureLimitMs`. The closure
+    /// when the ring does not close within `ringClosureLimitMs(pairs:)`. The closure
     /// error is spread evenly over the pairs; the latest speaker gets 0.
     static func ringOffsets(pairDeltasMs deltas: [Double]) -> [Double]? {
         let count = deltas.count
         guard count >= 2, deltas.allSatisfy(\.isFinite) else { return nil }
         let closure = deltas.reduce(0, +)
-        guard abs(closure) <= ringClosureLimitMs else { return nil }
+        guard abs(closure) <= ringClosureLimitMs(pairs: count) else {
+            log.info("Ring closure \(closure, privacy: .public) ms over the limit")
+            return nil
+        }
         let corrected = deltas.map { $0 - closure / Double(count) }
         var arrivals = [0.0]
         for k in 0..<(count - 1) { arrivals.append(arrivals[k] + corrected[k]) }
