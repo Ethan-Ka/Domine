@@ -18,5 +18,8 @@ struct TuningActions: Sendable {
     var setSurroundTrim: @MainActor @Sendable (_ uid: String, _ trim: Double) -> Void = { _, _ in }
     var setSurroundOffset: @MainActor @Sendable (_ uid: String, _ ms: Double) -> Void = { _, _ in }
 
+    /// One speaker's hardware volume offset in dB.
+    var setSpeakerVolumeOffset: @MainActor @Sendable (_ uid: String, _ db: Double) -> Void = { _, _ in }
+
     static let none = TuningActions()
 }

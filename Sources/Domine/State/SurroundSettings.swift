@@ -28,6 +28,9 @@ struct SurroundSettings: Codable, Equatable, Sendable {
     var trims: [String: Float] = [:]
     var offsetsMs: [String: Float] = [:]
     var effects: [String: Effects] = [:]
+    /// Per speaker by UID: hardware volume offset in dB, -12...12 (SPEC 4a).
+    /// Missing is 0.
+    var volumeOffsetsDb: [String: Float] = [:]
     /// While on, every speaker uses the first speaker's effects.
     var linkEffects = true
     /// L and R summed before panning, so every speaker plays the whole mix.
@@ -50,6 +53,7 @@ struct SurroundSettings: Codable, Equatable, Sendable {
 
     func trim(for uid: String) -> Float { trims[uid] ?? 1 }
     func offsetMs(for uid: String) -> Float { offsetsMs[uid] ?? 0 }
+    func volumeOffsetDb(for uid: String) -> Float { volumeOffsetsDb[uid] ?? 0 }
 
     /// The effects a speaker plays with: the first speaker's while linked.
     func resolvedEffects(for uid: String) -> Effects {
@@ -70,6 +74,7 @@ struct SurroundSettings: Codable, Equatable, Sendable {
         copy.trims = trims.filter { kept.contains($0.key) }
         copy.offsetsMs = offsetsMs.filter { kept.contains($0.key) }
         copy.effects = effects.filter { kept.contains($0.key) }
+        copy.volumeOffsetsDb = volumeOffsetsDb.filter { kept.contains($0.key) }
         // A different set needs its timing measured again.
         if kept != Set(uids) { copy.timingMeasured = false }
         return copy
@@ -93,6 +98,8 @@ struct SurroundSettings: Codable, Equatable, Sendable {
         spatialRoomMs = Self.clamp(spatialRoomMs, 5...30, fallback: 15)
         trims = trims.mapValues { Self.clamp($0, 0...1, fallback: 1) }
         offsetsMs = offsetsMs.mapValues { Self.clamp($0, 0...PairSettings.delayLimitMs, fallback: 0) }
+        volumeOffsetsDb = volumeOffsetsDb.mapValues { Self.clamp($0, SpeakerVolumeLink.offsetRange, fallback: 0) }
+            .filter { $0.value != 0 }
     }
 
     static func clamp(_ value: Float, _ range: ClosedRange<Float>, fallback: Float) -> Float {
@@ -144,7 +151,7 @@ struct SurroundSettings: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case speakers, width, surroundLevel, orbitRate, rotation, spatialAmount, spatialRoomMs
-        case trims, offsetsMs, effects, linkEffects, timingMeasured, mono
+        case trims, offsetsMs, effects, linkEffects, timingMeasured, mono, volumeOffsetsDb
     }
 
     /// Missing or mistyped fields fall back to their defaults one by one; a
@@ -163,6 +170,7 @@ struct SurroundSettings: Codable, Equatable, Sendable {
         trims = (try? c.decodeIfPresent([String: Float].self, forKey: .trims)) ?? [:]
         offsetsMs = (try? c.decodeIfPresent([String: Float].self, forKey: .offsetsMs)) ?? [:]
         effects = (try? c.decodeIfPresent([String: Effects].self, forKey: .effects)) ?? [:]
+        volumeOffsetsDb = (try? c.decodeIfPresent([String: Float].self, forKey: .volumeOffsetsDb)) ?? [:]
         linkEffects = (try? c.decodeIfPresent(Bool.self, forKey: .linkEffects)) ?? d.linkEffects
         timingMeasured = (try? c.decodeIfPresent(Bool.self, forKey: .timingMeasured)) ?? d.timingMeasured
         mono = (try? c.decodeIfPresent(Bool.self, forKey: .mono)) ?? d.mono

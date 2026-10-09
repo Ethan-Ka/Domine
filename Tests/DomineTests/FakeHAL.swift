@@ -31,6 +31,9 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
         /// When set, a written volume snaps to the nearest multiple of this
         /// step, like a Bluetooth speaker's AVRCP volume.
         var volumeStep: Float? = nil
+        /// When set, the device converts between scalar and dB linearly over
+        /// this range (scalar 0 is the lower end). Nil means no dB curve.
+        var decibelRange: ClosedRange<Float>? = nil
         /// Output mute state; nil means the device has no mute control.
         var mute: Bool? = nil
         /// `kAudioDevicePropertyDeviceIsAlive`. Change it with `setAlive`.
@@ -448,6 +451,23 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
             throw HALError(kAudioHardwareUnknownPropertyError, "AudioObjectGetPropertyData", selector: kAudioDevicePropertyVolumeScalar)
         }
         return volume
+    }
+
+    func volumeDecibels(fromScalar scalar: Float, of device: AudioObjectID, element: AudioObjectPropertyElement) throws(HALError) -> Float {
+        let range = try decibelRange(device, kAudioDevicePropertyVolumeScalarToDecibels)
+        return range.lowerBound + min(max(scalar, 0), 1) * (range.upperBound - range.lowerBound)
+    }
+
+    func volumeScalar(fromDecibels decibels: Float, of device: AudioObjectID, element: AudioObjectPropertyElement) throws(HALError) -> Float {
+        let range = try decibelRange(device, kAudioDevicePropertyVolumeDecibelsToScalar)
+        return min(max((decibels - range.lowerBound) / (range.upperBound - range.lowerBound), 0), 1)
+    }
+
+    private func decibelRange(_ device: AudioObjectID, _ selector: AudioObjectPropertySelector) throws(HALError) -> ClosedRange<Float> {
+        guard let range = try self.device(device, selector).decibelRange else {
+            throw HALError(kAudioHardwareUnknownPropertyError, "AudioObjectGetPropertyData", selector: selector)
+        }
+        return range
     }
 
     /// Like the real HAL, a write notifies listeners, including Domine's own.

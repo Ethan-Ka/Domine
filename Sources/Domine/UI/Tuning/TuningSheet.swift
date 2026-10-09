@@ -121,8 +121,10 @@ struct TuningSheet: View {
     /// Tallest the per-speaker lists get before they scroll.
     private static let surroundListMaxHeight: CGFloat = 220
     private static let surroundRowHeight: CGFloat = 44
+    /// Level rows also carry the speaker volume line.
+    private static let surroundLevelRowHeight: CGFloat = 72
 
-    private func surroundList<Row: View>(_ rows: [SurroundTuningRow],
+    private func surroundList<Row: View>(_ rows: [SurroundTuningRow], rowHeight: CGFloat = surroundRowHeight,
                                          @ViewBuilder row: @escaping (SurroundTuningRow) -> Row) -> some View {
         ScrollView {
             VStack(spacing: 8) {
@@ -132,7 +134,7 @@ struct TuningSheet: View {
             }
             .padding(.trailing, 4)
         }
-        .frame(height: min(CGFloat(rows.count) * Self.surroundRowHeight, Self.surroundListMaxHeight))
+        .frame(height: min(CGFloat(rows.count) * rowHeight, Self.surroundListMaxHeight))
     }
 
     /// Per-speaker delay, then the click test (SPEC section 13).
@@ -174,7 +176,7 @@ struct TuningSheet: View {
     private func surroundLevel(_ rows: [SurroundTuningRow]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionTitle("LEVEL")
-            surroundList(rows) { row in
+            surroundList(rows, rowHeight: Self.surroundLevelRowHeight) { row in
                 VStack(spacing: 4) {
                     readoutRow(row.label, value: row.trimReadout)
                     Slider(
@@ -185,6 +187,9 @@ struct TuningSheet: View {
                         .labelsHidden()
                         .accessibilityLabel("\(row.label) level")
                         .accessibilityValue(row.trimReadout)
+                    if let volume = state.speakerVolume(uid: row.uid) {
+                        speakerVolumeLine(volume, title: "Speaker volume")
+                    }
                 }
             }
         }
@@ -237,6 +242,45 @@ struct TuningSheet: View {
                     .accessibilityLabel("Balance")
                     .accessibilityValue(state.balanceReadout)
                 endLabels("Left", "Right")
+            }
+            if !state.speakerVolumes.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Speaker volume")
+                        .font(.callout)
+                    ForEach(state.speakerVolumes) { row in
+                        speakerVolumeLine(row, title: row.label)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Hardware volume offset for one speaker (SPEC 4a), with a note when
+    /// it is held at the speaker's maximum or cannot be raised.
+    private func speakerVolumeLine(_ row: SpeakerVolumeRow, title: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Text(title)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(row.readout)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                Stepper(
+                    "\(row.label) speaker volume",
+                    value: Binding(
+                        get: { row.offsetDb },
+                        set: { actions.setSpeakerVolumeOffset(row.uid, $0) }),
+                    in: row.range,
+                    step: 1)
+                    .labelsHidden()
+                    .accessibilityValue(row.readout)
+            }
+            .font(.callout)
+            if let note = row.note {
+                Text(note)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }

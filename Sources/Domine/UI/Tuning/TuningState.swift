@@ -27,6 +27,12 @@ struct TuningState: Equatable, Sendable {
     var surroundRows: [SurroundTuningRow]?
     /// Surround: the offsets were measured with the microphone (SPEC 13.4).
     var isSurroundTimingMeasured = false
+    /// Each speaker's hardware volume offset (SPEC 4a), in row order.
+    var speakerVolumes: [SpeakerVolumeRow] = []
+
+    func speakerVolume(uid: String) -> SpeakerVolumeRow? {
+        speakerVolumes.first { $0.uid == uid }
+    }
 
     var isDemoButtonEnabled: Bool { isDemoPlaying || canPlayDemo }
 

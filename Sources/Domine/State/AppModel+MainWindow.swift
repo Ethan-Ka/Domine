@@ -109,6 +109,9 @@ extension AppModel {
                     offsetMs: Double(settings.offsetMs(for: speaker.uid)))
             }
             state.isSurroundTimingMeasured = settings.timingMeasured
+            state.speakerVolumes = state.surroundRows?.map { speakerVolumeRow(uid: $0.uid, title: $0.title) } ?? []
+        } else {
+            state.speakerVolumes = stereoSpeakerVolumeRows
         }
         return state
     }
@@ -118,6 +121,9 @@ extension AppModel {
         actions.toggleDemo = { [weak self] in self?.toggleDemo() }
         actions.resetSurround = { [weak self] in self?.resetSurroundTuning() }
         actions.setSurroundTrim = { [weak self] uid, trim in self?.setSurroundTrim(uid: uid, Float(trim)) }
+        actions.setSpeakerVolumeOffset = { [weak self] uid, db in
+            self?.setSpeakerVolumeOffset(uid: uid, db: Float(db.rounded()))
+        }
         actions.setSurroundOffset = { [weak self] uid, ms in
             self?.setSurroundOffset(uid: uid, ms: Float(ms.rounded()))
         }

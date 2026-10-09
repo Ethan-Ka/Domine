@@ -121,7 +121,11 @@ enum SampleStates {
         delayMs: 4,
         isExtendedRange: false,
         balance: 0,
-        reportedLatencies: "Reported latency: left 182 ms, right 178 ms")
+        reportedLatencies: "Reported latency: left 182 ms, right 178 ms",
+        speakerVolumes: [
+            SpeakerVolumeRow(uid: "60-FD-A6-19-4F-2A:output", title: "Left", suffix: "4F2A"),
+            SpeakerVolumeRow(uid: "60-FD-A6-19-9C-11:output", title: "Right", suffix: "9C11", offsetDb: 4, isAtMaximum: true),
+        ])
 
     static let tuningDemo: TuningState = {
         var state = SampleStates.tuning
@@ -139,6 +143,9 @@ enum SampleStates {
             SurroundTuningRow(uid: "60-FD-A6-19-22-B7:output", title: "Rear Left", suffix: "22B7", trim: 1, offsetMs: 30),
             SurroundTuningRow(uid: "60-FD-A6-19-E0-3D:output", title: "Rear Right", suffix: "E03D", trim: 1, offsetMs: 28),
         ]
+        state.speakerVolumes = state.surroundRows?.map {
+            SpeakerVolumeRow(uid: $0.uid, title: $0.title, suffix: $0.suffix, offsetDb: $0.title == "Center" ? 6 : 0)
+        } ?? []
         return state
     }()
 

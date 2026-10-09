@@ -101,12 +101,15 @@ extension AppModel {
         updatePairSettings { $0.balance = Float(balance) }
     }
 
-    /// Delay, range, and balance back to defaults. Master volume is not part of the sheet.
+    /// Delay, range, and balance back to defaults. Master volume is not part
+    /// of the sheet, and the speaker volume offsets describe the speakers.
     func resetTuning() {
         updatePairSettings { s in
-            let volume = s.masterVolume
+            let old = s
             s = PairSettings()
-            s.masterVolume = volume
+            s.masterVolume = old.masterVolume
+            s.leftVolumeOffsetDb = old.leftVolumeOffsetDb
+            s.rightVolumeOffsetDb = old.rightVolumeOffsetDb
         }
     }
 

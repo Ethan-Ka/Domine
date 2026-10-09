@@ -19,13 +19,20 @@ struct PairSettings: Codable, Equatable, Sendable {
     var crossfeed: Double = 0
     /// Both speakers play the same mix (speakers in different rooms).
     var sameOnBoth = false
+    /// Hardware volume offset of each speaker in dB, -12...12 (SPEC 4a):
+    /// how far that speaker sits above or below the master volume.
+    var leftVolumeOffsetDb: Float = 0
+    var rightVolumeOffsetDb: Float = 0
 
     /// What the kernel gets: full mix while `sameOnBoth`, else the slider.
     var effectiveCrossfeed: Float { sameOnBoth ? 1 : Float(min(max(crossfeed.isFinite ? crossfeed : 0, 0), 1)) }
 
     init(delayMs: Float = 0, extendedRange: Bool = false, balance: Float = 0, masterVolume: Float = 0.5,
          effects: EffectsSettings = EffectsSettings(),
-         crossfeed: Double = 0, sameOnBoth: Bool = false) {
+         crossfeed: Double = 0, sameOnBoth: Bool = false,
+         leftVolumeOffsetDb: Float = 0, rightVolumeOffsetDb: Float = 0) {
+        self.leftVolumeOffsetDb = leftVolumeOffsetDb
+        self.rightVolumeOffsetDb = rightVolumeOffsetDb
         self.crossfeed = crossfeed
         self.sameOnBoth = sameOnBoth
         self.effects = effects
@@ -51,6 +58,8 @@ struct PairSettings: Codable, Equatable, Sendable {
         copy.delayMs = delayMs == 0 ? 0 : -delayMs
         copy.balance = balance == 0 ? 0 : -balance
         copy.effects = effects.swapped
+        copy.leftVolumeOffsetDb = rightVolumeOffsetDb
+        copy.rightVolumeOffsetDb = leftVolumeOffsetDb
         return copy
     }
 
@@ -58,6 +67,9 @@ struct PairSettings: Codable, Equatable, Sendable {
         delayMs = Self.clamp(delayMs, -Self.delayLimitMs, Self.delayLimitMs, fallback: 0)
         balance = Self.clamp(balance, -1, 1, fallback: 0)
         masterVolume = Self.clamp(masterVolume, 0, 1, fallback: 0.5)
+        let offsets = SpeakerVolumeLink.offsetRange
+        leftVolumeOffsetDb = Self.clamp(leftVolumeOffsetDb, offsets.lowerBound, offsets.upperBound, fallback: 0)
+        rightVolumeOffsetDb = Self.clamp(rightVolumeOffsetDb, offsets.lowerBound, offsets.upperBound, fallback: 0)
     }
 
     private static func clamp(_ value: Float, _ low: Float, _ high: Float, fallback: Float) -> Float {
@@ -66,6 +78,7 @@ struct PairSettings: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case delayMs, extendedRange, balance, masterVolume, effects, crossfeed, sameOnBoth
+        case leftVolumeOffsetDb, rightVolumeOffsetDb
     }
 
     /// Missing or mistyped fields fall back to their defaults one by one,
@@ -80,6 +93,8 @@ struct PairSettings: Codable, Equatable, Sendable {
             masterVolume: (try? c.decodeIfPresent(Float.self, forKey: .masterVolume)) ?? defaults.masterVolume,
             effects: (try? c.decodeIfPresent(EffectsSettings.self, forKey: .effects)) ?? defaults.effects,
             crossfeed: (try? c.decodeIfPresent(Double.self, forKey: .crossfeed)) ?? defaults.crossfeed,
-            sameOnBoth: (try? c.decodeIfPresent(Bool.self, forKey: .sameOnBoth)) ?? defaults.sameOnBoth)
+            sameOnBoth: (try? c.decodeIfPresent(Bool.self, forKey: .sameOnBoth)) ?? defaults.sameOnBoth,
+            leftVolumeOffsetDb: (try? c.decodeIfPresent(Float.self, forKey: .leftVolumeOffsetDb)) ?? 0,
+            rightVolumeOffsetDb: (try? c.decodeIfPresent(Float.self, forKey: .rightVolumeOffsetDb)) ?? 0)
     }
 }

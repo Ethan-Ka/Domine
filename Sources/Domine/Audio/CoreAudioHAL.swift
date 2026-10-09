@@ -141,6 +141,32 @@ final class CoreAudioHAL: AudioHAL {
         try writeScalar(device, volumeAddress(element), Float32(min(max(volume, 0), 1)))
     }
 
+    func volumeDecibels(fromScalar scalar: Float, of device: AudioObjectID, element: AudioObjectPropertyElement) throws(HALError) -> Float {
+        try translateVolume(scalar, kAudioDevicePropertyVolumeScalarToDecibels, device, element)
+    }
+
+    func volumeScalar(fromDecibels decibels: Float, of device: AudioObjectID, element: AudioObjectPropertyElement) throws(HALError) -> Float {
+        try translateVolume(decibels, kAudioDevicePropertyVolumeDecibelsToScalar, device, element)
+    }
+
+    /// The translation properties take the input in the data buffer and
+    /// return the result in place.
+    private func translateVolume(
+        _ value: Float, _ selector: AudioObjectPropertySelector,
+        _ device: AudioObjectID, _ element: AudioObjectPropertyElement
+    ) throws(HALError) -> Float {
+        var addr = AudioObjectPropertyAddress(mSelector: selector, mScope: kAudioObjectPropertyScopeOutput, mElement: element)
+        guard AudioObjectHasProperty(device, &addr) else {
+            throw HALError(kAudioHardwareUnknownPropertyError, "AudioObjectHasProperty", selector: selector)
+        }
+        var data = Float32(value)
+        var size = UInt32(MemoryLayout<Float32>.size)
+        try HALError.check(
+            AudioObjectGetPropertyData(device, &addr, 0, nil, &size, &data),
+            "AudioObjectGetPropertyData", selector: selector)
+        return data
+    }
+
     private func volumeAddress(_ element: AudioObjectPropertyElement) -> AudioObjectPropertyAddress {
         AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyVolumeScalar,

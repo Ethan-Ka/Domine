@@ -458,6 +458,7 @@ final class AppModel {
         let present = presentSpeakers
         let current = Dictionary(present.map { ($0.uid, $0.id) }, uniquingKeysWith: { first, _ in first })
         guard current != volumeLink.attachedDevices else { return }
+        volumeLink.setOffsets(speakerVolumeOffsets)
         if present.isEmpty {
             volumeLink.detach()
         } else if let volume = volumeLink.attach(present) {
@@ -471,7 +472,9 @@ final class AppModel {
         var s = pairSettings
         change(&s)
         s = PairSettings(delayMs: s.delayMs, extendedRange: s.extendedRange,
-                         balance: s.balance, masterVolume: s.masterVolume, effects: s.effects)
+                         balance: s.balance, masterVolume: s.masterVolume, effects: s.effects,
+                         crossfeed: s.crossfeed, sameOnBoth: s.sameOnBoth,
+                         leftVolumeOffsetDb: s.leftVolumeOffsetDb, rightVolumeOffsetDb: s.rightVolumeOffsetDb)
         guard s != pairSettings else { return }
         pairSettings = s
         mirrorMasterToVirtualOutput()
@@ -484,6 +487,7 @@ final class AppModel {
     /// Balance is always a kernel gain. Master volume is a kernel gain only
     /// for a speaker whose hardware volume Domine cannot set.
     func applyPairSettingsToEngine() {
+        volumeLink.setOffsets(speakerVolumeOffsets)
         engine.leftGain = pairSettings.leftGain * kernelVolume(for: leftUID)
         engine.rightGain = pairSettings.rightGain * kernelVolume(for: rightUID)
         engine.delayMs = pairSettings.delayMs
@@ -496,6 +500,7 @@ final class AppModel {
     /// master volume's kernel share, calibration offsets, effects, and the
     /// field controls. Distance compensation is added by the engine.
     func applySurroundSettingsToEngine() {
+        volumeLink.setOffsets(speakerVolumeOffsets)
         let s = surroundSettings
         engine.surroundSpeakers = s.speakers
         var gains: [String: Float] = [:]
@@ -533,7 +538,9 @@ final class AppModel {
                   hardware - master > SpeakerVolumeLink.exactTolerance else { return 1 }
             return min(1, master / hardware)
         }
-        return master
+        // No hardware volume: only a negative offset applies, as a cut.
+        let offset = uid.map { speakerVolumeOffsets[$0] ?? 0 } ?? 0
+        return offset < 0 ? master * Float(pow(10, Double(offset) / 20)) : master
     }
 
     private static func loadPairSettings(store: SettingsStore, left: String?, right: String?) -> PairSettings {

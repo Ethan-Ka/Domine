@@ -45,6 +45,11 @@ protocol AudioHAL: AnyObject, Sendable {
     /// `kAudioDevicePropertyVolumeScalar`, output scope, 0...1.
     func volume(of device: AudioObjectID, element: AudioObjectPropertyElement) throws(HALError) -> Float
     func setVolume(_ volume: Float, of device: AudioObjectID, element: AudioObjectPropertyElement) throws(HALError)
+    /// `kAudioDevicePropertyVolumeScalarToDecibels` on one output element:
+    /// the device's own volume curve. Throws when the device has none.
+    func volumeDecibels(fromScalar scalar: Float, of device: AudioObjectID, element: AudioObjectPropertyElement) throws(HALError) -> Float
+    /// `kAudioDevicePropertyVolumeDecibelsToScalar`, the inverse.
+    func volumeScalar(fromDecibels decibels: Float, of device: AudioObjectID, element: AudioObjectPropertyElement) throws(HALError) -> Float
 
     /// `kAudioDevicePropertyMute`, output scope, main element. Nil when the
     /// device has no settable mute control.
