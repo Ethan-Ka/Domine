@@ -806,7 +806,7 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
             const int quiet = keepAlive && fadeTarget != 0 && !toneActive && !clickActive && !chirpActive
                 && !demoActive;
             const uint32_t hold = (uint32_t)lround(s->sampleRate * KEEP_ALIVE_HOLD_S);
-            if (quiet && s->kaSilent >= hold) {
+            if (quiet && s->kaSilent > hold) { // counted this frame, so > waits the full hold
                 s->kaLevel += (float)(1.0 / (s->sampleRate * KEEP_ALIVE_FADE_IN_S));
                 if (s->kaLevel > 1.0f) s->kaLevel = 1.0f;
             } else {

@@ -864,7 +864,7 @@ static RenderResult render(DomineKernel *k,
             const int quiet = keepAlive && !muted && toneSide == 0 && k->playingToneSide == 0
                 && clickTest == 0 && k->clickLevel == 0 && k->chirpLevel == 0;
             const uint32_t hold = (uint32_t)lround(k->sampleRate * KEEP_ALIVE_HOLD_S);
-            if (quiet && k->kaSilent >= hold) {
+            if (quiet && k->kaSilent > hold) { // counted this frame, so > waits the full hold
                 k->kaLevel += (float)(1.0 / (k->sampleRate * KEEP_ALIVE_FADE_IN_S));
                 if (k->kaLevel > 1.0f) k->kaLevel = 1.0f;
             } else {
