@@ -22,9 +22,11 @@ import os
 /// Safety (the volume must never jump up on its own): every value from a
 /// dB curve is checked for being finite, and a bad curve falls back to the
 /// offset-free level, never to full scale. A write Domine makes on its own
-/// (relink, offset change, copying a change made on a speaker, probing for
-/// the hardware step) raises a speaker by at most `maxRise` above its
-/// current reading; relink never raises one at all. A read-back within one
+/// (relink, offset change, probing for the hardware step) raises a speaker
+/// by at most `maxRise` above its current reading; relink never raises one
+/// at all. A press on a speaker's own button is the user's change: it may
+/// raise the master only by what that speaker moved, and the other speakers
+/// are then set to it in full. A read-back within one
 /// hardware step of what Domine last wrote is quantization, not a press.
 ///
 /// A speaker without a settable volume is left out; the caller applies the
@@ -52,7 +54,8 @@ final class SpeakerVolumeLink {
 
     /// Who asked for a write, which decides how far it may raise a speaker.
     private enum WriteKind {
-        /// A master change the user asked for: up to master plus offset.
+        /// A master change the user asked for (slider, keys, or a press on a
+        /// speaker's own button): up to master plus offset.
         case user
         /// Domine's own follow-up: at most `maxRise` above the reading.
         case automatic
@@ -261,7 +264,8 @@ final class SpeakerVolumeLink {
         guard value.isFinite else { return }
         Self.log.info("\(uid, privacy: .public) changed to \(reading) outside Domine; master is now \(value)")
         lastHardware[uid] = reading
-        write(value, except: uid, kind: .automatic)
+        // The press is deliberate and `value` is already limited to what it moved.
+        write(value, except: uid, kind: .user)
         volume = value
         onExternalChange?(value)
     }
