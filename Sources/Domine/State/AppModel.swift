@@ -660,10 +660,18 @@ final class AppModel {
         let connected = present && !speakersWerePresent && key == speakersPresenceKey
         speakersWerePresent = present
         speakersPresenceKey = key
-        if !present, !assignedSpeakerUIDs.isEmpty { userTurnedRoutingOff = false }
+        if !present {
+            // A start still waiting to run is stale once a speaker is gone.
+            autoStartTask?.cancel()
+            autoStartTask = nil
+            if !assignedSpeakerUIDs.isEmpty { userTurnedRoutingOff = false }
+        }
         guard connected, store.startWhenBothConnect, !userTurnedRoutingOff, !engine.state.isActive else { return }
         Self.log.info("Speakers connected; starting routing")
-        autoStartTask = Task { [weak self] in await self?.startRouting() }
+        autoStartTask = Task { [weak self] in
+            guard !Task.isCancelled else { return }
+            await self?.startRouting()
+        }
     }
 
     /// Called whenever the engine state changes: meters poll only while routing.
