@@ -48,7 +48,8 @@ extension AppModel {
                 sectionTitle: demoSectionTitle,
                 canPlay: canPlayDemo),
             rooms: rooms,
-            currentRoomID: currentRoomID)
+            currentRoomID: currentRoomID,
+            maxVolume: Double(maxMasterVolume))
     }
 
     var mainWindowActions: MainWindowActions {

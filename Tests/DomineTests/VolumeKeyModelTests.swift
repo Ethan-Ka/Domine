@@ -142,11 +142,12 @@ final class VolumeKeyModelTests {
 
     @Test func clampsAtBothEnds() async {
         await enableAndRun()
-        model.setMasterVolume(0.97)
+        // Above 100% is the boost, up to the master's maximum.
+        model.setMasterVolume(1.97)
         tap.press(Self.event(.volumeUp))
-        #expect(model.pairSettings.masterVolume == 1)
+        #expect(model.pairSettings.masterVolume == PairSettings.maxMasterVolume)
         tap.press(Self.event(.volumeUp))
-        #expect(model.pairSettings.masterVolume == 1)
+        #expect(model.pairSettings.masterVolume == PairSettings.maxMasterVolume)
         model.setMasterVolume(0.03)
         tap.press(Self.event(.volumeDown))
         #expect(model.pairSettings.masterVolume == 0)

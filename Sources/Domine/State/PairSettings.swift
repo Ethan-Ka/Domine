@@ -1,3 +1,4 @@
+import Foundation
 /// Tuning for one pair of speakers, always expressed from the point of view
 /// of the current assignment: `left` is whatever device is Front Left now.
 /// `SettingsStore` handles the flip when the same pair is stored the other way round.
@@ -12,7 +13,18 @@ struct PairSettings: Codable, Equatable, Sendable {
     /// Tuning sheet Balance slider, -1...1. 0 is centered, -1 is full left, 1 is full right.
     var balance: Float = 0
     /// Hardware volume applied to both speakers (SPEC section 4a), 0...1.
+    /// Up to `maxMasterVolume` the hardware stays at full and the kernel
+    /// boosts, 0 to +10 dB.
     var masterVolume: Float = 0.5
+    static let maxMasterVolume: Float = 2
+    static let maxBoostDb: Float = 10
+
+    /// Kernel boost for a master volume above 1: (master - 1) * 10 dB.
+    static func boostGain(forMaster master: Float) -> Float {
+        guard master > 1 else { return 1 }
+        let db = min(master - 1, maxMasterVolume - 1) * maxBoostDb
+        return Float(pow(10, Double(db) / 20))
+    }
     /// EQ, bass, and compressor, per speaker or linked.
     var effects = EffectsSettings()
     /// Stereo only: how much of each side is mixed into the other, 0...1.
@@ -66,7 +78,7 @@ struct PairSettings: Codable, Equatable, Sendable {
     private mutating func sanitize() {
         delayMs = Self.clamp(delayMs, -Self.delayLimitMs, Self.delayLimitMs, fallback: 0)
         balance = Self.clamp(balance, -1, 1, fallback: 0)
-        masterVolume = Self.clamp(masterVolume, 0, 1, fallback: 0.5)
+        masterVolume = Self.clamp(masterVolume, 0, Self.maxMasterVolume, fallback: 0.5)
         let offsets = SpeakerVolumeLink.offsetRange
         leftVolumeOffsetDb = Self.clamp(leftVolumeOffsetDb, offsets.lowerBound, offsets.upperBound, fallback: 0)
         rightVolumeOffsetDb = Self.clamp(rightVolumeOffsetDb, offsets.lowerBound, offsets.upperBound, fallback: 0)

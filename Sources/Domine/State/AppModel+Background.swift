@@ -81,6 +81,7 @@ extension AppModel {
             left: statusMenuSpeaker(.frontLeft),
             right: statusMenuSpeaker(.frontRight),
             masterVolume: Double(pairSettings.masterVolume),
+            maxVolume: Double(maxMasterVolume),
             isMuted: isMuted,
             preset: matched,
             isRouting: engine.state.isRouting,

@@ -136,3 +136,47 @@ final class SingleSpeakerTests {
         #expect(RoutingMode.allCases.first == .single)
     }
 }
+
+/// Master volume above 100%: hardware stays at full, the kernel boosts.
+@MainActor
+struct VolumeBoostModelTests {
+    @Test func boostGainMapsTheTopOfTheSlider() {
+        #expect(PairSettings.boostGain(forMaster: 0.7) == 1)
+        #expect(PairSettings.boostGain(forMaster: 1) == 1)
+        #expect(abs(PairSettings.boostGain(forMaster: 2) - 3.1622777) < 1e-5)
+        #expect(abs(PairSettings.boostGain(forMaster: 1.6) - 1.9952623) < 1e-5)
+        #expect(PairSettings.boostGain(forMaster: 5) == PairSettings.boostGain(forMaster: 2))
+    }
+
+    @Test func labelShowsDecibelsAbove100() {
+        #expect(VolumeText.label(0.5) == "50%")
+        #expect(VolumeText.label(1) == "100%")
+        #expect(VolumeText.label(1.4) == "+4 dB")
+        #expect(VolumeText.label(2) == "+10 dB")
+    }
+
+    @Test func volumeKeysGoPast100WhenAllowed() {
+        let up = VolumeKeyEvent(key: .volumeUp, isKeyDown: true, isRepeat: false, step: VolumeKeyEvent.normalStep)
+        #expect(up.apply(to: 1, muted: false).0 == 1)
+        #expect(up.apply(to: 1, muted: false, maximum: 2).0 == 1 + VolumeKeyEvent.normalStep)
+    }
+}
+
+extension SingleSpeakerTests {
+    @Test func masterAbove100BoostsAndSurroundCapsIt() {
+        hal.add(Self.speakers)
+        hal.add(Self.gripA)
+        hal.add(Self.gripB)
+        let model = AppModel(hal: hal, defaults: defaults, services: system.services)
+        model.start()
+        model.setRoutingMode(.single)
+        model.setMasterVolume(1.5)
+        #expect(model.pairSettings.masterVolume == 1.5)
+        #expect(abs(model.engine.boost - PairSettings.boostGain(forMaster: 1.5)) < 1e-6)
+        #expect(model.mainWindowState.maxVolume == 2)
+        model.setRoutingMode(.surround)
+        #expect(model.pairSettings.masterVolume <= 1)
+        #expect(model.engine.boost == 1)
+        #expect(model.mainWindowState.maxVolume == 1)
+    }
+}

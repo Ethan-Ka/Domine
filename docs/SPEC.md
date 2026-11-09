@@ -146,6 +146,8 @@ Note: at typical listening distances, an offset under about 1 ms is inaudible as
 
 ### 4a. Volume
 
+- Boost (Single and Stereo): the master slider goes past 100% up to +10 dB. Above 100% the hardware stays at full and the stereo kernel adds gain, (master - 1) x 10 dB, through a peak limiter linked across both speakers (ceiling -1 dBFS, instant attack, 50 ms release), via `domine_kernel_set_boost`. This is the one exception to section 4d's rule that the kernel never adds gain; at 100% and below the stage is skipped and output stays bit-exact. Surround stops at 100%. The label shows "+N dB" above 100%.
+
 The process tap captures audio before any device volume is applied, so the default output's volume does not change what the Grips play. Domine handles volume itself:
 - With the virtual output device installed (section 3.3), it is the default output while routing. Domine listens to its volume scalar and mute and applies them to both Grips' hardware volume as the master volume. A change Domine makes to the Grips' volume (from the slider or a Grip's buttons) is written back to the virtual device, so the system HUD and the menu bar volume stay in step.
 - A master volume slider in the menu sets `kAudioDevicePropertyVolumeScalar` on both Grips (output scope, main element; fall back to per-channel elements if the main element is not settable). Over AAC/AVRCP this is the speaker's own hardware volume, so there is no loss of resolution.

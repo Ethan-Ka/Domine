@@ -67,6 +67,8 @@ final class Engine {
     var crossfeed: Float = 0 { didSet { if crossfeed != oldValue { applyControls() } } }
     var leftGain: Float = 1 { didSet { applyControls() } }
     var rightGain: Float = 1 { didSet { applyControls() } }
+    /// Volume boost above 100%, 1...DOMINE_MAX_BOOST (stereo kernel only).
+    var boost: Float = 1 { didSet { if boost != oldValue { applyControls() } } }
     /// Positive delays the right speaker, negative the left (SPEC section 4).
     var delayMs: Float = 0 { didSet { applyControls() } }
     /// Effects per physical speaker: position A (Front Left device) and B.
@@ -1185,6 +1187,7 @@ final class Engine {
         domine_kernel_set_click_test(kernel, calibrationChirps ? (swapped ? 3 : 2) : (clickTest ? 1 : 0))
         domine_kernel_set_crossfeed(kernel, crossfeed)
         domine_kernel_set_gains(kernel, leftGain, rightGain)
+        domine_kernel_set_boost(kernel, boost)
         domine_kernel_set_delay_ms(kernel, delayMs)
         domine_kernel_set_muted(kernel, muted || fadingOut ? 1 : 0)
         pushedEQ = []

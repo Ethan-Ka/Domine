@@ -33,6 +33,9 @@ _Static_assert(sizeof(DomineKernelStats) % sizeof(uint64_t) == 0, "stats must pa
 #define KEEP_ALIVE_HOLD_S 2.0
 #define KEEP_ALIVE_FADE_IN_S 0.05
 #define KEEP_ALIVE_FADE_OUT_S 0.01
+// Volume boost (SPEC 4a, above 100%): limiter ceiling (-1 dBFS) and release.
+#define BOOST_CEILING 0.8912509f
+#define BOOST_LIMITER_RELEASE_S 0.05
 
 struct DomineKernel {
     double sampleRate;
@@ -41,6 +44,7 @@ struct DomineKernel {
     // Parameters: written by any thread, read by the render thread.
     _Atomic uint32_t gainABits;
     _Atomic uint32_t gainBBits;
+    _Atomic uint32_t boostBits; // 1...DOMINE_MAX_BOOST, both positions
     _Atomic int32_t delaySamples; // > 0 delays B, < 0 delays A
     _Atomic int monoPerSpeaker;
     _Atomic int swapSides;
@@ -89,6 +93,13 @@ struct DomineKernel {
     float gainTargetA, gainTargetB;
     float gainStepA, gainStepB;
     uint32_t gainLeftA, gainLeftB; // ramp samples remaining
+    // Boost: ramps like the trim gains, then a peak limiter linked across
+    // A and B (instant attack, 50 ms release). Idle at 1 with the limiter
+    // released, so unity passes bit for bit.
+    float boostCur, boostTarget, boostStep;
+    uint32_t boostLeft;
+    float boostLimGain;
+    float boostLimRelease; // per-sample release coefficient
     // Crossfeed amount smoothing (20 ms linear ramp), render thread only.
     uint32_t xfRampLength;
     float xfCur, xfTarget, xfStep;
@@ -289,6 +300,9 @@ DomineKernel *domine_kernel_create(double sampleRate, uint32_t maxFrames) {
         const uint32_t ramp = (uint32_t)llround(0.03 * sampleRate);
         k->gainRampLength = ramp > 0 ? ramp : 1;
         k->gainCurA = k->gainCurB = k->gainTargetA = k->gainTargetB = 1.0f;
+        k->boostCur = k->boostTarget = 1.0f;
+        k->boostLimGain = 1.0f;
+        k->boostLimRelease = (float)exp(-1.0 / (BOOST_LIMITER_RELEASE_S * sampleRate));
     }
     {
         const uint32_t xr = (uint32_t)llround(0.02 * sampleRate);
@@ -304,6 +318,7 @@ DomineKernel *domine_kernel_create(double sampleRate, uint32_t maxFrames) {
 
     atomic_init(&k->gainABits, float_bits(1.0f));
     atomic_init(&k->gainBBits, float_bits(1.0f));
+    atomic_init(&k->boostBits, float_bits(1.0f));
     atomic_init(&k->delaySamples, 0);
     atomic_init(&k->monoPerSpeaker, 1);
     atomic_init(&k->swapSides, 0);
@@ -364,6 +379,14 @@ void domine_kernel_set_gains(DomineKernel *k, float leftGain, float rightGain) {
     if (k == NULL) return;
     atomic_store_explicit(&k->gainABits, float_bits(sanitize_gain(leftGain)), memory_order_relaxed);
     atomic_store_explicit(&k->gainBBits, float_bits(sanitize_gain(rightGain)), memory_order_relaxed);
+}
+
+void domine_kernel_set_boost(DomineKernel *k, float boost) {
+    if (k == NULL) return;
+    float b = isfinite(boost) ? boost : 1.0f;
+    if (b < 1.0f) b = 1.0f;
+    if (b > DOMINE_MAX_BOOST) b = DOMINE_MAX_BOOST;
+    atomic_store_explicit(&k->boostBits, float_bits(b), memory_order_relaxed);
 }
 
 void domine_kernel_set_delay_ms(DomineKernel *k, float signedDelayMs) {
@@ -601,12 +624,19 @@ static RenderResult render(DomineKernel *k,
     // Snapshot parameters once per cycle.
     const float gainA = bits_float(atomic_load_explicit(&k->gainABits, memory_order_relaxed));
     const float gainB = bits_float(atomic_load_explicit(&k->gainBBits, memory_order_relaxed));
+    const float boost = bits_float(atomic_load_explicit(&k->boostBits, memory_order_relaxed));
     // The first call snaps to the target; later changes ramp over 30 ms.
     const int xfFirst = !k->gainPrimed;
     if (!k->gainPrimed) {
         k->gainPrimed = 1;
         k->gainCurA = k->gainTargetA = gainA;
         k->gainCurB = k->gainTargetB = gainB;
+        k->boostCur = k->boostTarget = boost;
+    }
+    if (boost != k->boostTarget) {
+        k->boostTarget = boost;
+        k->boostLeft = k->gainRampLength;
+        k->boostStep = (boost - k->boostCur) / (float)k->gainRampLength;
     }
     if (gainA != k->gainTargetA) {
         k->gainTargetA = gainA;
@@ -751,6 +781,27 @@ static RenderResult render(DomineKernel *k,
         const float gainNowA = k->gainCurA, gainNowB = k->gainCurB;
         if (gainNowA != 1.0f) outA *= gainNowA;
         if (gainNowB != 1.0f) outB *= gainNowB;
+
+        // Boost above 100%: gain, then the linked limiter holds the louder
+        // position at the ceiling. Skipped once back at 1 and released.
+        if (k->boostLeft) {
+            k->boostCur = --k->boostLeft ? k->boostCur + k->boostStep : k->boostTarget;
+        }
+        if (k->boostCur != 1.0f || k->boostLimGain != 1.0f) {
+            outA *= k->boostCur;
+            outB *= k->boostCur;
+            const float pa = fabsf(outA), pb = fabsf(outB);
+            const float peak = pa > pb ? pa : pb;
+            // Release toward 1 first, then clamp, so no sample passes the ceiling.
+            float lg = 1.0f + k->boostLimRelease * (k->boostLimGain - 1.0f);
+            if (lg > 0.99999f) lg = 1.0f;
+            if (peak * lg > BOOST_CEILING) lg = BOOST_CEILING / peak;
+            k->boostLimGain = lg;
+            if (lg != 1.0f) {
+                outA *= lg;
+                outB *= lg;
+            }
+        }
 
         // Calibration chirps (click test mode 2): replace both positions after
         // the gains, bypassing the delay line and the gains (always full

@@ -121,11 +121,15 @@ extension AppModel {
         if virtualOutput?.device == device { return }
         virtualOutput?.cancel()
         let link = VirtualOutputLink(hal: hal, device: device)
-        link.onVolume = { [weak self] volume in self?.setMasterVolume(Double(volume)) }
+        link.onVolume = { [weak self] volume in
+            // The virtual output stops at 1; full there keeps a boost.
+            guard let self, !(volume >= 1 && self.pairSettings.masterVolume > 1) else { return }
+            self.setMasterVolume(Double(volume))
+        }
         link.onMute = { [weak self] muted in self?.setMuted(muted) }
         link.onDefaultOutputChange = { [weak self] in self?.syncVirtualOutput() }
         virtualOutput = link
-        link.mirror(volume: pairSettings.masterVolume)
+        link.mirror(volume: min(pairSettings.masterVolume, 1))
         link.mirror(muted: isMuted)
     }
 
@@ -136,7 +140,7 @@ extension AppModel {
     }
 
     func mirrorMasterToVirtualOutput() {
-        virtualOutput?.mirror(volume: pairSettings.masterVolume)
+        virtualOutput?.mirror(volume: min(pairSettings.masterVolume, 1))
     }
 
     func mirrorMuteToVirtualOutput() {

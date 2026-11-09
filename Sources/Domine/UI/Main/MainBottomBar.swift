@@ -95,14 +95,14 @@ struct MainBottomBar: View {
                     .accessibilityHidden(true)
                 Slider(value: Binding(
                     get: { state.masterVolume },
-                    set: { actions.setMasterVolume($0) }), in: 0...1)
+                    set: { actions.setMasterVolume($0) }), in: 0...max(1, state.maxVolume))
                     .labelsHidden()
                     .accessibilityLabel("Master volume")
-                    .accessibilityValue(state.isMuted ? "Muted, \(state.masterVolumePercent) percent" : "\(state.masterVolumePercent) percent")
-                Text("\(state.masterVolumePercent)%")
+                    .accessibilityValue(state.isMuted ? "Muted, \(VolumeText.accessibility(state.masterVolume))" : VolumeText.accessibility(state.masterVolume))
+                Text(VolumeText.label(state.masterVolume))
                     .font(.callout)
                     .monospacedDigit()
-                    .frame(width: 34, alignment: .trailing)
+                    .frame(width: 48, alignment: .trailing)
                     .accessibilityHidden(true)
             }
 

@@ -71,16 +71,16 @@ struct VolumeKeyEvent: Equatable, Sendable {
     }
 
     /// Returns the new master volume and mute state after this key event.
-    /// Volume is clamped to 0...1. Mute toggles. Volume up while muted
+    /// Volume is clamped to 0...maximum. Mute toggles. Volume up while muted
     /// unmutes. Key up events, and mute auto-repeats, return the inputs
     /// unchanged.
-    func apply(to volume: Float, muted: Bool) -> (Float, Bool) {
+    func apply(to volume: Float, muted: Bool, maximum: Float = 1) -> (Float, Bool) {
         guard isKeyDown else { return (volume, muted) }
         switch key {
         case .volumeUp:
-            return (min(1, max(0, volume + step)), false)
+            return (min(maximum, max(0, volume + step)), false)
         case .volumeDown:
-            return (min(1, max(0, volume - step)), muted)
+            return (min(maximum, max(0, volume - step)), muted)
         case .mute:
             // A held mute key would otherwise flicker on every repeat.
             return isRepeat ? (volume, muted) : (volume, !muted)

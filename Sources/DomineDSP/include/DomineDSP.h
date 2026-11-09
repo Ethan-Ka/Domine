@@ -93,6 +93,17 @@ void domine_kernel_destroy(DomineKernel *_Nullable k);
 /// not ramp. The first process call applies the gains at once.
 void domine_kernel_set_gains(DomineKernel *k, float leftGain, float rightGain);
 
+/// Largest volume boost: +10 dB (10^(10/20)).
+#define DOMINE_MAX_BOOST 3.1622777f
+
+/// Volume boost above 100% (SPEC 4a), the only place the kernel adds gain.
+/// Clamped to 1...DOMINE_MAX_BOOST; not a number counts as 1. Applied after
+/// the trim gains on both positions, ramping over the same 30 ms, then a
+/// peak limiter linked across A and B keeps the louder one at or below
+/// -1 dBFS (instant attack, 50 ms release). At 1 with the limiter released
+/// the stage is skipped, so unity output stays bit for bit.
+void domine_kernel_set_boost(DomineKernel *k, float boost);
+
 /// Calibration chirp gains (SPEC 12, test volume): the rising chirp on A is
 /// multiplied by gainA, the falling one on B by gainB, each clamped to 0...1
 /// (NaN counts as 1). Only the chirp samples are scaled. Default 1.

@@ -314,6 +314,7 @@ final class AppModel {
         routingMode = mode
         store.routingMode = mode
         if mode == .surround { seedSurroundSetIfEmpty() }
+        if pairSettings.masterVolume > maxMasterVolume { updatePairSettings { $0.masterVolume = maxMasterVolume } }
         refreshCurrentRoom()
         syncVolumeLink()
         applyPairSettingsToEngine()
@@ -427,15 +428,23 @@ final class AppModel {
     /// Master volume, 0...1 (SPEC 4a): hardware volume at the step at or above
     /// it, times a kernel gain for the remainder, so coarse Bluetooth steps
     /// still move smoothly. A speaker without a settable volume gets it as a kernel gain instead.
+    /// Above 1 (Single and Stereo only) the hardware stays at full and the
+    /// kernel boosts up to +10 dB through a limiter.
     func setMasterVolume(_ volume: Double) {
-        let value = min(max(Float(volume), 0), 1)
-        if volumeLink.volume != nil { volumeLink.setAtOrAbove(value) }
+        let value = min(max(Float(volume), 0), maxMasterVolume)
+        if volumeLink.volume != nil { volumeLink.setAtOrAbove(min(value, 1)) }
         updatePairSettings { $0.masterVolume = value }
     }
 
+    /// Surround's kernel has no boost, so its master stops at 100%.
+    var maxMasterVolume: Float {
+        routingMode == .surround ? 1 : PairSettings.maxMasterVolume
+    }
+
     /// Shows a volume read from the speakers as the master value, without
-    /// writing it back to them.
+    /// writing it back to them. Full hardware volume keeps a boost.
     func adoptHardwareVolume(_ volume: Float) {
+        if pairSettings.masterVolume > 1, volume >= 1 - SpeakerVolumeLink.exactTolerance { return }
         updatePairSettings { $0.masterVolume = volume }
     }
 
@@ -497,6 +506,7 @@ final class AppModel {
         engine.leftGain = (single ? 1 : pairSettings.leftGain) * kernelVolume(for: leftUID)
         engine.rightGain = pairSettings.rightGain * kernelVolume(for: rightUID)
         engine.delayMs = single ? 0 : pairSettings.delayMs
+        engine.boost = PairSettings.boostGain(forMaster: min(pairSettings.masterVolume, maxMasterVolume))
         engine.crossfeed = pairSettings.effectiveCrossfeed
         engine.setEffects(left: pairSettings.effects.left, right: pairSettings.effects.effectiveRight)
         applySurroundSettingsToEngine()

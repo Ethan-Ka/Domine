@@ -13,6 +13,8 @@ struct MainWindowState: Equatable, Sendable {
     var speakers: [SpeakerCardState]
     /// Master volume, 0...1.
     var masterVolume: Double
+    /// Top of the master slider: 2 (+10 dB boost) in Single and Stereo, 1 in Surround.
+    var maxVolume: Double = 1
     /// Muted with the mute key. The slider keeps showing the volume.
     var isMuted: Bool
     /// The side whose test tone is playing, if any.
@@ -47,8 +49,10 @@ struct MainWindowState: Equatable, Sendable {
         canAddSurroundSpeaker: Bool = true,
         demo: DemoState = DemoState(),
         rooms: [Room] = [],
-        currentRoomID: Room.ID? = nil
+        currentRoomID: Room.ID? = nil,
+        maxVolume: Double = 1
     ) {
+        self.maxVolume = maxVolume
         self.rooms = rooms
         self.currentRoomID = currentRoomID
         self.surround = surround

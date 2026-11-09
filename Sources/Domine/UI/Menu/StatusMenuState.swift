@@ -5,8 +5,9 @@ struct StatusMenuState: Equatable, Sendable {
     var isOn: Bool
     var left: StatusMenuSpeaker
     var right: StatusMenuSpeaker
-    /// 0...1
+    /// 0...maxVolume; above 1 is the boost.
     var masterVolume: Double
+    var maxVolume: Double = 1
     var isMuted = false
     /// The preset the current sound settings match, if any.
     var preset: PairSettings.Preset? = .flat

@@ -58,7 +58,7 @@ extension AppModel {
     /// Applies one key press to the master volume and mute, saves the volume
     /// for the pair, and shows the HUD.
     func handleVolumeKey(_ event: VolumeKeyEvent) {
-        let (volume, muted) = event.apply(to: pairSettings.masterVolume, muted: isMuted)
+        let (volume, muted) = event.apply(to: pairSettings.masterVolume, muted: isMuted, maximum: maxMasterVolume)
         setMasterVolume(Double(volume))
         setMuted(muted)
         Self.volumeKeysLog.info("Key \(String(describing: event.key), privacy: .public): master \(self.pairSettings.masterVolume), muted \(muted)")
