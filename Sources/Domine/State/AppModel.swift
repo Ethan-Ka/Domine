@@ -355,6 +355,8 @@ final class AppModel {
         var routeUIDs: Set<String>?
         if let surround {
             routeUIDs = Set(surround.map(\.uid))
+        } else if routingMode == .single {
+            if let left = leftUID, catalog.device(uid: left) != nil { routeUIDs = [left] }
         } else if let left = leftUID, let right = rightUID, left != right,
                   catalog.device(uid: left) != nil, catalog.device(uid: right) != nil {
             routeUIDs = [left, right]
@@ -378,6 +380,8 @@ final class AppModel {
         applyPairSettingsToEngine()
         if let surround {
             await engine.start(surround: surround)
+        } else if routingMode == .single {
+            await engine.start(single: leftUID)
         } else {
             await engine.start(left: leftUID, right: rightUID)
         }
@@ -438,7 +442,7 @@ final class AppModel {
     /// Selected speakers that are present, with their current device IDs.
     private var presentSpeakers: [(uid: String, id: AudioObjectID)] {
         var seen = Set<String>()
-        var uids: [String?] = [leftUID, rightUID]
+        var uids: [String?] = routingMode == .single ? [leftUID] : [leftUID, rightUID]
         if let surround = surroundRouteSpeakers { uids = surround.map { $0.uid } }
         return uids.compactMap { uid in
             guard let uid, seen.insert(uid).inserted, let device = catalog.device(uid: uid) else { return nil }
@@ -486,11 +490,13 @@ final class AppModel {
 
     /// Balance is always a kernel gain. Master volume is a kernel gain only
     /// for a speaker whose hardware volume Domine cannot set.
+    /// Single mode has no balance or delay: its one speaker takes only the volume.
     func applyPairSettingsToEngine() {
         volumeLink.setOffsets(speakerVolumeOffsets)
-        engine.leftGain = pairSettings.leftGain * kernelVolume(for: leftUID)
+        let single = routingMode == .single
+        engine.leftGain = (single ? 1 : pairSettings.leftGain) * kernelVolume(for: leftUID)
         engine.rightGain = pairSettings.rightGain * kernelVolume(for: rightUID)
-        engine.delayMs = pairSettings.delayMs
+        engine.delayMs = single ? 0 : pairSettings.delayMs
         engine.crossfeed = pairSettings.effectiveCrossfeed
         engine.setEffects(left: pairSettings.effects.left, right: pairSettings.effects.effectiveRight)
         applySurroundSettingsToEngine()
@@ -606,16 +612,18 @@ final class AppModel {
     /// Assigned speakers that are not in the catalog right now.
     func syncReconnector() {
         let assigned: [String?] = routingMode == .surround
-            ? surroundSpeakers.map(\.uid) : [leftUID, rightUID]
+            ? surroundSpeakers.map(\.uid) : routingMode == .single ? [leftUID] : [leftUID, rightUID]
         reconnector.update(missing: Set(assigned.compactMap { $0 }.filter { catalog.device(uid: $0) == nil }))
     }
 
-    /// Every speaker the current mode routes to: the pair in Stereo, the
-    /// whole set in Surround.
+    /// Every speaker the current mode routes to: the one in Single, the
+    /// pair in Stereo, the whole set in Surround.
     var assignedSpeakerUIDs: [String] {
-        routingMode == .surround
-            ? surroundSpeakers.map(\.uid)
-            : [leftUID, rightUID].compactMap { $0 }
+        switch routingMode {
+        case .single: [leftUID].compactMap { $0 }
+        case .stereo: [leftUID, rightUID].compactMap { $0 }
+        case .surround: surroundSpeakers.map(\.uid)
+        }
     }
 
     private var assignedSpeakersKey: String {
@@ -625,6 +633,7 @@ final class AppModel {
     /// All of the current mode's speakers are connected: both of the pair,
     /// or every speaker of the surround set (at least the surround minimum).
     var allSpeakersPresent: Bool {
+        if routingMode == .single { return leftUID.flatMap { catalog.device(uid: $0) } != nil }
         guard routingMode == .surround else { return bothSelectedSpeakersPresent }
         let uids = Set(assignedSpeakerUIDs)
         return uids.count >= Self.surroundMinimumSpeakers

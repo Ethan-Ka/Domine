@@ -39,7 +39,8 @@ extension AppModel {
     func assignSheetState(for position: SpeakerPosition) -> AssignSheetState {
         let rows = catalog.outputs.map { device in
             var details = [device.transportName]
-            if let other = SpeakerPosition.allCases.first(where: { $0 != position && uid(at: $0) == device.uid }) {
+            if routingMode != .single,
+               let other = SpeakerPosition.allCases.first(where: { $0 != position && uid(at: $0) == device.uid }) {
                 details.append("In use as \(other.title)")
             }
             return AssignRow(
@@ -49,7 +50,8 @@ extension AppModel {
         }
         return AssignSheetState(
             position: position, rows: rows,
-            footnote: showsGripPairingHint ? Self.gripPairingHint : nil)
+            footnote: showsGripPairingHint ? Self.gripPairingHint : nil,
+            customTitle: routingMode == .single ? "Choose a speaker" : nil)
     }
 
     func assignSheetActions(for position: SpeakerPosition) -> AssignSheetActions {

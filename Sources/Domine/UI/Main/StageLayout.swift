@@ -30,7 +30,7 @@ struct StageLayout: Equatable, Sendable {
 
     var guideRadius: CGFloat {
         switch mode {
-        case .stereo:
+        case .single, .stereo:
             return Self.stereoGuideRadius * scale
         case .surround:
             return Self.surroundGuideRadius * scale

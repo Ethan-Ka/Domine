@@ -43,8 +43,11 @@ extension AppModel {
             hasHardwareVolume: canSetHardwareVolume(uid: uid))
     }
 
-    /// Stereo rows for Sync & Balance: Left, then Right.
+    /// Stereo rows for Sync & Balance: Left, then Right. Single has one row.
     var stereoSpeakerVolumeRows: [SpeakerVolumeRow] {
+        if routingMode == .single {
+            return leftUID.map { [speakerVolumeRow(uid: $0, title: Self.singleSpeakerTitle)] } ?? []
+        }
         guard let left = leftUID, let right = rightUID, left != right else { return [] }
         return [speakerVolumeRow(uid: left, title: "Left"), speakerVolumeRow(uid: right, title: "Right")]
     }

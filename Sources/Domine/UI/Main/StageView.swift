@@ -31,7 +31,7 @@ struct StageView: View {
                     .position(layout.macCenter)
 
                 switch state.mode {
-                case .stereo:
+                case .single, .stereo:
                     stereoStage(layout: layout)
                 case .surround:
                     surroundStage(layout: layout)
@@ -64,7 +64,7 @@ struct StageView: View {
 
     @ViewBuilder
     private func stereoStage(layout: StageLayout) -> some View {
-        ForEach(SpeakerPosition.positions(in: .stereo)) { position in
+        ForEach(SpeakerPosition.positions(in: state.mode)) { position in
             connector(
                 from: layout.connectorStart(position), to: layout.connectorEnd(position),
                 connection: state.speaker(at: position).connection)
@@ -73,7 +73,7 @@ struct StageView: View {
         thisMac
             .position(x: layout.macCenter.x, y: layout.macCenter.y + 8)
 
-        ForEach(SpeakerPosition.positions(in: .stereo)) { position in
+        ForEach(SpeakerPosition.positions(in: state.mode)) { position in
             SpeakerCard(
                 state: state.speaker(at: position),
                 onSelect: { actions.selectSpeaker(position) },

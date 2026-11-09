@@ -25,11 +25,13 @@ struct SpeakerCardState: Identifiable, Equatable, Sendable {
     var reconnectUID: String?
     /// A connection attempt is running; the button reads "Connecting…".
     var isReconnecting = false
+    /// Replaces the position's title, e.g. "Speaker" in Single mode.
+    var customTitle: String?
 
     var id: String { surround.map { "surround:" + $0.uid } ?? position.rawValue }
 
     /// "Front Left" for a Stereo card; for a Surround card, its direction.
-    var title: String { surround?.title ?? position.title }
+    var title: String { customTitle ?? surround?.title ?? position.title }
 
     init(
         position: SpeakerPosition,

@@ -120,7 +120,7 @@ struct SpeakerCard: View {
 
     private var placeholder: some View {
         VStack(spacing: 6) {
-            Text(state.position.title)
+            Text(state.title)
                 .font(.callout.weight(.semibold))
             Text(state.statusText)
                 .font(.subheadline)

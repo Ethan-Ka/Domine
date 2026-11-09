@@ -280,6 +280,9 @@ final class Engine {
     static let maxFormatRebuilds = 3
     /// The kernel plays (L + R) / 2 because one speaker is left out.
     @ObservationIgnored private var kernelMonoFallback = false
+    /// Single mode: one speaker plays (L + R) / 2 on both of its channels.
+    /// It runs as speaker A with B always left out, and reports `.running`.
+    @ObservationIgnored private(set) var isSingleSpeaker = false
     /// The kernel is fading out before a rebuild.
     @ObservationIgnored private var fadingOut = false
     @ObservationIgnored private var speakerCheckPending = false
@@ -321,6 +324,7 @@ final class Engine {
         guard let uidA else { return refuse(.noLeftSpeaker) }
         guard let uidB else { return refuse(.noRightSpeaker) }
         guard uidA != uidB else { return refuse(.sameSpeaker) }
+        isSingleSpeaker = false
 
         let idA: AudioObjectID, idB: AudioObjectID
         do {
@@ -337,6 +341,32 @@ final class Engine {
         generation &+= 1
         refusedSpeakerIDs = nil
         if let error = await build(uidA: uidA, uidB: uidB, ids: SpeakerIDs(a: idA, b: idB), fadeIn: false) {
+            state = .error(error.description)
+        }
+    }
+
+    /// Single mode: routes to one speaker, which plays the mono sum.
+    func start(single uid: String?) async {
+        switch state {
+        case .idle, .error: break
+        case .starting, .running, .degraded, .stopping: return
+        }
+        idleReason = nil
+        guard let uid else { return refuse(.noSingleSpeaker) }
+        let id: AudioObjectID
+        do {
+            id = try hal.deviceID(forUID: uid)
+        } catch {
+            state = .error(EngineError.hal(error).description)
+            return
+        }
+        guard id != kAudioObjectUnknown else { return refuse(.singleMissing) }
+
+        state = .starting
+        generation &+= 1
+        refusedSpeakerIDs = nil
+        isSingleSpeaker = true
+        if let error = await build(uidA: uid, uidB: uid, ids: SpeakerIDs(a: id, b: nil), fadeIn: false) {
             state = .error(error.description)
         }
     }
@@ -386,7 +416,7 @@ final class Engine {
             resources.speakerIDs = ids
             if a == nil {
                 state = .degraded(.monoFallback(missing: .left))
-            } else if b == nil {
+            } else if b == nil, !isSingleSpeaker {
                 state = .degraded(.monoFallback(missing: .right))
             } else {
                 state = .running
@@ -417,6 +447,7 @@ final class Engine {
         formatCheck = nil
         formatRebuilds = 0
         speakers = nil
+        isSingleSpeaker = false
         surroundRoute = nil
         surroundTestTone = nil
         startStereoDemo = false
@@ -803,7 +834,7 @@ final class Engine {
             return true
         }
         guard let speakers else { return false }
-        if state != .running {
+        if state != .running || isSingleSpeaker {
             // Mono fallback cannot go through start, which needs both speakers.
             await rebuild(uidA: speakers.left, uidB: speakers.right, ids: resources.speakerIDs)
             return true
@@ -960,7 +991,7 @@ final class Engine {
     func checkSpeakers() async -> Bool {
         if let route = surroundRoute { return await checkSurroundSpeakers(route) }
         guard state.isRouting, let speakers else { return false }
-        let ids = SpeakerIDs(a: presentID(speakers.left), b: presentID(speakers.right))
+        let ids = SpeakerIDs(a: presentID(speakers.left), b: isSingleSpeaker ? nil : presentID(speakers.right))
         // A pair that just failed to build is not retried until something changes.
         guard ids != resources.speakerIDs, ids != refusedSpeakerIDs else { return false }
         refusedSpeakerIDs = nil
@@ -968,8 +999,9 @@ final class Engine {
         startStereoDemo = false
         if ids.a == nil && ids.b == nil {
             Self.log.warning("Both speakers disconnected; stopping")
+            let single = isSingleSpeaker
             stop()
-            idleReason = .speakersDisconnected
+            idleReason = single ? .speakerDisconnected : .speakersDisconnected
             onRoutingEnded?()
             return true
         }

@@ -17,10 +17,15 @@ enum SpeakerPosition: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// The fixed positions drawn in `mode`. Surround draws one card per
-    /// surround speaker instead, so it has none.
+    /// The fixed positions drawn in `mode`. Single uses Front Left's
+    /// speaker. Surround draws one card per surround speaker instead, so it
+    /// has none.
     static func positions(in mode: RoutingMode) -> [SpeakerPosition] {
-        mode == .stereo ? [.frontLeft, .frontRight] : []
+        switch mode {
+        case .single: [.frontLeft]
+        case .stereo: [.frontLeft, .frontRight]
+        case .surround: []
+        }
     }
 
     var isFront: Bool { self == .frontLeft || self == .frontRight }

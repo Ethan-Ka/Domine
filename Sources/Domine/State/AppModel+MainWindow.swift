@@ -6,14 +6,14 @@ extension AppModel {
     /// One Grip is visible and the selected pair is not both present, so the
     /// second Grip is probably still stereo-paired to the first (SPEC 9).
     var showsGripPairingHint: Bool {
-        catalog.showsGripPairingHint && !bothSelectedSpeakersPresent
+        catalog.showsGripPairingHint && routingMode != .single && !bothSelectedSpeakersPresent
     }
 
     var mainWindowState: MainWindowState {
         let isSurround = routingMode == .surround
         let cards: [SpeakerCardState] = isSurround
             ? surroundCards
-            : SpeakerPosition.positions(in: .stereo).map { card(for: $0) }
+            : SpeakerPosition.positions(in: routingMode).map { card(for: $0) }
         var anyAssigned = false
         for uid in [leftUID, rightUID] {
             if let uid, catalog.device(uid: uid) != nil { anyAssigned = true }
@@ -24,7 +24,7 @@ extension AppModel {
             isOn: engine.state.isActive,
             mode: routingMode,
             isSurroundAvailable: isSurroundAvailable,
-            canSwap: !isSurround,
+            canSwap: routingMode == .stereo,
             speakers: cards,
             masterVolume: Double(pairSettings.masterVolume),
             isMuted: isMuted,
@@ -270,12 +270,14 @@ extension AppModel {
     var statusLine: String {
         switch engine.state {
         case .idle:
-            if leftUID == nil || rightUID == nil { return "Choose two speakers" }
+            if routingMode == .single, leftUID == nil { return "Choose a speaker" }
+            if routingMode != .single, leftUID == nil || rightUID == nil { return "Choose two speakers" }
             return routingRefusal ?? engine.idleReason?.description ?? "Off"
         case .starting: return "Starting"
         case .running:
             if volumeKeysNeedAccessibility { return "Playing, volume keys need Accessibility" }
             if routingMode == .surround { return isSurroundAvailable ? "Surround" : "Surround: add speakers" }
+            if routingMode == .single { return "Playing" }
             return engine.swapSides ? "Playing, sides swapped" : "Playing"
         case .degraded(.monoFallback): return "Mono fallback"
         case .degraded(.quadFallback): return "Surround, some speakers missing"
@@ -306,7 +308,17 @@ extension AppModel {
     /// swapping only changes which channel it plays, shown by the side tag.
     /// In mono fallback the missing speaker reads "Not connected" (even if
     /// it is still listed but no longer alive) and the other one plays L+R.
+    /// In Single mode the one card reads "Speaker" and plays L+R.
     func card(for position: SpeakerPosition) -> SpeakerCardState {
+        var card = positionCard(for: position)
+        if routingMode == .single {
+            card.customTitle = Self.singleSpeakerTitle
+            card.sideTag = "L+R"
+        }
+        return card
+    }
+
+    private func positionCard(for position: SpeakerPosition) -> SpeakerCardState {
         let isA = position == .frontLeft
         let tag = position.isFront ? (isA != engine.swapSides ? "L" : "R") : (position == .rearLeft ? "RL" : "RR")
         guard let uid = uid(at: position) else {
@@ -332,6 +344,9 @@ extension AppModel {
         card.batteryPercent = batteryPercent[uid]
         return card
     }
+
+    /// The one card's title in Single mode.
+    static let singleSpeakerTitle = "Speaker"
 
     private func markReconnectable(_ card: inout SpeakerCardState, uid: String) {
         guard BluetoothAddress(deviceUID: uid) != nil else { return }
