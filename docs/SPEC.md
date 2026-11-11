@@ -260,7 +260,7 @@ EQ details: RBJ cookbook biquads, double precision state, float input and output
 
 ### Per-app volume
 
-The aggregate may hold several process taps: one global tap that excludes the apps with their own volume, plus one tap per such app. Both kernels sum up to 8 taps ahead of the existing chain. `domine_kernel_set_tap_layout(k, tapCount, firstBuffer[], channels[], interleaved[])` (and `domine_quad_set_tap_layout`) gives each tap's first buffer index in the aggregate input list, its channel count, and whether it is one interleaved buffer or one buffer per channel. Each tap becomes stereo the same way a single tap does, is multiplied by its gain, and the results are added. `domine_kernel_set_tap_gain(k, tap, gain)` (and `domine_quad_set_tap_gain`) sets a gain from 0 to 1 that ramps linearly over 20 ms. With a tap count of 0 (the default) the kernel reads the single tap as before; with one tap at gain 1 the output is bit-identical to that. Missing or short tap buffers read as silence. The layout crosses threads through a seqlock; gains through atomics.
+The aggregate may hold several process taps: one global tap that excludes the apps with their own volume, plus one tap per such app. The kernel sums up to 8 taps ahead of the existing chain. `domine_kernel_set_tap_layout(k, tapCount, firstBuffer[], channels[], interleaved[])` gives each tap's first buffer index in the aggregate input list, its channel count, and whether it is one interleaved buffer or one buffer per channel. Each tap becomes stereo the same way a single tap does, is multiplied by its gain, and the results are added. `domine_kernel_set_tap_gain(k, tap, gain)` (and `domine_quad_set_tap_gain`) sets a gain from 0 to 1 that ramps linearly over 20 ms. With a tap count of 0 (the default) the kernel reads the single tap as before; with one tap at gain 1 the output is bit-identical to that. Missing or short tap buffers read as silence. The layout crosses threads through a seqlock; gains through atomics.
 
 ## 6. App structure (Swift)
 
@@ -384,7 +384,7 @@ States: `idle`, `starting`, `running`, `degraded(reason)`, `stopping`, `error(me
 - **M9, Linux port:** `linux/` engine on PipeWire behind `linux/src/engine.h`, GTK4 UI with the stage and demo, `make check` self-test (section 15).
 - **v2 ideas:** mic-based auto-calibration of the latency offset (play a click on each side, cross-correlate), per-app routing using per-process taps, a true stereo mode where each speaker gets full stereo with a crossfeed amount.
 
-## 11. Quad mode (v2 plan, superseded by section 13)
+## 11. Quad mode (v2 plan, superseded by section 13; the quad kernel `quad.c` and `DomineQuad.h` were removed)
 
 Superseded by Surround mode (section 13). Kept for history; where the two disagree, section 13 wins.
 
@@ -507,7 +507,7 @@ The kernel turns the stereo tap into a few virtual sources and pans each one ove
 - Orbit: continuous rotation in degrees per second, clamped to +-720 in the kernel (the UI offers -90 to 90). 0 stops the field where it is; "Reset" returns the phase to 0. Orbit is a listening effect, not a correction, and is off by default.
 - Pan gains ramp from the old values over one process call when the layout, width, rotation or orbit changes (no zipper, no click). Dragging a card updates the kernel live.
 - After panning, each speaker runs its own chain from section 5a: EQ, bass, compressor, then trim gain, then delay. Then mute (50 ms fade) and the peak meter (`domine_surround_peak`).
-- Multi-tap input (per-app volume, section 5a) works as in the quad kernel through `domine_surround_set_tap_layout` and `_tap_gain`.
+- Multi-tap input (per-app volume, section 5a) works as in the stereo kernel through `domine_surround_set_tap_layout` and `_tap_gain`.
 
 ### 13.4 Distance compensation
 - `domine_surround_distance_comp` turns distances into delay and gain so every speaker's sound arrives at the listener at the same time and level. The farthest speaker is the reference (delay 0, gain 1). Speaker i gets delay (dmax - d_i) / 343 m/s and gain d_i / dmax (inverse distance law). Example: speakers at 2 m and 3 m, the 2 m one gets 2.915 ms and 0.667.

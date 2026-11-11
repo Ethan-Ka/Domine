@@ -108,7 +108,7 @@ void domine_surround_set_surround_level(DomineSurround *s, float level);
 void domine_surround_set_spatial(DomineSurround *s, const DomineSpatialParams *params);
 
 /// Per-speaker trim gain 0...1 (ramped over 30 ms after the first process
-/// call) and delay in ms 0...DOMINE_MAX_DELAY_MS, like the quad kernel.
+/// call) and delay in ms 0...DOMINE_MAX_DELAY_MS.
 void domine_surround_set_gain(DomineSurround *s, uint32_t speaker, float gain);
 void domine_surround_set_delay_ms(DomineSurround *s, uint32_t speaker, float ms);
 /// Per-speaker effects, in order EQ, bass, compressor, then gain, then delay.
@@ -116,7 +116,7 @@ void domine_surround_set_eq(DomineSurround *s, uint32_t speaker, const DomineEQP
 void domine_surround_set_bass(DomineSurround *s, uint32_t speaker, const DomineBassParams *params);
 void domine_surround_set_compressor(DomineSurround *s, uint32_t speaker, const DomineCompressorParams *params);
 
-/// Mute with the 50 ms fade (DOMINE_FADE_MS), same contract as the quad kernel.
+/// Mute with the 50 ms fade (DOMINE_FADE_MS).
 void domine_surround_set_muted(DomineSurround *s, int muted);
 void domine_surround_start_faded_out(DomineSurround *s);
 
@@ -161,7 +161,7 @@ void domine_surround_set_demo(DomineSurround *s, int on);
 int domine_surround_demo_status(DomineSurround *s, float *_Nullable seconds,
                                 float *_Nullable azimuth, int *_Nullable section);
 
-/// Renders `frames` frames. `in` is the tap (same rules as the quad kernel:
+/// Renders `frames` frames. `in` is the tap (same rules as the stereo kernel:
 /// interleaved stereo, deinterleaved stereo, or mono; NULL is silence).
 /// out_offsets has one flat output channel index per speaker in the current
 /// layout (count from set_speakers), DOMINE_NO_DEVICE for one that is absent.
@@ -174,7 +174,7 @@ void domine_surround_process(DomineSurround *s,
                              uint32_t frames,
                              const uint32_t *out_offsets);
 
-/// Multi-tap input, same contract as domine_quad_set_tap_layout / _tap_gain.
+/// Multi-tap input, same contract as domine_kernel_set_tap_layout / _tap_gain.
 void domine_surround_set_tap_layout(DomineSurround *s, uint32_t tapCount, const uint32_t *_Nullable firstBuffer,
                                     const uint32_t *_Nullable channels, const uint32_t *_Nullable interleaved);
 void domine_surround_set_tap_gain(DomineSurround *s, uint32_t tap, float gain);

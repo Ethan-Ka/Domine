@@ -180,23 +180,6 @@ struct SurroundKernelTests {
         #expect(out.channel(0) == mono)
     }
 
-    @Test func quadLayoutMatchesQuadMirror() {
-        let s = Self.make([-30, 30, -110, 110])
-        let q = domine_quad_create(48000, 512)!
-        defer { domine_surround_destroy(s); domine_quad_destroy(q) }
-        var sp = DomineSpatialParams(amount: 0, roomMs: 15, highCutHz: 5000)
-        domine_surround_set_spatial(s, &sp)
-        domine_surround_set_surround_level(s, 1)
-        let offsets: [UInt32] = [0, 2, 4, 6]
-        let a = Self.run(s, offsets: offsets)
-        let input = TestBufferList.interleaved(left: Self.left, right: Self.right)
-        let b = TestBufferList(channelsPerBuffer: [8], frames: Self.frames)
-        offsets.withUnsafeBufferPointer {
-            domine_quad_process(q, input.pointer, b.pointer, UInt32(Self.frames), $0.baseAddress!)
-        }
-        for c in 0..<8 { #expect(a.channel(c) == b.channel(c)) }
-    }
-
     @Test func absentSpeakerLeavesThePairExact() {
         let s = Self.make([-30, 0, 30])
         defer { domine_surround_destroy(s) }
