@@ -29,6 +29,8 @@ extension AppModel {
         let alwaysExcluded = Set(exclusionsSettings.items.filter { $0.mode == .always }.map(\.bundleID))
         let reduced = appVolumes.filter { $0.value < 1 && !alwaysExcluded.contains($0.key) }
         var requests: [AppTapRequest] = []
+        // Sorted so a reordered process list is not seen as a change and
+        // does not rebuild the tap.
         if !reduced.isEmpty, let processes = try? hal.processObjects() {
             for (bundleID, volume) in reduced {
                 let own = processes.filter { process in
@@ -36,7 +38,7 @@ extension AppModel {
                           let id = try? hal.processBundleID(of: process) else { return false }
                     return id == bundleID || id.hasPrefix(bundleID + ".")
                 }
-                if !own.isEmpty { requests.append(AppTapRequest(key: bundleID, processes: own, gain: volume)) }
+                if !own.isEmpty { requests.append(AppTapRequest(key: bundleID, processes: own.sorted(), gain: volume)) }
             }
         }
         engine.setAppTaps(requests)
