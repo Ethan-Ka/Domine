@@ -29,7 +29,9 @@ struct MainWindowState: Equatable, Sendable {
     /// The showcase demo (SPEC section 14).
     var demo: DemoState
     /// Shown at the bottom of the stage, e.g. while in mono fallback.
-    var bannerMessage: String?
+    var banner: StageBannerState?
+    /// The banner's text, if any.
+    var bannerMessage: String? { banner?.text }
     var rooms: [Room] = []
     var currentRoomID: Room.ID?
 
@@ -45,6 +47,7 @@ struct MainWindowState: Equatable, Sendable {
         testToneSide: StereoSide? = nil,
         canPlayTestTones: Bool = true,
         bannerMessage: String? = nil,
+        banner: StageBannerState? = nil,
         surround: SurroundControls = SurroundControls(),
         canAddSurroundSpeaker: Bool = true,
         demo: DemoState = DemoState(),
@@ -68,7 +71,18 @@ struct MainWindowState: Equatable, Sendable {
         self.isMuted = isMuted
         self.testToneSide = testToneSide
         self.canPlayTestTones = canPlayTestTones
-        self.bannerMessage = bannerMessage
+        self.banner = banner ?? bannerMessage.map { StageBannerState(severity: .warning, text: $0) }
+    }
+
+    /// Domine is on, a speaker is connected, and every level is zero.
+    var showsNothingPlaying: Bool {
+        isOn && speakers.contains { $0.connection == .connected } && speakers.allSatisfy { $0.level <= 0 }
+    }
+
+    /// Whether a speaker's Reconnect is running.
+    func isReconnecting(uid: String?) -> Bool {
+        guard let uid else { return false }
+        return speakers.contains { $0.reconnectUID == uid && $0.isReconnecting }
     }
 
     func speaker(at position: SpeakerPosition) -> SpeakerCardState {
