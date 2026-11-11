@@ -171,6 +171,10 @@ static void pick_up(DomineEQ *eq) {
     }
 }
 
+static void clear_state(DomineEQ *eq) {
+    for (int i = 0; i < DOMINE_EQ_BANDS; i++) eq->bands[i].z1 = eq->bands[i].z2 = 0.0;
+}
+
 static int band_target_is_identity(const Band *b) {
     return b->target[0] == 1.0 && b->target[1] == 0.0 && b->target[2] == 0.0
         && b->target[3] == 0.0 && b->target[4] == 0.0;
@@ -199,9 +203,19 @@ void domine_eq_process(DomineEQ *eq, float *samples, uint32_t frames) {
             const double y = b->cur[0] * x + b->z1;
             b->z1 = b->cur[1] * x - b->cur[3] * y + b->z2;
             b->z2 = b->cur[2] * x - b->cur[4] * y;
+            // Decayed far below audibility: zero both states together, so the
+            // band never goes subnormal (slow on Intel) and no limit cycle
+            // forms. Identity bands are skipped, so the flat path is untouched.
+            if (fabs(b->z1) < DOMINE_EQ_FLUSH && fabs(b->z2) < DOMINE_EQ_FLUSH) b->z1 = b->z2 = 0.0;
             x = y;
         }
-        samples[n] = (float)x;
+        const float out = (float)x;
+        if (isfinite(out)) {
+            samples[n] = out;
+        } else { // NaN or inf never stays in the state
+            clear_state(eq);
+            samples[n] = 0.0f;
+        }
         if (ramping && --eq->rampLeft == 0) {
             int allIdentity = 1;
             for (int i = 0; i < DOMINE_EQ_BANDS; i++) {

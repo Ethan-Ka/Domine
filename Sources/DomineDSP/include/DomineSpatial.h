@@ -14,6 +14,11 @@
 // silence as amount rises. For inputs within +-1 the rear output stays within
 // +-1. amount 0 (settled) copies L and R bit for bit.
 //
+// Ambience state below 1e-25 is flushed to zero (no subnormals in silence).
+// A NaN or infinite side signal is fed to the ambience path as 0, and if the
+// ambience output is ever non-finite its state is cleared, so a bad input
+// sample cannot poison later output.
+//
 // Real-time safe in process: no allocation, locks, logging, I/O. Parameters
 // cross threads through a seqlock over atomic words and are smoothed (~10 ms).
 

@@ -18,6 +18,11 @@ extern "C" {
 #define DOMINE_EQ_BANDS 5
 #define DOMINE_EQ_MAX_GAIN_DB 12.0
 #define DOMINE_EQ_SMOOTH_MS 10.0
+/// An active band whose two states are both below this magnitude has them set
+/// to zero (no subnormals).
+/// While processing, a sample whose output is NaN or infinite comes out as 0
+/// and clears every band's state.
+#define DOMINE_EQ_FLUSH 1e-30
 
 typedef enum { DOMINE_EQ_LOW_SHELF = 0, DOMINE_EQ_PEAKING = 1, DOMINE_EQ_HIGH_SHELF = 2 } DomineEQBandType;
 

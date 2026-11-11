@@ -12,12 +12,19 @@
 // 60 Hz so nothing is added below that. The boost is limited to the running
 // input peak, so output peak stays under +6 dB. enabled = 0 is bit-exact
 // passthrough.
+//
+// While active, a filter whose two state values are both below
+// DOMINE_BASS_FLUSH has them set to zero (no subnormals in silence), and a
+// sample whose output is NaN or infinite comes out as 0 and resets the
+// filter state.
 
 #include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define DOMINE_BASS_FLUSH 1e-25f
 
 typedef struct {
     int enabled;

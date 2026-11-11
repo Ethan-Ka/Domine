@@ -31,7 +31,14 @@ struct DomineSpatial {
     uint32_t ringMask, ringPos;
     Allpass ap[2][NSTAGES];
     float *apMem;
+    uint32_t apTotal; // floats in apMem
 };
+
+#define FLUSH 1e-25f
+
+// Flushes ambience state far below audibility to zero, so decaying silence
+// never goes subnormal (slow on Intel). The direct path never passes here.
+static inline float flush(float v) { return fabsf(v) < FLUSH ? 0.0f : v; }
 
 static inline uint32_t f2u(float f) { uint32_t u; memcpy(&u, &f, 4); return u; }
 static inline float u2f(uint32_t u) { float f; memcpy(&f, &u, 4); return f; }
@@ -72,6 +79,7 @@ DomineSpatial *domine_spatial_create(double sampleRate) {
             total += lens[c][i];
         }
     s->apMem = calloc(total, sizeof(float));
+    s->apTotal = total;
     if (s->ring == NULL || s->apMem == NULL) { domine_spatial_destroy(s); return NULL; }
     float *m = s->apMem;
     for (int c = 0; c < 2; c++)
@@ -126,7 +134,7 @@ static void pickup(DomineSpatial *s) {
 
 static inline float allpass(Allpass *a, float x) {
     const float d = a->buf[a->pos];
-    const float v = x + AP_G * d;
+    const float v = flush(x + AP_G * d);
     a->buf[a->pos] = v;
     if (++a->pos == a->len) a->pos = 0;
     return d - AP_G * v;
@@ -142,6 +150,13 @@ static inline float read_delay(const DomineSpatial *s, float delay) {
     return a + frac * (b - a);
 }
 
+// Clears the ambience path after a NaN or infinity got into it. No allocation.
+static void reset_ambience(DomineSpatial *s) {
+    memset(s->ring, 0, (size_t)(s->ringMask + 1) * sizeof(float));
+    memset(s->apMem, 0, (size_t)s->apTotal * sizeof(float));
+    s->lpL = s->lpR = 0.0f;
+}
+
 static inline void frame(DomineSpatial *s, float l, float r, float *rl, float *rr) {
     const double c = s->smoothCoef;
     s->amount += c * (s->amountTarget - s->amount);
@@ -150,7 +165,8 @@ static inline void frame(DomineSpatial *s, float l, float r, float *rl, float *r
     if (fabs(s->roomTarget - s->roomMs) < 1e-6) s->roomMs = s->roomTarget;
 
     // Ambience path always runs so its state is warm when amount rises.
-    const float side = 0.5f * (l - r);
+    float side = flush(0.5f * (l - r));
+    if (!isfinite(side)) side = 0.0f; // a bad input sample never enters the ambience state
     s->ringPos++;
     s->ring[s->ringPos & s->ringMask] = side;
     const float samplesPerMs = (float)(s->sampleRate / 1000.0);
@@ -158,10 +174,11 @@ static inline void frame(DomineSpatial *s, float l, float r, float *rl, float *r
     float b = read_delay(s, (float)s->roomMs * RIGHT_DELAY_RATIO * samplesPerMs);
     for (int i = 0; i < NSTAGES; i++) { a = allpass(&s->ap[0][i], a); b = allpass(&s->ap[1][i], b); }
     b = -b;
-    s->lpL += s->lpCoef * (a - s->lpL);
-    s->lpR += s->lpCoef * (b - s->lpR);
-    const float ambL = clamp1(AMB_GAIN * (s->lpL + SHELF_K * (a - s->lpL)));
-    const float ambR = clamp1(AMB_GAIN * (s->lpR + SHELF_K * (b - s->lpR)));
+    s->lpL = flush(s->lpL + s->lpCoef * (a - s->lpL));
+    s->lpR = flush(s->lpR + s->lpCoef * (b - s->lpR));
+    float ambL = clamp1(AMB_GAIN * (s->lpL + SHELF_K * (a - s->lpL)));
+    float ambR = clamp1(AMB_GAIN * (s->lpR + SHELF_K * (b - s->lpR)));
+    if (!isfinite(ambL) || !isfinite(ambR)) { reset_ambience(s); ambL = ambR = 0.0f; }
 
     if (s->amount == 0.0f) { *rl = l; *rr = r; return; }
     const float w = (float)s->amount, m = 1.0f - w;

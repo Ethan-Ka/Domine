@@ -46,10 +46,17 @@ static Coef biquad(double sr, double fc, int highpass) {
     return k;
 }
 
+// Flushes values far below audibility to zero so decaying state never goes
+// subnormal (slow on Intel). Only reached while the effect is active.
+static inline float flush(float v) { return fabsf(v) < DOMINE_BASS_FLUSH ? 0.0f : v; }
+
 static float run(const Coef *k, State *s, float x) {
     const float y = k->b0 * x + s->z1;
     s->z1 = k->b1 * x - k->a1 * y + s->z2;
     s->z2 = k->b2 * x - k->a2 * y;
+    // Zero both states together: flushing one alone feeds a small error back
+    // in and can hold the filter in a limit cycle just above the threshold.
+    if (fabsf(s->z1) < DOMINE_BASS_FLUSH && fabsf(s->z2) < DOMINE_BASS_FLUSH) s->z1 = s->z2 = 0.0f;
     return y;
 }
 
@@ -132,9 +139,11 @@ void domine_bass_process(DomineBass *b, float *x, uint32_t frames) {
         boost = run(&b->hp60, &b->sHp60b, run(&b->hp60, &b->sHp60, boost)); // 4th order, nothing added below 60 Hz
         boost *= b->wet;
         const float a = fabsf(in);
-        b->env = a > b->env ? a : b->env * b->envRelease;
+        b->env = a > b->env ? a : flush(b->env * b->envRelease);
         const float lim = 0.9f * b->env + 1e-9f;
-        x[i] = in + lim * tanhf(boost / lim);
+        const float y = in + lim * tanhf(boost / lim);
+        if (!isfinite(y)) { reset(b); x[i] = 0.0f; continue; } // NaN or inf never stays in the state
+        x[i] = y;
     }
     // Fully faded out: clear state now, since the kernel skips idle calls.
     if (target == 0.0f && b->wet == 0.0f) reset(b);
