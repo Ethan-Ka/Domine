@@ -43,6 +43,18 @@ struct DeviceCatalogTests {
         #expect(catalog.device(uid: Self.gripA.uid)?.id == second)
     }
 
+    /// The HAL can coalesce a vanish and a reappear into one device-list
+    /// notification; the name listener must move to the new ID.
+    @Test func renameAfterCoalescedReconnectIsSeen() {
+        hal.add(Self.gripA)
+        catalog.start()
+        hal.remove(uid: Self.gripA.uid, notify: false)
+        hal.add(Self.gripA)
+        #expect(hal.listenerCount == 3)  // devices, default output, one name
+        hal.rename(uid: Self.gripA.uid, to: "Grip Left")
+        #expect(catalog.outputs.first?.name == "Grip Left")
+    }
+
     @Test func skipsInputOnlyDevices() {
         hal.add(.init(uid: "mic", name: "Mic", outputChannels: 0))
         hal.add(Self.gripA)
