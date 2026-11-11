@@ -94,11 +94,11 @@ void domine_surround_reset_orbit(DomineSurround *s);
 float domine_surround_orbit_phase(DomineSurround *s);
 /// Mono: L and R are both replaced by 0.5 * L + 0.5 * R before panning and
 /// the spatial upmixer, so every speaker plays the whole mix. Default off.
+void domine_surround_set_mono(DomineSurround *s, int on);
 /// Nonzero adds an inaudible 15 Hz tone at -60 dBFS to every speaker after 2 s
 /// of silence, so speakers do not power off. Same behaviour as
 /// domine_kernel_set_keep_alive. Off by default.
 void domine_surround_set_keep_alive(DomineSurround *s, int on);
-void domine_surround_set_mono(DomineSurround *s, int on);
 /// Surround level 0...2, default 0.7 (non-finite is 0). Up to 1 it scales the
 /// ambience sources. Above 1 the ambience gains are times the level and L and
 /// R also play at -REAR_AZ and +REAR_AZ times (level - 1) ("rear fill"), with
