@@ -58,6 +58,26 @@ Everything on the approved list is built and tested:
 | Keyboard shortcuts and volume step size | Only one shortcut exists; steps are fixed | New Shortcuts tab |
 | Automatic room switching and auto-start rules | Rooms are manual | New Automation tab |
 
+## Website (site/index.html)
+
+The page is one screen: logo art, Download and GitHub buttons, a headline and one paragraph. Colours come from the app icon, it uses the system font, and every text pair passes WCAG AA (body 14.8:1, grey text 6.3 to 6.8:1, button text 5.2:1). What it could do better, most valuable first:
+
+| Idea | Why | Notes |
+| --- | --- | --- |
+| A real screenshot of the main window, light and dark | Nothing on the page shows what the app looks like | Stereo stage with two cards and the meters; swap with `<picture>` like the header art |
+| Say how to open an unsigned build | Releases are development-signed, not notarized, so a first launch hits Gatekeeper and the page never says "right-click, Open" | One line under the buttons. Notarizing (needs a Developer ID) would remove the step |
+| Download the installer directly | The button opens the releases page, one click and a scroll from the file | Also publish each release's installer as `Domine.pkg`, so the button can link `releases/latest/download/Domine.pkg` |
+| Headline that covers Single mode | "Two+ Bluetooth speakers" leaves out one-speaker use | The og-image carries the same line and needs the same change |
+| Say any brand works | The page reads as if only matched speakers work | "Tested with JBL Grip and JBL Go 4" is specific and true |
+| Back the sync claim with the mechanism | "They stay in sync" is a promise with no how | "Line them up with the Mac's microphone in about 15 seconds" (check the timing first) |
+| Be exact about surround size | "Up to 16" is true, but the app warns above 4 Bluetooth speakers because they share one radio | "Up to 16 speakers; more than 4 Bluetooth ones can drop out" |
+| Show the version and what's new | Visitors can't tell if it's maintained | "Version 0.4.0", linked to the release notes |
+| Requirements | Only "macOS 14.4 or later" is listed | Add "Apple silicon and Intel" (the build is universal) |
+| A short privacy note | Domine asks for audio capture, the microphone (calibration only) and optionally Accessibility and an admin password | True facts: audio never leaves the Mac; the only network request is the GitHub update check |
+| Three-question troubleshooting | The common problems have known fixes | Only one speaker shows up (unpair in the speaker's app); a speaker goes silent (a phone took it over); timing drifts (run Auto-calibrate) |
+| Uninstall line | People look for it before installing | Menu bar menu, then Uninstall Domine |
+| Secondary button border | The "View on GitHub" outline is 1.45:1 against the page, below 3:1 for UI edges | The label still identifies the button, but darken `--rule` on that border |
+
 ## Planned: Headphones phase
 
 Control headphones from Domine the way it controls speakers.
