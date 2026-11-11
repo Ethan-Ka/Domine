@@ -271,6 +271,60 @@ struct EngineFormatTests {
         #expect(await engine.checkFormat() == false)
     }
 
+    @Test func formatChangeRebuildFadesOutAndIn() async {
+        var fades: [Duration] = []
+        let engine = Engine(hal: hal, layoutAttempts: 3, layoutRetryDelay: .zero,
+                            diagnosticsInterval: .seconds(3600), formatCheckDelay: .seconds(3600),
+                            fadeWait: { fades.append($0) })
+        let dac = FakeHAL.Device(uid: "USB-DAC", name: "DAC", transportType: kAudioDeviceTransportTypeUSB,
+                                 sampleRate: 44_100, availableSampleRates: [44_100...44_100])
+        hal.add(Self.gripA)
+        hal.add(Self.gripB)
+        hal.add(Self.speakers)
+        hal.setDefault(uid: Self.speakers.uid)
+        await engine.start(left: Self.gripA.uid, right: Self.gripB.uid)
+        hal.add(dac)
+        hal.setDefault(uid: dac.uid)
+        #expect(await engine.checkFormat())
+        #expect(engine.state == .running)
+        #expect(fades == [Engine.rebuildFadeWait])
+        engine.stop()
+    }
+
+    @Test func failedFormatRebuildEndsRouting() async {
+        var ended = 0
+        engine.onRoutingEnded = { ended += 1 }
+        let dac = FakeHAL.Device(uid: "USB-DAC", name: "DAC", transportType: kAudioDeviceTransportTypeUSB,
+                                 sampleRate: 44_100, availableSampleRates: [44_100...44_100])
+        await start()
+        hal.add(dac)
+        hal.setDefault(uid: dac.uid)
+        hal.failures[.createAggregate] = -1
+        #expect(await engine.checkFormat())
+        guard case .error = engine.state else { Issue.record("expected an error, got \(engine.state)"); return }
+        #expect(ended == 1)
+        #expect(hal.liveTapCount == 0)
+    }
+
+    @Test func formatCheckDuringABuildComparesWithTheTapsDefaultOutput() async {
+        let engine = Engine(hal: hal, layoutAttempts: 10, layoutRetryDelay: .milliseconds(20),
+                            diagnosticsInterval: .seconds(3600), formatCheckDelay: .seconds(3600))
+        await start()
+        let normal = hal.listenerCount
+        self.engine.stop()
+        let baseline = hal.listenerCount
+        hal.aggregateStreamsHiddenForAttempts = 3
+        let aggregates = hal.ops.filter { $0 == .createAggregate }.count
+        let starting = Task { await engine.start(left: Self.gripA.uid, right: Self.gripB.uid) }
+        while hal.ops.filter({ $0 == .createAggregate }).count == aggregates { await Task.yield() }
+        // Nothing changed since the tap was made: no rebuild and no extra listener.
+        #expect(await engine.checkFormat() == false)
+        await starting.value
+        #expect(engine.state == .running)
+        #expect(hal.listenerCount - baseline == normal - baseline)
+        engine.stop()
+    }
+
     @Test func stopRemovesWatchersAndDiagnosticsListener() async {
         let baseline = hal.listenerCount
         await start()
