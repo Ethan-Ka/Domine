@@ -12,13 +12,15 @@ struct SpeakerVolumeRow: Identifiable, Equatable, Sendable {
     var isAtMaximum = false
     /// False when the Mac cannot set this speaker's volume; it can then only be cut.
     var hasHardwareVolume = true
+    /// The offset range is minus to plus this (Settings > Advanced).
+    var limitDb: Double = 12
 
     var id: String { uid }
 
     var label: String { [title, suffix].compactMap { $0 }.joined(separator: " ") }
 
     /// Positive offsets need hardware volume; a cut works on any speaker.
-    var range: ClosedRange<Double> { -12...(hasHardwareVolume ? 12 : 0) }
+    var range: ClosedRange<Double> { -limitDb...(hasHardwareVolume ? limitDb : 0) }
 
     var readout: String {
         let db = Int(offsetDb.rounded())

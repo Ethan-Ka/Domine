@@ -18,7 +18,10 @@ struct AppSettingsView: View {
             setup: model.setupState,
             setupActions: model.setupActions(showMainWindow: showMainWindow),
             automaticUpdates: $updater.automaticallyChecks,
-            exclusionsActions: ExclusionsActions(chooseApp: chooseApp))
+            exclusionsActions: ExclusionsActions(chooseApp: chooseApp),
+            advanced: $model.advancedSettings,
+            clockChoices: model.clockSpeakerChoices,
+            restoreAdvancedDefaults: { model.restoreAdvancedDefaults() })
             .onAppear { model.settingsDidAppear() }
             .onDisappear { model.settingsDidDisappear() }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in

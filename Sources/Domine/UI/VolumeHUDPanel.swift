@@ -4,7 +4,7 @@ import SwiftUI
 /// Borderless, non-activating panel that shows `VolumeHUD` near the bottom
 /// of the screen with the mouse, like the old system volume overlay
 /// (SPEC section 4b). Each `show` resets the timer; the panel fades out
-/// about 1.5 s after the last key press.
+/// `visibleDuration` (1.5 s by default) after the last key press.
 @MainActor
 final class VolumeHUDPanel {
     static let shared = VolumeHUDPanel()
@@ -12,7 +12,8 @@ final class VolumeHUDPanel {
     static let size = CGSize(width: 200, height: 200)
     /// Distance from the bottom of the screen's visible area.
     static let bottomInset: CGFloat = 140
-    static let visibleDuration: Duration = .milliseconds(1500)
+    /// Settings > Advanced, overlay time.
+    var visibleDuration: Duration = .milliseconds(1500)
     static let fadeDuration: TimeInterval = 0.3
 
     private var panel: NSPanel?
@@ -35,8 +36,9 @@ final class VolumeHUDPanel {
 
     private func scheduleHide(generation current: Int) {
         hideTask?.cancel()
+        let duration = visibleDuration
         hideTask = Task { [weak self] in
-            try? await Task.sleep(for: Self.visibleDuration)
+            try? await Task.sleep(for: duration)
             guard !Task.isCancelled else { return }
             self?.fadeOut(generation: current)
         }

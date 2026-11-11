@@ -62,7 +62,7 @@ extension AppModel {
         setMasterVolume(Double(volume))
         setMuted(muted)
         Self.volumeKeysLog.info("Key \(String(describing: event.key), privacy: .public): master \(self.pairSettings.masterVolume), muted \(muted)")
-        showVolumeHUD(Double(pairSettings.masterVolume), isMuted)
+        if advancedSettings.showsVolumeHUD { showVolumeHUD(Double(pairSettings.masterVolume), isMuted) }
     }
 
     /// Mute uses the kernel's 50 ms fade. The volume is left as it was.

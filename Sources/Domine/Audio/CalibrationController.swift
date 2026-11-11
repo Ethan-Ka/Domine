@@ -39,7 +39,8 @@ enum CalibrationOutcome: Equatable, Sendable {
 /// stop, destroy IOProc, free the recorder, restore the mic's rate.
 @MainActor
 final class CalibrationController {
-    static let recordSeconds = 5.5
+    /// Recording length with the chirps on (Settings > Advanced, 4...12 s).
+    var recordSeconds = 5.5
     /// The silent stretch recorded before the chirps for the noise check.
     static let quietSeconds = 0.7
     /// The start of the silent stretch that is skipped (mute fade, settling).
@@ -55,18 +56,20 @@ final class CalibrationController {
     var waitQuiet: @MainActor () async -> Void = {
         try? await Task.sleep(for: .seconds(CalibrationController.quietSeconds))
     }
-    /// Runs while the mic records with the chirps on. Tests replace it to feed the IOProc.
-    var wait: @MainActor () async -> Void = {
-        try? await Task.sleep(for: .seconds(CalibrationController.recordSeconds))
-    }
+    /// Runs while the mic records with the chirps on. Tests replace it to
+    /// feed the IOProc. Nil sleeps for `recordSeconds`.
+    var wait: (@MainActor () async -> Void)?
     /// Runs off the main actor. Tests replace it with a fixed result.
     var analyze: @Sendable (_ recording: [Float], _ sampleRate: Double,
                             _ rising: [Float], _ falling: [Float]) -> CalibrationResult = CalibrationController.analyzeAligned
     /// Finds clipped chirps, off the main actor. Tests replace it.
     var inspectPeaks: @Sendable (_ recording: [Float], _ sampleRate: Double,
                                  _ rising: [Float], _ falling: [Float]) -> ChirpPeaks = ChirpClipCheck.peaks
-    /// Extra recordings of one pair after a clipped or too quiet capture.
-    static let maxExtraAttempts = 3
+    /// Extra recordings of one pair after a clipped or too quiet capture
+    /// (Settings > Advanced, 0...5).
+    var maxExtraAttempts = 3
+    /// Chirp gain of a speaker's first recording (Settings > Advanced, 0.5...1).
+    var startGain: Double = 1
 
     private nonisolated static let log = Logger(subsystem: "com.ethankawley.Domine", category: "Calibration")
     private let hal: any AudioHAL
@@ -118,7 +121,7 @@ final class CalibrationController {
         var gains = start
         // The lowest gain that clipped, per speaker: never raised back to it.
         var clippedRising: Double?, clippedFalling: Double?
-        for attempt in 0...Self.maxExtraAttempts {
+        for attempt in 0...maxExtraAttempts {
             setGains(gains)
             let tag = attempt == 0 ? label : "\(label)-retry\(attempt)"
             let (outcome, peaks) = await runOnce(kernelRate: kernelRate, label: tag,
@@ -133,7 +136,7 @@ final class CalibrationController {
                             clipped: peaks.risingClipped, quiet: quietRising)
             Self.logAttempt(tag, name: names.falling, gain: gains.falling, peak: peaks.falling,
                             clipped: peaks.fallingClipped, quiet: quietFalling)
-            let last = attempt == Self.maxExtraAttempts
+            let last = attempt == maxExtraAttempts
             if peaks.anyClipped {
                 var next = gains
                 if peaks.risingClipped {
@@ -327,7 +330,7 @@ final class CalibrationController {
         setupFailure = "Could not use the microphone"
         guard rate > 0, rate.isFinite else { throw .invalidSampleRate(rate) }
 
-        guard let recorder = domine_recorder_create(UInt32((Self.recordSeconds + Self.quietSeconds) * rate)) else {
+        guard let recorder = domine_recorder_create(UInt32((recordSeconds + Self.quietSeconds) * rate)) else {
             Self.log.error("Recorder allocation failed")
             throw .kernelUnavailable
         }
@@ -362,7 +365,7 @@ final class CalibrationController {
             setChirps(true)
             chirpsOn = true
             Self.log.info("Chirps on")
-            await wait()
+            if let wait { await wait() } else { try? await Task.sleep(for: .seconds(recordSeconds)) }
         } catch {
             if teardown() { domine_recorder_destroy(recorder) }
             throw error

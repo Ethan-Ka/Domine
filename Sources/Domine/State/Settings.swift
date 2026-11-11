@@ -15,6 +15,7 @@ final class SettingsStore {
         case previousOutputUID, outputNeedsRestore, excludedAppsPlayThroughUID, exclusions, appVolumes
         case hasCompletedWelcome, audioCaptureWorking, audioCaptureSignature
         case rooms, currentRoomID, rememberedSpeakers
+        case advanced
 
         var name: String { SettingsStore.keyPrefix + rawValue }
     }
@@ -293,6 +294,19 @@ final class SettingsStore {
             return raw.compactMapValues { ($0 as? Double).map { min(max($0, 0), 1) } }
         }
         set { defaults.set(newValue, forKey: Key.appVolumes.name) }
+    }
+
+    /// Settings > Advanced, as JSON. Missing or corrupt reads as the
+    /// defaults; out-of-range values read back clamped.
+    var advanced: AdvancedSettings {
+        get {
+            defaults.data(forKey: Key.advanced.name)
+                .flatMap { try? JSONDecoder().decode(AdvancedSettings.self, from: $0) } ?? AdvancedSettings()
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue.sanitized()) else { return }
+            defaults.set(data, forKey: Key.advanced.name)
+        }
     }
 
     // MARK: Helpers

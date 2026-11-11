@@ -3,12 +3,22 @@
 extension AppModel {
     /// Offset in dB per speaker UID for the current mode: the surround
     /// record in Surround, the pair's left and right otherwise.
+    /// Each is clamped to the offset range in Settings > Advanced; the
+    /// saved value is kept, so widening the range brings it back.
     var speakerVolumeOffsets: [String: Float] {
-        if routingMode == .surround { return surroundSettings.volumeOffsetsDb }
+        let limit = speakerVolumeOffsetLimitDb
+        if routingMode == .surround { return surroundSettings.volumeOffsetsDb.mapValues { min(max($0, -limit), limit) } }
         var offsets: [String: Float] = [:]
-        if let left = leftUID { offsets[left] = pairSettings.leftVolumeOffsetDb }
-        if let right = rightUID, right != leftUID { offsets[right] = pairSettings.rightVolumeOffsetDb }
+        if let left = leftUID { offsets[left] = min(max(pairSettings.leftVolumeOffsetDb, -limit), limit) }
+        if let right = rightUID, right != leftUID {
+            offsets[right] = min(max(pairSettings.rightVolumeOffsetDb, -limit), limit)
+        }
         return offsets
+    }
+
+    /// Offsets go from minus to plus this many dB (Settings > Advanced).
+    var speakerVolumeOffsetLimitDb: Float {
+        min(Float(advancedSettings.offsetRangeDb), SpeakerVolumeLink.offsetRange.upperBound)
     }
 
     /// False only for a present speaker whose volume Domine cannot set.
@@ -20,8 +30,8 @@ extension AppModel {
     /// settable hardware volume only takes a cut: Domine never adds digital gain.
     func setSpeakerVolumeOffset(uid: String, db: Float) {
         guard db.isFinite else { return }
-        let range = SpeakerVolumeLink.offsetRange
-        var value = min(max(db, range.lowerBound), range.upperBound)
+        let limit = speakerVolumeOffsetLimitDb
+        var value = min(max(db, -limit), limit)
         if !canSetHardwareVolume(uid: uid) { value = min(value, 0) }
         if routingMode == .surround {
             guard surroundSpeakers.contains(where: { $0.uid == uid }) else { return }
@@ -40,7 +50,8 @@ extension AppModel {
             suffix: catalog.device(uid: uid)?.uidSuffix ?? OutputDevice.suffix(forUID: uid),
             offsetDb: Double(speakerVolumeOffsets[uid] ?? 0),
             isAtMaximum: volumeLink.isAtMaximum(uid: uid),
-            hasHardwareVolume: canSetHardwareVolume(uid: uid))
+            hasHardwareVolume: canSetHardwareVolume(uid: uid),
+            limitDb: Double(speakerVolumeOffsetLimitDb))
     }
 
     /// Stereo rows for Sync & Balance: Left, then Right. Single has one row.

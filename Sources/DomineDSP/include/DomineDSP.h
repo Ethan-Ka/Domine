@@ -216,6 +216,21 @@ void domine_kernel_set_muted(DomineKernel *k, int muted);
 /// is unchanged.
 void domine_kernel_set_keep_alive(DomineKernel *k, int on);
 
+/// Keep-alive parameter limits. Out-of-range values are clamped.
+#define DOMINE_KEEP_ALIVE_MIN_HOLD_S 0.5
+#define DOMINE_KEEP_ALIVE_MAX_HOLD_S 10.0
+#define DOMINE_KEEP_ALIVE_MIN_HZ 10.0
+#define DOMINE_KEEP_ALIVE_MAX_HZ 40.0
+#define DOMINE_KEEP_ALIVE_MIN_AMPLITUDE 3.1622776601683794e-4 // -70 dBFS
+#define DOMINE_KEEP_ALIVE_MAX_AMPLITUDE 1.0e-2                // -40 dBFS
+
+/// Keep-alive tuning: seconds of silence before the tone (0.5...10, default
+/// 2), tone frequency in Hz (10...40, default 15) and linear peak amplitude
+/// (-70...-40 dBFS, default 1e-3, -60 dBFS). Values are clamped; non-finite
+/// takes the default. Applies from the next process call; the phase and the
+/// silence count carry on. Any thread.
+void domine_kernel_set_keep_alive_params(DomineKernel *k, double holdSeconds, double frequencyHz, double amplitude);
+
 /// Puts the output gain at 0 at once, as if a mute fade had just finished.
 /// Unless muted, the next process calls then fade in over the same 50 ms
 /// ramp (1/L, 2/L, ... L/L). The engine calls it on a kernel built for a

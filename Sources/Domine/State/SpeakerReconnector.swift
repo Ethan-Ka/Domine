@@ -2,14 +2,14 @@ import Foundation
 import Observation
 
 /// Reconnects Bluetooth speakers that dropped. A missing speaker is tried
-/// after 5 seconds, then every 30 seconds, until 10 minutes have passed or it
-/// reappears. UIDs that are not Bluetooth addresses are ignored.
+/// after `timing.firstDelay` (5 s by default), then every `timing.retryDelay`
+/// (30 s), until `timing.giveUpAfter` (10 min) has passed or it reappears.
+/// UIDs that are not Bluetooth addresses are ignored.
 @MainActor
 @Observable
 final class SpeakerReconnector {
-    static let firstDelay: Duration = .seconds(5)
-    static let retryDelay: Duration = .seconds(30)
-    static let giveUpAfter: Duration = .seconds(600)
+    /// Settings > Advanced. A loop already waiting keeps the timing it started with.
+    @ObservationIgnored var timing = ReconnectTiming()
 
     /// UIDs with a connection attempt in flight, for the Reconnect button.
     private(set) var connecting: Set<String> = []
@@ -54,13 +54,14 @@ final class SpeakerReconnector {
     }
 
     private func retryLoop(uid: String) async {
+        let timing = timing
         var elapsed = Duration.zero
-        var delay = Self.firstDelay
-        while elapsed + delay <= Self.giveUpAfter {
+        var delay = timing.firstDelay
+        while elapsed + delay <= timing.giveUpAfter {
             await sleep(delay)
             if Task.isCancelled { return }
             elapsed += delay
-            delay = Self.retryDelay
+            delay = timing.retryDelay
             guard isEnabled() else { return }
             await attempt(uid: uid)
             if Task.isCancelled { return }

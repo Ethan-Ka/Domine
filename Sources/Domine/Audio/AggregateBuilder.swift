@@ -8,7 +8,8 @@ import Foundation
 enum AggregateBuilder {
     static let name = "Domine"
 
-    /// The clock used for every aggregate the engine builds. Change it here.
+    /// The default clock. The engine passes the clock speaker chosen in
+    /// Settings > Advanced (`Engine.aggregateClock(present:)`).
     static let clock: AggregateClock = .leftSpeaker
     /// Resampler quality for drift compensation.
     static let driftQuality = Int(kAudioAggregateDriftCompensationMaxQuality)

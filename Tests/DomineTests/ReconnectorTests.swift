@@ -49,6 +49,32 @@ final class ReconnectorTests: XCTestCase {
         XCTAssertEqual(Set(connector.calls), [address])
     }
 
+    func testHonoursTimingFromSettings() async {
+        let (reconnector, connector, log) = make()
+        var advanced = AdvancedSettings()
+        advanced.reconnectFirstDelaySeconds = 2
+        advanced.reconnectRetrySeconds = 20
+        advanced.reconnectGiveUpMinutes = 1
+        reconnector.timing = advanced.reconnectTiming
+        reconnector.update(missing: [uid])
+        await reconnector.waitForRetries()
+        // 2 s, then 20 s steps: 2 + 20 * 2 = 42 s; the next would pass 60 s.
+        XCTAssertEqual(log.delays, [.seconds(2), .seconds(20), .seconds(20)])
+        XCTAssertEqual(connector.calls.count, 3)
+    }
+
+    func testModelPassesTimingToReconnector() {
+        let suite = "ReconnectorTests." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        let system = FakeSystem()
+        let model = AppModel(hal: FakeHAL(), defaults: defaults, services: system.services)
+        model.advancedSettings.reconnectRetrySeconds = 45
+        model.advancedSettings.reconnectGiveUpMinutes = 30
+        XCTAssertEqual(model.reconnector.timing,
+                       ReconnectTiming(firstDelay: .seconds(5), retryDelay: .seconds(45), giveUpAfter: .seconds(1800)))
+    }
+
     func testStopsWhenDeviceReturns() async {
         let (reconnector, connector, _) = make()
         connector.onConnect = { _ in await MainActor.run { reconnector.update(missing: []) } }
