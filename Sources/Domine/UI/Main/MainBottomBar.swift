@@ -20,35 +20,41 @@ struct MainBottomBar: View {
     private var surroundControls: some View {
         let controls = state.surround
         return VStack(alignment: .leading, spacing: 6) {
-            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
-                GridRow {
-                    compactSlider("Width", value: controls.width, range: SurroundControls.widthRange,
-                                  text: controls.widthText, set: actions.setSurroundWidth)
-                    compactSlider("Surround", value: controls.level, range: 0...2,
-                                  text: controls.levelText, set: actions.setSurroundLevel)
-                    Button("Add Speaker…", action: actions.addSurroundSpeaker)
-                        .disabled(!state.canAddSurroundSpeaker)
+            // Wraps to one column when the window is too narrow for the grid.
+            ViewThatFits(in: .horizontal) {
+                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
+                    GridRow {
+                        compactSlider("Width", value: controls.width, range: SurroundControls.widthRange,
+                                      text: controls.widthText, set: actions.setSurroundWidth)
+                        compactSlider("Surround", value: controls.level, range: 0...2,
+                                      text: controls.levelText, set: actions.setSurroundLevel)
+                        Button("Add Speaker…", action: actions.addSurroundSpeaker)
+                            .disabled(!state.canAddSurroundSpeaker)
+                    }
+                    GridRow {
+                        HStack(spacing: 4) {
+                            compactSlider("Orbit", value: controls.orbitRate, range: SurroundControls.orbitRange,
+                                          text: controls.orbitText, set: actions.setOrbitRate)
+                            Button(action: actions.resetSurroundOrbit) {
+                                Image(systemName: "arrow.counterclockwise")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Turn the orbit back to the front")
+                            .accessibilityLabel("Reset orbit")
+                        }
+                        compactSlider("Rotation", value: controls.rotation, range: SurroundControls.rotationRange,
+                                      text: controls.rotationText, set: actions.setSurroundRotation)
+                        Menu("Presets") {
+                            ForEach(SurroundPreset.allCases, id: \.self) { preset in
+                                Button(preset.title) { actions.applySurroundPreset(preset) }
+                                    .disabled(!preset.isEnabled(speakerCount: state.surroundCards.count))
+                            }
+                        }
+                        .fixedSize()
+                    }
                 }
-                GridRow {
-                    HStack(spacing: 4) {
-                        compactSlider("Orbit", value: controls.orbitRate, range: SurroundControls.orbitRange,
-                                      text: controls.orbitText, set: actions.setOrbitRate)
-                        Button(action: actions.resetSurroundOrbit) {
-                            Image(systemName: "arrow.counterclockwise")
-                        }
-                        .buttonStyle(.borderless)
-                        .help("Turn the orbit back to the front")
-                        .accessibilityLabel("Reset orbit")
-                    }
-                    compactSlider("Rotation", value: controls.rotation, range: SurroundControls.rotationRange,
-                                  text: controls.rotationText, set: actions.setSurroundRotation)
-                    Menu("Presets") {
-                        ForEach(SurroundPreset.allCases, id: \.self) { preset in
-                            Button(preset.title) { actions.applySurroundPreset(preset) }
-                                .disabled(!preset.isEnabled(speakerCount: state.surroundCards.count))
-                        }
-                    }
-                    .fixedSize()
+                VStack(alignment: .leading, spacing: 6) {
+                    sliderRows(controls)
                 }
             }
             if controls.showsBluetoothWarning {
@@ -59,6 +65,37 @@ struct MainBottomBar: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func sliderRows(_ controls: SurroundControls) -> some View {
+        compactSlider("Width", value: controls.width, range: SurroundControls.widthRange,
+                      text: controls.widthText, set: actions.setSurroundWidth)
+        compactSlider("Surround", value: controls.level, range: 0...2,
+                      text: controls.levelText, set: actions.setSurroundLevel)
+        HStack(spacing: 4) {
+            compactSlider("Orbit", value: controls.orbitRate, range: SurroundControls.orbitRange,
+                          text: controls.orbitText, set: actions.setOrbitRate)
+            Button(action: actions.resetSurroundOrbit) {
+                Image(systemName: "arrow.counterclockwise")
+            }
+            .buttonStyle(.borderless)
+            .help("Turn the orbit back to the front")
+            .accessibilityLabel("Reset orbit")
+        }
+        compactSlider("Rotation", value: controls.rotation, range: SurroundControls.rotationRange,
+                      text: controls.rotationText, set: actions.setSurroundRotation)
+        HStack(spacing: 12) {
+            Button("Add Speaker…", action: actions.addSurroundSpeaker)
+                .disabled(!state.canAddSurroundSpeaker)
+            Menu("Presets") {
+                ForEach(SurroundPreset.allCases, id: \.self) { preset in
+                    Button(preset.title) { actions.applySurroundPreset(preset) }
+                        .disabled(!preset.isEnabled(speakerCount: state.surroundCards.count))
+                }
+            }
+            .fixedSize()
+        }
     }
 
     private func compactSlider(_ title: String, value: Double, range: ClosedRange<Double>,

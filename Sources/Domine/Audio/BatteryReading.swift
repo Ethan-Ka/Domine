@@ -2,4 +2,10 @@
 protocol BatteryReading: Sendable {
     /// 1...100, or nil when the speaker does not report one.
     func percent(for address: BluetoothAddress) -> Int?
+    /// True while charging, nil when the speaker does not report it.
+    func isCharging(for address: BluetoothAddress) -> Bool?
+}
+
+extension BatteryReading {
+    func isCharging(for address: BluetoothAddress) -> Bool? { nil }
 }

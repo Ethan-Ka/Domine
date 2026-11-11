@@ -26,7 +26,7 @@ struct StageView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let layout = StageLayout(size: proxy.size, mode: state.mode)
+            let layout = StageLayout(size: proxy.size, mode: state.mode, speakerCount: state.mode == .surround ? state.surroundCards.count : 2)
             ZStack(alignment: .topLeading) {
                 Circle()
                     .stroke(.quaternary, lineWidth: 1)
@@ -159,7 +159,7 @@ struct StageView: View {
 
         ForEach(SpeakerPosition.positions(in: state.mode)) { position in
             SpeakerCard(
-                state: state.speaker(at: position),
+                state: state.speaker(at: position), compact: layout.isCompact,
                 onSelect: { actions.selectSpeaker(position) },
                 onReconnect: { state.speaker(at: position).reconnectUID.map(actions.reconnectSpeaker) })
                 .position(layout.cardCenter(position))
@@ -209,7 +209,7 @@ struct StageView: View {
 
     private func surroundCard(_ card: SpeakerCardState, info: SurroundCardInfo, layout: StageLayout) -> some View {
         SpeakerCard(
-            state: card,
+            state: card, compact: layout.isCompact,
             onSelect: { actions.chooseSurroundSpeaker(info.uid) },
             onReconnect: { actions.reconnectSpeaker(info.uid) })
             .onTapGesture { actions.chooseSurroundSpeaker(info.uid) }

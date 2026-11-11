@@ -190,6 +190,7 @@ extension AppModel {
             card.batteryPercent = batteryPercent[speaker.uid]
             card.sync = sync[speaker.uid]
             card.health = SpeakerHealth(dropouts[uid: speaker.uid])
+            card.isCharging = batteryCharging[speaker.uid]
             return card
         }
     }
@@ -376,6 +377,7 @@ extension AppModel {
             level: Double(level), isMonoFallback: isMonoFallback)
         card.batteryPercent = batteryPercent[uid]
         card.health = SpeakerHealth(dropoutCounts[uid: uid])
+        card.isCharging = batteryCharging[uid]
         return card
     }
 

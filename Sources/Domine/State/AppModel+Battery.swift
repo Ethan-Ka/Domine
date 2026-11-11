@@ -7,12 +7,15 @@ extension AppModel {
         uids.formUnion([leftUID, rightUID].compactMap { $0 })
         uids.formUnion(surroundSpeakers.map(\.uid))
         var levels: [String: Int] = [:]
+        var charging: [String: Bool] = [:]
         for uid in uids {
             guard catalog.device(uid: uid) != nil,
                   let address = BluetoothAddress(deviceUID: uid),
                   let percent = batteryReader.percent(for: address) else { continue }
             levels[uid] = percent
+            if let flag = batteryReader.isCharging(for: address) { charging[uid] = flag }
         }
+        if charging != batteryCharging { batteryCharging = charging }
         if levels != batteryPercent { batteryPercent = levels }
     }
 
