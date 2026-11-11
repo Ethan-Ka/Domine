@@ -165,6 +165,8 @@ extension AppModel {
     var surroundCards: [SpeakerCardState] {
         let toneUID = surroundTestToneUID
         let routing = engine.state.isRouting
+        let sync = routing ? SpeakerSync.surround(delaysMs: engine.pushedSurroundDelaysMs) : [:]
+        let dropouts = dropoutCounts
         return surroundSpeakers.map { (speaker: SurroundSpeaker) -> SpeakerCardState in
             let info = SurroundCardInfo(
                 uid: speaker.uid, azimuth: Double(speaker.azimuth), distance: Double(speaker.distance))
@@ -182,8 +184,15 @@ extension AppModel {
                 connection: .connected,
                 level: routing ? Double(surroundLevel(uid: speaker.uid)) : 0)
             card.batteryPercent = batteryPercent[speaker.uid]
+            card.sync = sync[speaker.uid]
+            card.health = SpeakerHealth(dropouts[uid: speaker.uid])
             return card
         }
+    }
+
+    /// This session's dropouts; empty while not routing.
+    var dropoutCounts: DropoutCounts {
+        engine.diagnostics?.dropoutCounts ?? DropoutCounts()
     }
 
     /// The Choose Speaker sheet in Surround mode.
@@ -315,6 +324,8 @@ extension AppModel {
         if routingMode == .single {
             card.customTitle = Self.singleSpeakerTitle
             card.sideTag = "L+R"
+        } else {
+            card.sync = stereoSync(for: position, card: card)
         }
         return card
     }
@@ -343,7 +354,17 @@ extension AppModel {
             statusText: isMonoFallback ? "Mono fallback" : "Connected", connection: .connected,
             level: Double(level), isMonoFallback: isMonoFallback)
         card.batteryPercent = batteryPercent[uid]
+        card.health = SpeakerHealth(dropoutCounts[uid: uid])
         return card
+    }
+
+    /// Stereo sync readout: only while both front speakers play their own side.
+    private func stereoSync(for position: SpeakerPosition, card: SpeakerCardState) -> SpeakerSync? {
+        guard routingMode == .stereo, position.isFront, card.connection == .connected, !card.isMonoFallback,
+              let left = leftUID, let right = rightUID,
+              catalog.device(uid: left) != nil, catalog.device(uid: right) != nil else { return nil }
+        let sync = SpeakerSync.stereo(delayMs: pairSettings.delayMs)
+        return position == .frontLeft ? sync.a : sync.b
     }
 
     /// The one card's title in Single mode.

@@ -67,7 +67,7 @@ struct StageView: View {
         ForEach(SpeakerPosition.positions(in: state.mode)) { position in
             connector(
                 from: layout.connectorStart(position), to: layout.connectorEnd(position),
-                connection: state.speaker(at: position).connection)
+                card: state.speaker(at: position))
         }
 
         thisMac
@@ -92,7 +92,7 @@ struct StageView: View {
             if let info = card.surround {
                 let end = layout.surroundConnectorEnd(
                     cardCenter: layout.surroundCardCenter(azimuth: info.azimuth, distance: info.distance))
-                connector(from: layout.connectorStart(toward: end), to: end, connection: card.connection)
+                connector(from: layout.connectorStart(toward: end), to: end, card: card)
             }
         }
 
@@ -207,13 +207,15 @@ struct StageView: View {
         .accessibilityElement(children: .combine)
     }
 
+    /// The line from the Mac to a card. A warning symbol sits mid-line when
+    /// the speaker dropped out, and a delayed speaker's "+42 ms" near its card.
     @ViewBuilder
-    private func connector(from start: CGPoint, to end: CGPoint, connection: SpeakerConnection) -> some View {
+    private func connector(from start: CGPoint, to end: CGPoint, card: SpeakerCardState) -> some View {
         let path = Path { path in
             path.move(to: start)
             path.addLine(to: end)
         }
-        switch connection {
+        switch card.connection {
         case .connected:
             path.stroke(Color.accentColor.opacity(0.55), lineWidth: 2)
         case .disconnected:
@@ -221,6 +223,31 @@ struct StageView: View {
         case .placeholder, .unassigned:
             path.stroke(.tertiary, style: StrokeStyle(lineWidth: 1.5, dash: [4, 5]))
         }
+        if card.connection == .connected {
+            if let health = card.health.text {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .padding(3)
+                    .background(Circle().fill(Color(nsColor: .windowBackgroundColor)))
+                    .position(Self.point(from: start, to: end, at: 0.45))
+                    .help(health)
+                    .accessibilityHidden(true)
+            }
+            if let label = card.sync?.connectorLabel {
+                Text(label)
+                    .font(.caption2.weight(.medium))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .position(Self.point(from: start, to: end, at: 0.75, lift: 9))
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+
+    /// A point `t` of the way along the line, moved `lift` points up off it.
+    static func point(from start: CGPoint, to end: CGPoint, at t: CGFloat, lift: CGFloat = 0) -> CGPoint {
+        CGPoint(x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t - lift)
     }
 }
 

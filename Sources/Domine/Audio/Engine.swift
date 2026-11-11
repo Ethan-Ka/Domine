@@ -171,6 +171,20 @@ final class Engine {
     /// Test hook: what the last control push gave the surround kernel, per
     /// kernel index (list order; the stereo demo uses A, B).
     private(set) var pushedSurround: PushedSurround?
+    /// Each present surround speaker's total delay as last pushed, by UID.
+    /// Empty when the surround kernel is not running or the stereo demo
+    /// owns it. Read-only, for the stage cards.
+    var pushedSurroundDelaysMs: [String: Float] {
+        guard let pushed = pushedSurround, resources.surround != nil, !stereoDemo else { return [:] }
+        let uids = resources.surroundUIDs
+        let present = resources.surroundPresent
+        var delays: [String: Float] = [:]
+        for (index, uid) in uids.enumerated() where index < pushed.delaysMs.count {
+            if index < present.count, !present[index] { continue }
+            delays[uid] = pushed.delaysMs[index]
+        }
+        return delays
+    }
     struct PushedSurround: Equatable, Sendable {
         var azimuths: [Float]
         var gains: [Float]

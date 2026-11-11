@@ -196,6 +196,9 @@ final class EngineDiagnostics {
 
     func resetDropoutCounts() { dropouts.reset() }
 
+    /// This session's dropouts, read-only. Observable through the tracker.
+    var dropoutCounts: DropoutCounts { dropouts.counts }
+
     /// Reads the current values for the Debug window. Changes no audio state.
     func snapshot() -> DebugSnapshot {
         var stats = DomineKernelStats()

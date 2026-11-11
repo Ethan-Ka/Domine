@@ -43,6 +43,13 @@ struct SpeakerCard: View {
 
     private var isError: Bool { state.connection == .disconnected }
 
+    /// Red only for a fault; the mono fallback "L+R" is neutral.
+    private var sideTagStyle: AnyShapeStyle {
+        if isError { return AnyShapeStyle(Color.red) }
+        if state.isMonoFallback { return AnyShapeStyle(.secondary) }
+        return AnyShapeStyle(Color.accentColor)
+    }
+
     private var card: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
@@ -57,7 +64,7 @@ struct SpeakerCard: View {
                         Spacer(minLength: 4)
                         Text(state.sideTag)
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(isError ? Color.red : Color.accentColor)
+                            .foregroundStyle(sideTagStyle)
                     }
                     if let name = state.deviceName {
                         DeviceNameLabel(name: name, suffix: state.uidSuffix)
@@ -68,7 +75,8 @@ struct SpeakerCard: View {
                             .foregroundStyle(isError ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondary))
                         if let percent = state.batteryPercent {
                             Spacer(minLength: 4)
-                            Image(systemName: Self.batterySymbol(percent))
+                            Image(systemName: state.isCharging == true
+                                  ? "battery.100percent.bolt" : Self.batterySymbol(percent))
                             Text("\(percent)%")
                                 .monospacedDigit()
                         }
@@ -76,8 +84,13 @@ struct SpeakerCard: View {
                     .font(.subheadline)
                     .foregroundStyle(state.batteryPercent.map { $0 <= 15 } == true
                                      ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondary))
-                    if let secondary = state.statusDetail {
-                        Text(secondary)
+                    if let health = state.health.text {
+                        Label(health, systemImage: "exclamationmark.triangle.fill")
+                            .labelStyle(.titleAndIcon)
+                            .font(.subheadline)
+                            .foregroundStyle(.orange)
+                    } else if let detail = state.sync?.text ?? state.statusDetail {
+                        Text(detail)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -141,7 +154,13 @@ struct SpeakerCard: View {
         }
         parts.append(state.statusText)
         if let percent = state.batteryPercent {
-            parts.append("Battery \(percent) percent")
+            parts.append(state.isCharging == true ? "Battery \(percent) percent, charging" : "Battery \(percent) percent")
+        }
+        if let health = state.health.text {
+            parts.append(health)
+        }
+        if let sync = state.sync {
+            parts.append(sync.text)
         }
         if let secondary = state.statusDetail {
             parts.append(secondary)
