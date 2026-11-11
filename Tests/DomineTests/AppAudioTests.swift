@@ -69,4 +69,15 @@ struct AppAudioTests {
         model.setAppExcluded(bundleID: "us.zoom.xos", false)
         #expect(model.store.exclusions.isEmpty)
     }
+
+    @Test func appTapProcessesAreSorted() {
+        let defaults = UserDefaults(suiteName: "AppAudioTests-\(UUID().uuidString)")!
+        let hal = FakeHAL()
+        hal.addProcess(bundleID: "com.example.Player", isRunningOutput: true)
+        hal.addProcess(bundleID: "com.example.Player.helper", isRunningOutput: true)
+        let model = AppModel(hal: hal, defaults: defaults)
+        model.setAppVolume(bundleID: "com.example.Player", 0.5)
+        let processes = model.engine.appTapRequests.first?.processes ?? []
+        #expect(processes == processes.sorted())
+    }
 }
