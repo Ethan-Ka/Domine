@@ -8,7 +8,7 @@ struct AdvancedSliderRow: View {
     var range: ClosedRange<Double>
     var step: Double
     var readout: (Double) -> String
-    var caption: String
+    var caption: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -22,7 +22,7 @@ struct AdvancedSliderRow: View {
                         .frame(width: 72, alignment: .trailing)
                 }
             }
-            AdvancedCaption(text: caption)
+            if let caption { AdvancedCaption(text: caption) }
         }
     }
 }

@@ -99,21 +99,17 @@ struct AdvancedSettingsView: View {
     private var reconnectSection: some View {
         Section("Reconnect and volume overlay") {
             AdvancedSliderRow(title: "First try after", value: $settings.reconnectFirstDelaySeconds,
-                              range: S.reconnectFirstDelayRange, step: 1, readout: Self.seconds,
-                              caption: "Wait this long after a speaker drops before reconnecting.")
+                              range: S.reconnectFirstDelayRange, step: 1, readout: Self.seconds)
             AdvancedSliderRow(title: "Try again every", value: $settings.reconnectRetrySeconds,
-                              range: S.reconnectRetryRange, step: 5, readout: Self.seconds,
-                              caption: "Time between later reconnect tries.")
+                              range: S.reconnectRetryRange, step: 5, readout: Self.seconds)
             AdvancedSliderRow(title: "Give up after", value: $settings.reconnectGiveUpMinutes,
-                              range: S.reconnectGiveUpRange, step: 1, readout: { "\(Int($0.rounded())) min" },
-                              caption: "Stop trying once a speaker has been gone this long.")
+                              range: S.reconnectGiveUpRange, step: 1, readout: { "\(Int($0.rounded())) min" })
             VStack(alignment: .leading, spacing: 2) {
                 Toggle("Show volume overlay", isOn: $settings.showsVolumeHUD)
-                AdvancedCaption(text: "Shown when you use the keyboard volume keys.")
+                AdvancedCaption(text: "The volume level that appears while you press the volume keys.")
             }
             AdvancedSliderRow(title: "Overlay time", value: $settings.volumeHUDSeconds,
-                              range: S.hudSecondsRange, step: 0.5, readout: Self.seconds,
-                              caption: "How long the overlay stays after the last key press.")
+                              range: S.hudSecondsRange, step: 0.5, readout: Self.seconds)
                 .disabled(!settings.showsVolumeHUD)
         }
     }

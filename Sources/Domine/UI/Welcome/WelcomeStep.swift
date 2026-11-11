@@ -8,8 +8,8 @@ struct WelcomeStep: Identifiable, Equatable, Sendable {
 
         var title: String {
             switch self {
-            case .unpairJBL: "Turn off the speakers' own stereo pairing (for JBL: the JBL Portable app)"
-            case .connectSpeakers: "Connect both speakers"
+            case .unpairJBL: "Unpair the speakers in their own app (JBL Portable for JBL)"
+            case .connectSpeakers: "Connect your speakers"
             case .allowCapture: "Let Domine capture your Mac's audio"
             case .installDriver: "Install the Domine output (recommended)"
             }

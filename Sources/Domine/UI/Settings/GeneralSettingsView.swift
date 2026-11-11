@@ -49,29 +49,27 @@ struct GeneralSettingsView: View {
 
             LabeledContent("Startup:") {
                 VStack(alignment: .leading, spacing: 8) {
-                    option("Launch at login", isOn: $state.launchAtLogin, caption: "Open Domine when you log in to your Mac.")
+                    option("Launch at login", isOn: $state.launchAtLogin)
                     option("Start routing when speakers connect", isOn: $state.startWhenBothConnect,
-                           caption: "Start routing automatically when all of the mode's speakers connect.")
+                           caption: "Waits for every speaker the current mode uses.")
                     if let automaticUpdates {
-                        option("Check for updates automatically", isOn: automaticUpdates,
-                               caption: "Look for a new version of Domine now and then.")
+                        option("Check for updates automatically", isOn: automaticUpdates, caption: "Once a day.")
                     }
                 }
             }
 
             LabeledContent("Speakers:") {
                 VStack(alignment: .leading, spacing: 8) {
-                    option("Reconnect speakers that drop", isOn: $state.reconnectDroppedSpeakers,
-                           caption: "Try to bring a speaker back if its connection is lost.")
+                    option("Reconnect speakers that drop", isOn: $state.reconnectDroppedSpeakers)
                     option("Keep speakers from turning off", isOn: $state.keepSpeakersAwake,
-                           caption: "Plays an inaudible tone so the speakers don't go to sleep.")
+                           caption: "Plays a very quiet low tone during silence so the speakers don't power off.")
                 }
             }
 
             LabeledContent("Quitting:") {
                 VStack(alignment: .leading, spacing: 8) {
                     option("Pause playback if Domine quits while playing", isOn: $state.pauseOnExit,
-                           caption: "Pauses the music if Domine quits unexpectedly.")
+                           caption: "So nothing plays from the Mac's own speakers.")
                 }
             }
 
@@ -114,10 +112,10 @@ struct GeneralSettingsView: View {
         }
     }
 
-    private func option(_ title: String, isOn: Binding<Bool>, caption text: String) -> some View {
+    private func option(_ title: String, isOn: Binding<Bool>, caption text: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Toggle(title, isOn: isOn)
-            caption(text)
+            if let text { caption(text) }
         }
     }
 

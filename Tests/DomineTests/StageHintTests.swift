@@ -36,7 +36,7 @@ final class StageHintTests {
         let right = SurroundSpeaker(uid: "r", azimuth: 30)
         let left = SurroundSpeaker(uid: "l", azimuth: -30)
         #expect(AppModel.phoneTakeoverHint(missing: [right])
-            == "The right speaker dropped out. A phone connected to it can take over, so check for one.")
+            == "The right speaker dropped out. Check that a phone didn't take it over.")
         #expect(AppModel.phoneTakeoverHint(missing: [left]).hasPrefix("The left speaker"))
     }
 

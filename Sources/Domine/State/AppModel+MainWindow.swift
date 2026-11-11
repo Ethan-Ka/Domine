@@ -272,17 +272,17 @@ extension AppModel {
 
     nonisolated static func phoneTakeoverHint(missing: [SurroundSpeaker]) -> String {
         guard missing.count == 1, let one = missing.first else {
-            return "Some speakers dropped out. A phone connected to one can take over, so check for one."
+            return "Some speakers dropped out. Check that a phone didn't take them over."
         }
         let side = one.azimuth <= -1 ? "left" : one.azimuth >= 1 ? "right" : "center"
-        return "The \(side) speaker dropped out. A phone connected to it can take over, so check for one."
+        return "The \(side) speaker dropped out. Check that a phone didn't take it over."
     }
 
     /// Stage banner during mono fallback (docs/mockups/Disconnected.dc.html).
     var monoFallbackBanner: String? {
         guard let missing = monoFallbackMissingPosition else { return nil }
         let playing: SpeakerPosition = missing == .frontLeft ? .frontRight : .frontLeft
-        return "\(missing.title) disconnected. \(playing.title) plays both sides until it reconnects. A phone connected to it can take over, so check for one."
+        return "\(missing.title) disconnected. \(playing.title) plays both sides until it reconnects. Check that a phone didn't take it over."
     }
 
     /// The stage banner: the most serious message that applies.

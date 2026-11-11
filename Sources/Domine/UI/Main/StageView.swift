@@ -194,7 +194,7 @@ struct StageView: View {
             .position(x: layout.macCenter.x, y: layout.macCenter.y + 8)
 
         if cards.isEmpty {
-            Text("Add speakers with Add Speaker… or Presets.")
+            Text("Add speakers with Add Speaker… or Layout.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .position(x: layout.macCenter.x, y: layout.macCenter.y + 70)
