@@ -1522,6 +1522,9 @@ extension Engine {
         await fadeOut()
         guard state.isRouting, resources.surroundIDs == previous else { return }
         Self.log.info("Rebuilding surround for \(ids.map { $0.map { "\($0)" } ?? "missing" }.joined(separator: ", "), privacy: .public)")
+        // Callers pass `resources.surroundIDs`, which is empty while another
+        // build is in flight (teardown cleared it); read the speakers afresh.
+        let ids = ids.count == uids.count ? ids : uids.map { presentID($0) }
         generation &+= 1
         teardown()
         layout = nil

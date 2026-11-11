@@ -224,4 +224,24 @@ final class SurroundEngineTests {
         #expect(!engine.demoRequested)
         #expect(engine.demoStatus().playing == false)
     }
+
+    /// An app tap change landing while a speaker rebuild waits on the
+    /// layout used to pass the empty mid-build IDs and index out of range.
+    @Test func tapRebuildDuringASpeakerRebuildReadsTheSpeakersAfresh() async throws {
+        engine = Engine(hal: hal, layoutAttempts: 3, layoutRetryDelay: .milliseconds(300), fadeWait: { _ in })
+        engine.appTapDebounce = .zero
+        let set = speakers(3)
+        await engine.start(surround: set)
+        #expect(engine.state == .running)
+        hal.aggregateStreamsHiddenForAttempts = 1
+        hal.remove(uid: set[1].uid)
+        try await Task.sleep(for: .milliseconds(100))
+        engine.setAppTaps([AppTapRequest(key: "com.a", processes: [7], gain: 0.5)])
+        await engine.appTapRebuild?.value
+        await engine.speakerCheck?.value
+        #expect(engine.state == .degraded(.quadFallback(missing: [set[1].uid])))
+        #expect(subDeviceUIDs == [set[0].uid, set[2].uid])
+        #expect(engine.layout?.outOffsets == [0, nil, 2])
+        #expect(hal.liveAggregateCount == 1)
+    }
 }
