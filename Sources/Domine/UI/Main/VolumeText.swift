@@ -12,6 +12,6 @@ enum VolumeText {
         let v = max(volume, 0)
         guard v > 1 else { return "\(Int((v * 100).rounded())) percent" }
         let db = Int(((v - 1) * Double(PairSettings.maxBoostDb)).rounded())
-        return "Boost \(db) decibels"
+        return db == 0 ? "100 percent" : "Boost \(db) decibels"
     }
 }
