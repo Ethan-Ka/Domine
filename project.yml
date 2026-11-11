@@ -27,6 +27,12 @@ targets:
     dependencies:
       - target: DomineDSP
       - sdk: IOBluetooth.framework
+      # Bundled so Settings can install or update the driver (SPEC 8d).
+      - target: DomineDriver
+        embed: true
+        codeSign: false
+        copy:
+          destination: resources
     # Hardened runtime blocks the microphone without this (auto-calibration).
     entitlements:
       path: Sources/Domine/Domine.entitlements

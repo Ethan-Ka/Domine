@@ -34,6 +34,9 @@ struct SystemServices: Sendable {
 
     /// Where sleep and wake notifications arrive. Tests pass their own center.
     var sleepWakeCenter: NotificationCenter = NSWorkspace.shared.notificationCenter
+    /// Installs the Domine output driver with the admin prompt (SPEC 8d).
+    /// The default does nothing, so tests never run the privileged command.
+    var driverInstaller: any DriverInstalling = UnavailableDriverInstaller()
 
     static let virtualOutputInstallURL = URL(string: "https://github.com/Ethan-Ka/Domine#virtual-output")!
     static let bluetoothSettingsURL = URL(string: "x-apple.systempreferences:com.apple.Bluetooth")!
@@ -71,5 +74,6 @@ struct SystemServices: Sendable {
         },
         terminateApp: { NSApp.terminate(nil) },
         revealInFinder: { NSWorkspace.shared.activateFileViewerSelecting([$0]) },
-        codeSignature: { CodeSignature.designatedRequirement })
+        codeSignature: { CodeSignature.designatedRequirement },
+        driverInstaller: LiveDriverInstaller())
 }

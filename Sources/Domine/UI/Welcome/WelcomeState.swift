@@ -5,6 +5,10 @@ struct WelcomeState: Equatable, Sendable {
     var isCheckingCapture = false
     /// A probe ran without confirming capture, so step 3 also offers the Privacy pane.
     var showsPrivacySettings = false
+    /// Install or Update of the Domine output is running.
+    var isInstallingDriver = false
+    /// Shown under the driver step after a failed or cancelled install.
+    var driverFailure: String?
 
     var allDone: Bool { steps.allSatisfy(\.isDone) }
 

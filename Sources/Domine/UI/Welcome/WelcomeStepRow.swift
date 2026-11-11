@@ -5,6 +5,8 @@ import SwiftUI
 struct WelcomeStepRow: View {
     let step: WelcomeStep
     var isBusy = false
+    /// A line under the instruction, such as a failed install.
+    var note: String?
     var secondaryTitle: String?
     var secondaryAction: () -> Void = {}
     let action: () -> Void
@@ -20,6 +22,12 @@ struct WelcomeStepRow: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    if let note {
+                        Text(note)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 VStack(alignment: .trailing, spacing: 6) {

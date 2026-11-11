@@ -500,6 +500,9 @@ final class AppModelTests {
         #expect(model.welcomeState.isDone(.connectSpeakers))
         #expect(!model.welcomeState.isDone(.allowCapture))
         model.captureAccess.markWorking()
+        #expect(!model.welcomeState.allDone)
+        #expect(!model.welcomeState.isDone(.installDriver))
+        model.welcomeActions.skipDriver()
         #expect(model.welcomeState.allDone)
 
         model.welcomeActions.perform(.connectSpeakers)
@@ -544,6 +547,7 @@ final class FakeSystem {
     var activations = 0
     var terminations = 0
     let sleepWakeCenter = NotificationCenter()
+    let driver = FakeDriverInstaller()
 
     struct Failure: Error {}
 
@@ -570,6 +574,7 @@ final class FakeSystem {
             terminateApp: { [weak self] in self?.terminations += 1 },
             revealInFinder: { [weak self] in self?.revealedURLs.append($0) },
             codeSignature: { [weak self] in self?.signature },
-            sleepWakeCenter: sleepWakeCenter)
+            sleepWakeCenter: sleepWakeCenter,
+            driverInstaller: driver)
     }
 }

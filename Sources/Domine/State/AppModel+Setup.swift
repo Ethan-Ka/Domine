@@ -46,7 +46,11 @@ extension AppModel {
             connectedSpeakers: connectedSpeakerCount,
             speakersNeeded: speakersNeededForMode,
             loginItemNeedsApproval: loginItemNeedsApproval,
-            virtualOutputInstalled: virtualOutputInstalled)
+            virtualOutputInstalled: virtualOutputInstalled,
+            driverStatus: driverStatus,
+            canInstallDriver: services.driverInstaller.bundledDriverURL != nil,
+            driverActivity: driverActivity,
+            driverFailure: driverFailure)
     }
 
     /// `showMainWindow` brings the main window forward; it needs the SwiftUI
@@ -67,13 +71,18 @@ extension AppModel {
             openBluetoothSpeakers: { [weak self] in self?.openBluetooth() },
             openBluetoothSettings: { [weak self] in self?.services.openURL(SystemServices.bluetoothSettingsURL) },
             openLoginItems: { [weak self] in self?.services.openLoginItemsSettings() },
-            showInstallSteps: { [weak self] in self?.services.openURL(SystemServices.virtualOutputInstallURL) })
+            showInstallSteps: { [weak self] in self?.services.openURL(SystemServices.virtualOutputInstallURL) },
+            driver: { [weak self] action in
+                guard let self else { return }
+                Task { await self.performDriverAction(action) }
+            })
     }
 
     /// Clears the first-run flag and presents the checklist again.
     func showSetupAgain() {
         store.hasCompletedWelcome = false
         markedJBLUnpaired = false
+        skippedDriverInstall = false
         showsWelcome = true
     }
 

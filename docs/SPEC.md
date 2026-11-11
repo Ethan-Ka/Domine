@@ -342,7 +342,7 @@ States: `idle`, `starting`, `running`, `degraded(reason)`, `stopping`, `error(me
 
 - Install: `scripts/install-driver.sh` builds the Debug driver, copies `Domine.driver` to `/Library/Audio/Plug-Ins/HAL` with `sudo`, sets owner `root:wheel`, and restarts coreaudiod with `sudo killall coreaudiod`. All audio drops for a few seconds while coreaudiod restarts. `scripts/uninstall-driver.sh` removes the bundle and restarts coreaudiod the same way. Both take `--dry-run`.
 - coreaudiod loads third-party HAL plug-ins into a sandboxed helper process (`Core Audio Driver Service`). On Apple silicon the bundle must carry a valid code signature. Community drivers built locally (BlackHole from source) load with Apple Development or ad-hoc signatures, so a Developer ID signature is expected to be needed only for distribution and notarization, not for loading. Debug builds sign with Apple Development (team XF5RVRJ6VU). To be confirmed on the first install: if the driver does not appear, check `log show --last 5m --predicate 'process CONTAINS "Core Audio Driver"'` for a signature rejection.
-- Release: `scripts/release.sh` builds the driver with Developer ID and the hardened runtime and includes it in the notarized zip next to the app. The app does not install the driver itself in v1; the user runs the install script, or a later installer package does it.
+- Release: `scripts/release.sh` builds the driver with Developer ID and the hardened runtime and includes it in the notarized zip next to the app. The app also carries a copy of the driver in `Contents/Resources` and can install it itself (section 8d).
 - The driver has no entitlements and no network or file access beyond the host's storage callbacks.
 
 ### 8b. Installer
@@ -358,6 +358,15 @@ States: `idle`, `starting`, `running`, `degraded(reason)`, `stopping`, `error(me
 - It checks at launch (at most once per 24 hours, timestamp persisted) and from "Check for Updates…" in the app menu, after About. Settings > General has "Check for updates automatically" for the launch check.
 - When newer, an alert "Domine X.Y.Z is available." offers "Download Installer" (the .pkg URL, or the release page if there is no .pkg) and "Later". A manual check with nothing newer says "Domine is up to date." Network errors are silent for the automatic check and show a short alert for the manual one.
 - It never runs in the unit test host. The network fetch is injected for tests.
+
+### 8d. In-app driver install
+
+- The Domine app depends on the `DomineDriver` target and copies `Domine.driver` into `Contents/Resources`. The pkg and `release.sh` still build and ship the driver on its own.
+- Settings > General > Setup, "Domine output" row: "Not installed" with Install, "Installed" with Remove, or "Update available" with Update and Remove. Update shows when the installed driver's `CFBundleVersion` (read from `/Library/Audio/Plug-Ins/HAL/Domine.driver/Contents/Info.plist`) is lower than the bundled one, compared as numbers. A device with the virtual output UID and no readable plist counts as installed.
+- The first-run checklist has a fourth step, "Install the Domine output (recommended)", with Install and Not Now. It is done when the driver is installed and up to date, or skipped. Domine routes without it.
+- Every action first shows an alert: "Installing the Domine output restarts macOS audio." with "Sound stops for a few seconds." Confirmed, it stages the bundled driver in the user's temporary folder (root cannot read some user folders), then runs one `do shell script ... with administrator privileges` through `osascript`, which shows the system password prompt: `mkdir -p`, `rm -rf` the old bundle, `ditto` the new one, `chown -R root:wheel`, then restart coreaudiod as in `postinstall`. Remove runs `rm -rf` and the same restart. Paths are single-quoted for the shell and escaped for the AppleScript string.
+- While it runs the row reads "Installing…" (or "Updating…", "Removing…"). Cancelling the password prompt (AppleScript error -128) shows "Cancelled. Nothing changed."; any other failure shows "Could not install the Domine output."
+- The privileged call sits behind the `DriverInstalling` protocol in `SystemServices`. The default is a stub that does nothing, so the unit-test host never runs it; tests pass a fake with plist versions by path.
 
 ## 9. Known risks
 

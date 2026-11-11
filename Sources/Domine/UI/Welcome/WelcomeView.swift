@@ -4,6 +4,8 @@ import SwiftUI
 struct WelcomeView: View {
     let state: WelcomeState
     var actions = WelcomeActions()
+    /// The restart warning before installing the driver is up.
+    @State private var confirmingInstall = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -19,14 +21,25 @@ struct WelcomeView: View {
             .padding(.bottom, 4)
 
             ForEach(state.steps) { step in
-                let isCapture = step.kind == .allowCapture
-                WelcomeStepRow(
-                    step: step,
-                    isBusy: isCapture && state.isCheckingCapture,
-                    secondaryTitle: isCapture && state.showsPrivacySettings && !step.isDone
-                        ? "Open Privacy Settings" : nil,
-                    secondaryAction: { actions.openPrivacySettings() }
-                ) { actions.perform(step.kind) }
+                switch step.kind {
+                case .installDriver:
+                    WelcomeStepRow(
+                        step: step,
+                        isBusy: state.isInstallingDriver,
+                        note: state.isInstallingDriver ? DriverAction.install.progressText : state.driverFailure,
+                        secondaryTitle: step.isDone || state.isInstallingDriver ? nil : "Not Now",
+                        secondaryAction: { actions.skipDriver() }
+                    ) { confirmingInstall = true }
+                default:
+                    let isCapture = step.kind == .allowCapture
+                    WelcomeStepRow(
+                        step: step,
+                        isBusy: isCapture && state.isCheckingCapture,
+                        secondaryTitle: isCapture && state.showsPrivacySettings && !step.isDone
+                            ? "Open Privacy Settings" : nil,
+                        secondaryAction: { actions.openPrivacySettings() }
+                    ) { actions.perform(step.kind) }
+                }
             }
 
             HStack {
@@ -39,6 +52,12 @@ struct WelcomeView: View {
         .padding(.horizontal, 40)
         .padding(.vertical, 20)
         .frame(width: 640, alignment: .top)
+        .alert(DriverAction.install.confirmTitle, isPresented: $confirmingInstall) {
+            Button("Install") { actions.installDriver() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(DriverAction.confirmMessage)
+        }
     }
 }
 

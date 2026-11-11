@@ -18,7 +18,34 @@ struct SetupState: Equatable, Sendable {
     /// The Domine virtual output driver is installed.
     var virtualOutputInstalled = false
 
-    var virtualOutputText: String { virtualOutputInstalled ? "Installed" : "Not installed" }
+    var driverStatus: DriverStatus = .notInstalled
+    /// The app carries a driver it can install.
+    var canInstallDriver = false
+    /// Install, Update or Remove is running.
+    var driverActivity: DriverAction?
+    /// Shown under the row after a failed or cancelled action.
+    var driverFailure: String?
+
+    var virtualOutputText: String {
+        if let driverActivity { return driverActivity.progressText }
+        switch driverStatus {
+        case .notInstalled: return "Not installed"
+        case .installed: return "Installed"
+        case .updateAvailable: return "Update available"
+        }
+    }
+
+    /// The main button: Install or Update, nil when up to date or the app has no driver.
+    var primaryDriverAction: DriverAction? {
+        guard canInstallDriver else { return nil }
+        switch driverStatus {
+        case .notInstalled: return .install
+        case .updateAvailable: return .update
+        case .installed: return nil
+        }
+    }
+
+    var showsRemoveDriver: Bool { driverStatus != .notInstalled }
 
     var captureText: String {
         if isCheckingCapture { return "Checking…" }
