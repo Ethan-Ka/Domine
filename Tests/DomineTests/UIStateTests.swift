@@ -16,11 +16,9 @@ struct UIStateTests {
         #expect(TuningState.balanceReadout(-0.1) == "Left 10%")
     }
 
-    @Test func delayRangeWidensWithExtendedRange() {
-        var state = SampleStates.tuning
-        #expect(state.delayRange == -50...50)
-        state.isExtendedRange = true
-        #expect(state.delayRange == -300...300)
+    @Test func delayRangeIsOneFixedRange() {
+        #expect(TuningState.delayRange == -300...300)
+        #expect(SampleStates.tuning.nudgedDelay(by: 400) == 300)
     }
 
     @Test func meterSegmentColors() {

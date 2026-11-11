@@ -37,13 +37,13 @@ final class SettingsTests {
 
     @Test func unknownPairReturnsDefaults() {
         let s = store.pairSettings(leftUID: Self.gripA, rightUID: Self.gripB)
-        #expect(s == PairSettings(delayMs: 0, extendedRange: false, balance: 0, masterVolume: 0.5))
+        #expect(s == PairSettings(delayMs: 0, balance: 0, masterVolume: 0.5))
         #expect(s.leftGain == 1)
         #expect(s.rightGain == 1)
     }
 
     @Test func pairSettingsRoundTrip() {
-        let s = PairSettings(delayMs: 12, extendedRange: true, balance: -0.25, masterVolume: 0.75)
+        let s = PairSettings(delayMs: 12, balance: -0.25, masterVolume: 0.75)
         store.setPairSettings(s, leftUID: Self.gripA, rightUID: Self.gripB)
         #expect(store.pairSettings(leftUID: Self.gripA, rightUID: Self.gripB) == s)
         let reopened = SettingsStore(defaults: defaults)
@@ -52,10 +52,10 @@ final class SettingsTests {
 
     @Test func swappedOrderFindsSamePairFlipped() {
         store.setPairSettings(
-            PairSettings(delayMs: 12, extendedRange: true, balance: -0.25, masterVolume: 0.75),
+            PairSettings(delayMs: 12, balance: -0.25, masterVolume: 0.75),
             leftUID: Self.gripA, rightUID: Self.gripB)
         let swapped = store.pairSettings(leftUID: Self.gripB, rightUID: Self.gripA)
-        #expect(swapped == PairSettings(delayMs: -12, extendedRange: true, balance: 0.25, masterVolume: 0.75))
+        #expect(swapped == PairSettings(delayMs: -12, balance: 0.25, masterVolume: 0.75))
         #expect(swapped.leftGain == 0.75)
         #expect(swapped.rightGain == 1)
     }
@@ -89,15 +89,15 @@ final class SettingsTests {
         let json = #"{"delayMs": 7, "balance": "left", "futureField": 1}"#
         defaults.set(Data(json.utf8), forKey: key)
         #expect(store.pairSettings(leftUID: Self.gripA, rightUID: Self.gripB)
-            == PairSettings(delayMs: 7, extendedRange: false, balance: 0, masterVolume: 0.5))
+            == PairSettings(delayMs: 7, balance: 0, masterVolume: 0.5))
     }
 
     @Test func outOfRangeStoredValuesAreClamped() {
         let key = SettingsStore.storageKey(for: PairKey(leftUID: Self.gripA, rightUID: Self.gripB))
-        let json = #"{"delayMs": -900, "balance": 3, "masterVolume": 1.5}"#
+        let json = #"{"delayMs": -900, "balance": 3, "masterVolume": 9}"#
         defaults.set(Data(json.utf8), forKey: key)
         #expect(store.pairSettings(leftUID: Self.gripA, rightUID: Self.gripB)
-            == PairSettings(delayMs: -300, extendedRange: false, balance: 1, masterVolume: 1))
+            == PairSettings(delayMs: -300, balance: 1, masterVolume: PairSettings.maxMasterVolume))
     }
 
     @Test func nonFiniteValuesFallBackToDefaults() {
@@ -121,7 +121,7 @@ final class SettingsTests {
     }
 
     @Test func swappedIsItsOwnInverseAndKeepsZeroPositive() {
-        let s = PairSettings(delayMs: 0, extendedRange: true, balance: 0, masterVolume: 0.25)
+        let s = PairSettings(delayMs: 0, balance: 0, masterVolume: 0.25)
         #expect(s.swapped == s)
         #expect(s.swapped.delayMs.sign == .plus)
         let t = PairSettings(delayMs: -3, balance: 0.5)

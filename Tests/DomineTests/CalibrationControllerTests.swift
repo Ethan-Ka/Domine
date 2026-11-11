@@ -94,7 +94,8 @@ final class CalibrationControllerTests {
         await calibrate()
         let micID = hal.id(forUID: Self.mic.uid)!
         let bluetooth = [Self.headsetInput.uid, Self.gripA.uid, Self.gripB.uid].compactMap { hal.id(forUID: $0) }
-        #expect(hal.ioProcDevices.filter { $0 == micID }.count == 1)
+        // Two recordings (the second with the chirps swapped, SPEC 12).
+        #expect(hal.ioProcDevices.filter { $0 == micID }.count == 2)
         #expect(hal.ioProcDevices.allSatisfy { !bluetooth.contains($0) })
         #expect(hal.liveIOProcCount == 1) // only the engine's
     }
@@ -145,11 +146,10 @@ final class CalibrationControllerTests {
         #expect(saved.pairSettings.delayMs == -12)
     }
 
-    @Test func leftLateBeyondNormalRangeWidens() async {
+    @Test func leftLateBeyondFiftyMs() async {
         setUp(offset: -120.4)
         await calibrate()
         #expect(model.pairSettings.delayMs == 120)
-        #expect(model.pairSettings.extendedRange)
         #expect(model.tuningState.calibrationStatus == .done("Left was 120 ms late. Delay set."))
     }
 

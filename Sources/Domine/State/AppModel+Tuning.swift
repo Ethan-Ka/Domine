@@ -4,7 +4,6 @@ extension AppModel {
     var tuningState: TuningState {
         TuningState(
             delayMs: Int(pairSettings.delayMs.rounded()),
-            isExtendedRange: pairSettings.extendedRange,
             balance: Double(pairSettings.balance),
             reportedLatencies: reportedLatencyText,
             isClickTestPlaying: engine.clickTest,
@@ -21,7 +20,6 @@ extension AppModel {
         }
         return TuningActions(
             setDelayMs: { [weak self] in self?.setDelayMs($0) },
-            setExtendedRange: { [weak self] in self?.setExtendedRange($0) },
             setBalance: { [weak self] in self?.setBalance($0) },
             playClickTest: { [weak self] in self?.toggleClickTest() },
             autoCalibrate: calibrate,
@@ -31,7 +29,6 @@ extension AppModel {
     }
 
     func openTuning() {
-        applyInitialDelayIfUnset()
         reportedLatencyText = readReportedLatencies()
         clickTestMessage = nil
         calibrationStatus = nil
@@ -82,19 +79,8 @@ extension AppModel {
     }
 
     func setDelayMs(_ ms: Int) {
-        let range = pairSettings.extendedRange ? TuningState.extendedRange : TuningState.normalRange
+        let range = TuningState.delayRange
         updatePairSettings { $0.delayMs = Float(min(max(ms, range.lowerBound), range.upperBound)) }
-    }
-
-    /// Turning the extended range off pulls the delay back into -50...50 ms.
-    func setExtendedRange(_ on: Bool) {
-        updatePairSettings { s in
-            s.extendedRange = on
-            if !on {
-                let limit = Float(TuningState.normalRange.upperBound)
-                s.delayMs = min(max(s.delayMs, -limit), limit)
-            }
-        }
     }
 
     func setBalance(_ balance: Double) {
@@ -110,25 +96,6 @@ extension AppModel {
             s.masterVolume = old.masterVolume
             s.leftVolumeOffsetDb = old.leftVolumeOffsetDb
             s.rightVolumeOffsetDb = old.rightVolumeOffsetDb
-        }
-    }
-
-    /// SPEC 4a: a pair with no saved tuning starts with the difference of the
-    /// speakers' reported latencies as its delay. A speaker that reports lower
-    /// latency plays early, so the right one being lower gives a positive delay.
-    /// Saving the result means a saved or user-set value is never replaced.
-    /// Does nothing when either latency is unknown.
-    func applyInitialDelayIfUnset() {
-        guard let left = leftUID, let right = rightUID, left != right,
-              !store.hasPairSettings(leftUID: left, rightUID: right),
-              let l = engine.reportedLatencyMs(uid: left),
-              let r = engine.reportedLatencyMs(uid: right) else { return }
-        let limit = Double(TuningState.extendedRange.upperBound)
-        let ms = Int(min(max((l - r).rounded(), -limit), limit))
-        guard ms != 0 else { return }
-        updatePairSettings { s in
-            s.extendedRange = !TuningState.normalRange.contains(ms)
-            s.delayMs = Float(ms)
         }
     }
 

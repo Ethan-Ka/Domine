@@ -8,8 +8,6 @@ struct PairSettings: Codable, Equatable, Sendable {
     /// Signed offset in ms (SPEC section 4). Positive delays the right speaker,
     /// negative delays the left. Clamped to -300...300.
     var delayMs: Float = 0
-    /// Slider shows -300...300 ms instead of -50...50 ms.
-    var extendedRange = false
     /// Tuning sheet Balance slider, -1...1. 0 is centered, -1 is full left, 1 is full right.
     var balance: Float = 0
     /// Hardware volume applied to both speakers (SPEC section 4a), 0...1.
@@ -39,7 +37,7 @@ struct PairSettings: Codable, Equatable, Sendable {
     /// What the kernel gets: full mix while `sameOnBoth`, else the slider.
     var effectiveCrossfeed: Float { sameOnBoth ? 1 : Float(min(max(crossfeed.isFinite ? crossfeed : 0, 0), 1)) }
 
-    init(delayMs: Float = 0, extendedRange: Bool = false, balance: Float = 0, masterVolume: Float = 0.5,
+    init(delayMs: Float = 0, balance: Float = 0, masterVolume: Float = 0.5,
          effects: EffectsSettings = EffectsSettings(),
          crossfeed: Double = 0, sameOnBoth: Bool = false,
          leftVolumeOffsetDb: Float = 0, rightVolumeOffsetDb: Float = 0) {
@@ -49,7 +47,6 @@ struct PairSettings: Codable, Equatable, Sendable {
         self.sameOnBoth = sameOnBoth
         self.effects = effects
         self.delayMs = delayMs
-        self.extendedRange = extendedRange
         self.balance = balance
         self.masterVolume = masterVolume
         sanitize()
@@ -89,7 +86,7 @@ struct PairSettings: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case delayMs, extendedRange, balance, masterVolume, effects, crossfeed, sameOnBoth
+        case delayMs, balance, masterVolume, effects, crossfeed, sameOnBoth
         case leftVolumeOffsetDb, rightVolumeOffsetDb
     }
 
@@ -100,7 +97,6 @@ struct PairSettings: Codable, Equatable, Sendable {
         let defaults = PairSettings()
         self.init(
             delayMs: (try? c.decodeIfPresent(Float.self, forKey: .delayMs)) ?? defaults.delayMs,
-            extendedRange: (try? c.decodeIfPresent(Bool.self, forKey: .extendedRange)) ?? defaults.extendedRange,
             balance: (try? c.decodeIfPresent(Float.self, forKey: .balance)) ?? defaults.balance,
             masterVolume: (try? c.decodeIfPresent(Float.self, forKey: .masterVolume)) ?? defaults.masterVolume,
             effects: (try? c.decodeIfPresent(EffectsSettings.self, forKey: .effects)) ?? defaults.effects,

@@ -306,12 +306,11 @@ final class AppModelTests {
     @Test func delayClampsToTheRange() {
         addGripsAndStart()
         model.setDelayMs(120)
-        #expect(model.engine.delayMs == 50)
-        model.setExtendedRange(true)
-        model.setDelayMs(-120)
-        #expect(model.engine.delayMs == -120)
-        model.setExtendedRange(false)
-        #expect(model.engine.delayMs == -50)
+        #expect(model.engine.delayMs == 120)
+        model.setDelayMs(-900)
+        #expect(model.engine.delayMs == -300)
+        model.setDelayMs(400)
+        #expect(model.engine.delayMs == 300)
     }
 
     @Test func resetKeepsMasterVolume() {
@@ -360,53 +359,20 @@ final class AppModelTests {
         #expect(!model.showsSound)
     }
 
-    private func addGrips(leftFrames: UInt32, rightFrames: UInt32) {
+    /// Reported latencies are shown, never turned into a delay: Bluetooth
+    /// speakers report them too loosely to start from.
+    @Test func reportedLatencyNeverSetsTheDelay() async {
         var a = FakeHAL.Device(uid: Self.gripA.uid, name: "JBL Grip")
-        a.latency = DeviceLatency(deviceFrames: leftFrames, safetyOffsetFrames: 0, streamFrames: 0)
+        a.latency = DeviceLatency(deviceFrames: 8000, safetyOffsetFrames: 0, streamFrames: 0)
         var b = FakeHAL.Device(uid: Self.gripB.uid, name: "JBL Grip")
-        b.latency = DeviceLatency(deviceFrames: rightFrames, safetyOffsetFrames: 0, streamFrames: 0)
+        b.latency = DeviceLatency(deviceFrames: 4800, safetyOffsetFrames: 0, streamFrames: 0)
         hal.add(a)
         hal.add(b)
         model.start()
-    }
-
-    @Test func initialDelayEqualLatenciesIsZero() {
-        addGrips(leftFrames: 8000, rightFrames: 8000)
         model.openTuning()
+        await model.startRouting()
         #expect(model.pairSettings.delayMs == 0)
-    }
-
-    @Test func initialDelayRightEarlyIsPositive() {
-        addGrips(leftFrames: 8000, rightFrames: 7712)
-        model.openTuning()
-        #expect(model.pairSettings.delayMs == 6)
-        #expect(!model.pairSettings.extendedRange)
-        #expect(model.engine.delayMs == 6)
-    }
-
-    @Test func initialDelayLeftEarlyIsNegative() {
-        addGrips(leftFrames: 7712, rightFrames: 8000)
-        model.openTuning()
-        #expect(model.pairSettings.delayMs == -6)
-    }
-
-    @Test func initialDelayKeepsSavedValue() {
-        addGrips(leftFrames: 8000, rightFrames: 7712)
-        model.setDelayMs(0)
-        model.setBalance(0.2)
-        model.openTuning()
-        #expect(model.pairSettings.delayMs == 0)
-        let reloaded = newModel()
-        reloaded.start()
-        reloaded.openTuning()
-        #expect(reloaded.pairSettings.delayMs == 0)
-    }
-
-    @Test func initialDelayBeyondFiftyTurnsOnExtendedRange() {
-        addGrips(leftFrames: 8000, rightFrames: 4800)
-        model.openTuning()
-        #expect(model.pairSettings.delayMs == 67)
-        #expect(model.pairSettings.extendedRange)
+        #expect(model.engine.delayMs == 0)
     }
 
     @Test func clickTestTogglesWhileRouting() async {

@@ -140,7 +140,7 @@ Each speaker card shows a post-kernel peak meter for the signal Domine sends to 
 Two different problems, handled differently:
 
 - **Clock drift** (the two devices run at slightly different real sample rates, so they slowly slide apart): handled by the aggregate device's drift compensation on the non-main sub-device. No app code needed beyond setting the key.
-- **Fixed latency offset** (Bluetooth speakers buffer differently, often 100 to 300 ms, and models differ): handled by a delay line in the render kernel. The user adjusts a "Delay Left / Delay Right" slider in milliseconds; negative means delay the other side. Sign convention: a positive offset delays the right speaker (use it when the right speaker plays early); negative delays the left. Only one side is ever delayed; the kernel converts the signed value into a delay on one channel. With two Grips the offset should be small, so the slider shows -50 to +50 ms in 1 ms steps by default, with an "extended range" toggle for -300 to +300 ms (needed when pairing a Grip with a different speaker model). Store the offset per device pair, since it can differ after a firmware update or codec change.
+- **Fixed latency offset** (Bluetooth speakers buffer differently, often 100 to 300 ms, and models differ): handled by a delay line in the render kernel. The user adjusts a "Delay Left / Delay Right" slider in milliseconds; negative means delay the other side. Sign convention: a positive offset delays the right speaker (use it when the right speaker plays early); negative delays the left. Only one side is ever delayed; the kernel converts the signed value into a delay on one channel. The slider always covers -300 to +300 ms (wide enough for mixed speaker models) and is set in 1 ms steps with the nudge buttons and arrow keys (16.7). There is no range toggle: a toggle that narrowed the range would clip a measured offset. Store the offset per device pair, since it can differ after a firmware update or codec change.
 
 Note: at typical listening distances, an offset under about 1 ms is inaudible as a timing problem but will shift the stereo image toward the earlier speaker. That is why the step size is 1 ms and not coarser.
 
@@ -159,7 +159,7 @@ The process tap captures audio before any device volume is applied, so the defau
 - A speaker without a settable volume takes only a negative offset, as a kernel gain on top of the master (Domine never adds digital gain); its control cannot go above 0 dB and reads "This speaker's volume can't be set from the Mac". Reset in Sync & Balance leaves the offsets alone, since they describe the speakers, not the room.
 - Without the virtual output device, volume keys are handled as described in section 4b.
 
-Report the Core Audio latency values (`kAudioDevicePropertyLatency`, `kAudioStreamPropertyLatency`, `kAudioDevicePropertySafetyOffset`) in a debug panel, and use their difference as the initial default offset. Bluetooth devices often report these inaccurately, so the manual slider always wins.
+Report the Core Audio latency values (`kAudioDevicePropertyLatency`, `kAudioStreamPropertyLatency`, `kAudioDevicePropertySafetyOffset`) in a debug panel. They are never turned into a delay: Bluetooth devices report them too loosely, and a guessed offset saved as the pair's tuning looked like a calibrated one. A new pair starts at 0 ms; auto-calibration or the slider sets it. Every stereo build logs (notice level) each speaker's reported latency and the delay in effect, so a drift after a rebuild can be traced.
 
 Sample rate: never set the nominal sample rate (`kAudioDevicePropertyNominalSampleRate`) of a Bluetooth speaker. Each speaker keeps the rate it reports, which follows its Bluetooth codec (a freshly connected JBL Grip reports 44.1 kHz, the only rate it offers). Reason: on hardware, Grips that had been forced to 48 kHz kept reporting 48 kHz while their AAC encoder still ran at 44.1 kHz with no conversion, so everything, even plain macOS playback with no Domine, played about 8% slow and 1.5 semitones low until the speaker was power-cycled. The aggregate runs at the main sub-device's (Device A's) rate, and the kernel, delay, tone, and click use that rate. If Device B reports a different rate, log a warning and let the aggregate's drift compensation convert it. The tap follows the system default output's rate, so when the default output is not Bluetooth (for example the built-in speakers) and supports Device A's rate, Domine sets it to that rate while running and restores its previous rate on stop. If the default output then moves to a device already at the tap's rate, nothing is rebuilt and the device Domine changed gets its previous rate back right away. Otherwise the tap's drift compensation converts it.
 
@@ -277,7 +277,7 @@ Domine/
         StageView.swift     Mac in the center, one SpeakerCard per position, connector lines
         SpeakerCard.swift   role, device name + UID suffix, volume, status, level meter
         AssignSheet.swift   choose the device for a position, with Play tone per row
-        TuningSheet.swift   delay offset, extended range, balance, reported latencies
+        TuningSheet.swift   delay offset, balance, reported latencies
         WelcomeView.swift   first-run checklist (unpair in JBL app, connect, allow capture)
         SettingsView.swift  General (volume keys, restore output, close behavior, auto-start) and Exclusions tabs
         StatusMenu.swift    MenuBarExtra content shown only in background mode
@@ -665,7 +665,7 @@ JBL Grips roll off below about 70 to 80 Hz (section 1a: 70 Hz at -6 dB, one smal
 
 ### 16.7 Delay nudge
 - Buttons -5, -1, +1 and +5 ms in Tuning. Arrow keys nudge by 1 ms, Shift with an arrow by 5 ms.
-- Results are clamped to the current slider range (section 4).
+- Results are clamped to -300...300 ms (section 4).
 
 ### 16.8 Now Playing
 - Removed in 0.2.2. MediaRemote returns no now playing information to third-party apps on current macOS, so the row never appeared. Only sending commands is still used (section 16.11).

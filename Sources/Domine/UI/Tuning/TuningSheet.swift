@@ -65,18 +65,13 @@ struct TuningSheet: View {
                         set: { actions.setDelayMs(Int($0.rounded())) }),
                     // Rounded in the setter rather than `step:`, which draws
                     // a tick for every millisecond.
-                    in: Double(state.delayRange.lowerBound)...Double(state.delayRange.upperBound))
+                    in: Double(TuningState.delayRange.lowerBound)...Double(TuningState.delayRange.upperBound))
                     .labelsHidden()
                     .accessibilityLabel("Delay offset")
                     .accessibilityValue(state.delayReadout)
                 endLabels("Delay left", "Delay right")
             }
             HStack(spacing: 8) {
-                Toggle("Extended range (±300 ms)", isOn: Binding(
-                    get: { state.isExtendedRange },
-                    set: { actions.setExtendedRange($0) }))
-                    .toggleStyle(.checkbox)
-                    .fixedSize()
                 Spacer(minLength: 8)
                 clickTestButton
                 autoCalibrateButton
@@ -366,8 +361,8 @@ struct TuningSheet: View {
     TuningSheet(state: SampleStates.tuningSurround)
 }
 
-#Preview("Extended, left") {
+#Preview("Left 120 ms") {
     TuningSheet(state: TuningState(
-        delayMs: -120, isExtendedRange: true, balance: -0.2,
+        delayMs: -120, balance: -0.2,
         reportedLatencies: SampleStates.tuning.reportedLatencies))
 }

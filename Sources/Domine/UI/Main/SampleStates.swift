@@ -119,7 +119,6 @@ enum SampleStates {
 
     static let tuning = TuningState(
         delayMs: 4,
-        isExtendedRange: false,
         balance: 0,
         reportedLatencies: "Reported latency: left 182 ms, right 178 ms",
         speakerVolumes: [

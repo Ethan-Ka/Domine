@@ -103,14 +103,11 @@ extension AppModel {
     }
 
     /// offset = arrival(right) - arrival(left). Saved through the same path
-    /// as the slider, widening to the extended range when needed.
+    /// as the slider (clamped to -300...300 ms).
     /// With `levels` (left plays the rising chirp, right the falling one),
     /// also sets the balance so the louder speaker is cut to the quieter one.
     func applyCalibration(offsetMs offset: Double, levels: ChirpLevels? = nil) {
-        let limit = TuningState.extendedRange.upperBound
-        let ms = min(max(CalibrationAnalyzer.delaySetting(forOffsetMs: offset), -limit), limit)
-        if !TuningState.normalRange.contains(ms) { setExtendedRange(true) }
-        setDelayMs(ms)
+        setDelayMs(CalibrationAnalyzer.delaySetting(forOffsetMs: offset))
         let balance = levels.flatMap { Self.calibratedBalance(levels: $0) }
         if let balance { setBalance(balance) }
         let what = balance == nil ? "Delay set." : "Delay and balance set."

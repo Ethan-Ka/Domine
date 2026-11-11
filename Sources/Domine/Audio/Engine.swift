@@ -426,6 +426,7 @@ final class Engine {
             let summary = present.map { "\($0.label) \($0.uid)" }.joined(separator: ", ")
             Self.log.info("\(self.kernelMonoFallback ? "Mono fallback" : "Running", privacy: .public): \(summary, privacy: .public), layout \(String(describing: layout), privacy: .public)")
             logSignalChain(present)
+            logTiming(present.map(\.uid))
             startDiagnostics(present)
             watchFormat()
             watchSpeakers()
@@ -1156,6 +1157,16 @@ final class Engine {
         let seconds = longest / 1000
         orbitDelayCache = (uids, delays, seconds)
         return seconds
+    }
+
+    /// One persisted line per stereo build: each speaker's reported latency
+    /// and the delay in effect. Every build is a fresh aggregate, so when the
+    /// speakers drift apart this shows whether a rebuild came first.
+    private func logTiming(_ uids: [String]) {
+        let speakers = uids.map { uid in
+            "\(uid) reports \(reportedLatencyMs(uid: uid).map { String(format: "%.1f ms", $0) } ?? "unknown")"
+        }.joined(separator: ", ")
+        Self.log.notice("Built: \(speakers, privacy: .public); delay \(self.delayMs, privacy: .public) ms")
     }
 
     /// Total output latency the device reports, in ms at its nominal rate.

@@ -352,7 +352,6 @@ final class AppModel {
         let surround = surroundRouteSpeakers
         tones.stop()
         routingRefusal = nil
-        applyInitialDelayIfUnset()
         var routeUIDs: Set<String>?
         if let surround {
             routeUIDs = Set(surround.map(\.uid))
@@ -484,8 +483,7 @@ final class AppModel {
     func updatePairSettings(_ change: (inout PairSettings) -> Void) {
         var s = pairSettings
         change(&s)
-        s = PairSettings(delayMs: s.delayMs, extendedRange: s.extendedRange,
-                         balance: s.balance, masterVolume: s.masterVolume, effects: s.effects,
+        s = PairSettings(delayMs: s.delayMs, balance: s.balance, masterVolume: s.masterVolume, effects: s.effects,
                          crossfeed: s.crossfeed, sameOnBoth: s.sameOnBoth,
                          leftVolumeOffsetDb: s.leftVolumeOffsetDb, rightVolumeOffsetDb: s.rightVolumeOffsetDb)
         guard s != pairSettings else { return }

@@ -3,7 +3,6 @@ struct TuningState: Equatable, Sendable {
     /// Signed offset in ms. Positive delays the right speaker, negative the
     /// left (SPEC section 4).
     var delayMs: Int
-    var isExtendedRange: Bool
     /// -1 (all left) ... 0 (centered) ... 1 (all right).
     var balance: Double
     /// e.g. "Reported latency: left 182 ms, right 176 ms".
@@ -58,18 +57,14 @@ struct TuningState: Equatable, Sendable {
         return "Now playing: \(demoSectionTitle ?? "Demo")"
     }
 
-    static let normalRange = -50...50
-    static let extendedRange = -300...300
-
-    var delayRange: ClosedRange<Int> {
-        isExtendedRange ? Self.extendedRange : Self.normalRange
-    }
+    /// One range for every pair: wide enough for mixed speaker models.
+    static let delayRange = -300...300
 
     var delayReadout: String { Self.delayReadout(delayMs) }
 
     /// The delay after nudging by `step` ms, kept inside the current range.
     func nudgedDelay(by step: Int) -> Int {
-        Self.nudge(delayMs, by: step, in: delayRange)
+        Self.nudge(delayMs, by: step, in: Self.delayRange)
     }
 
     static func nudge(_ ms: Int, by step: Int, in range: ClosedRange<Int>) -> Int {
