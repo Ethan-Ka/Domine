@@ -93,6 +93,16 @@ final class SurroundModelTests {
         #expect(next.trims == ["C": 0.2])
     }
 
+    @Test func linkedEffectsFollowTheNewFirstSpeaker() {
+        var s = SurroundSettings(uids: ["A", "B", "C"])
+        var fx = PairSettings.SideEffects()
+        fx.bassEnabled = true
+        s.effects = ["A": fx]
+        let next = s.carried(to: ["B", "C"])
+        #expect(next.resolvedEffects(for: "B") == fx)
+        #expect(next.effects["A"] == nil)
+    }
+
     // MARK: Migration (SPEC 13.7)
 
     @Test func quadSetMigratesOnceAtLaunch() throws {
