@@ -143,6 +143,17 @@ struct MappingTests {
         #expect(out.channel(3) == Self.left)
     }
 
+    @Test func monoDeviceBeforeTheOtherKeepsItsOwnChannel() {
+        // B is a one-channel device at 0, A starts at 1: B's "second" channel
+        // is A's first and must stay A's.
+        let kernel = Kernel()
+        let out = TestBufferList(channelsPerBuffer: [1, 2], frames: Self.frames)
+        kernel.process(.interleaved(left: Self.left, right: Self.right), out, a: 1, b: 0)
+        #expect(out.channel(0) == Self.right)
+        #expect(out.channel(1) == Self.left)
+        #expect(out.channel(2) == Self.left)
+    }
+
     @Test func unusedChannelsAreZeroed() {
         let kernel = Kernel()
         let out = TestBufferList(channelsPerBuffer: [3, 4], frames: Self.frames)
