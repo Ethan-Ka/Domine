@@ -144,16 +144,30 @@ final class SpeakerVolumeLink {
         return relink()
     }
 
-    /// Reads every attached speaker again and sets them all to the lowest.
+    /// Reads every attached speaker again and sets them all to the lowest
+    /// (a speaker held at full scale by its offset does not count).
     /// Returns the linked volume, or nil without hardware volume.
     @discardableResult
     func relink() -> Float? {
         let readings = speakers.compactMap { speaker in
             read(speaker).map { (speaker: speaker, hardware: $0, master: masterEquivalent(of: $0, speaker)) }
         }
-        guard let lowest = readings.map(\.master).min() else {
+        guard !readings.isEmpty else {
             volume = nil
             return nil
+        }
+        // A speaker at full scale may be short of its offset (`isAtMaximum`);
+        // its reading then only says the master is at least its level, so it
+        // must not pull the others down (SPEC 4a). Only speakers below full
+        // set the lowest; with all at full, the current master stands if it
+        // fits, else the lowest master that fits.
+        let full: Float = 1 - Self.exactTolerance
+        let lowest: Float
+        if let constrained = readings.filter({ $0.hardware < full }).map(\.master).min() {
+            lowest = constrained
+        } else {
+            let floor = readings.map(\.master).max() ?? 1
+            lowest = volume.map { min($0, 1) }.flatMap { $0 >= floor ? $0 : nil } ?? floor
         }
         let differs = readings.contains { abs($0.hardware - hardware(forMaster: lowest, $0.speaker).value) > Self.tolerance }
         if differs {
