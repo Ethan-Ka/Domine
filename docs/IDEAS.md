@@ -62,19 +62,16 @@ Everything on the approved list is built and tested:
 
 The page is one screen: logo art, Download and GitHub buttons, a headline and one paragraph. Colours come from the app icon, it uses the system font, and every text pair passes WCAG AA (body 14.8:1, grey text 6.3 to 6.8:1, button text 5.2:1). Done 2026-11-11: the headline and description cover Single mode ("One Bluetooth speaker or several, one sound system."), "up to 16" is gone, sync is described by the microphone calibration, and the social preview image matches. The Download button stays on the GitHub releases page on purpose: people trust a GitHub release more than a bare file link.
 
-Still open, most valuable first:
+The page stays minimal on purpose: one screen, logo, two buttons, a headline and one short paragraph. Ideas that fit that:
 
 | Idea | Why | Notes |
 | --- | --- | --- |
-| A real screenshot of the main window, light and dark | Nothing on the page shows what the app looks like | Stereo stage with two cards and the meters; swap with `<picture>` like the header art |
-| Say how to open an unsigned build | Releases are development-signed, not notarized, so macOS blocks the installer on first open and the page never says why | macOS 14: right-click, Open. macOS 15 and later: System Settings > Privacy & Security > Open Anyway. Notarizing (needs a Developer ID, $99 a year) removes the step |
-| Say any brand works | The page reads as if only matched speakers work | "Tested with JBL Grip and JBL Go 4" is specific and true |
-| Show the version and what's new | Visitors can't tell if it's maintained | "Version 0.4.0", linked to the release notes |
-| Requirements | Only "macOS 14.4 or later" is listed | Add "Apple silicon and Intel" (the build is universal) |
-| A short privacy note | Domine asks for audio capture, the microphone (calibration only) and optionally Accessibility and an admin password | True facts: audio never leaves the Mac; the only network request is the GitHub update check |
-| Three-question troubleshooting | The common problems have known fixes | Only one speaker shows up (unpair in the speaker's app); a speaker goes silent (a phone took it over); timing drifts (run Auto-calibrate) |
-| Uninstall line | People look for it before installing | Menu bar menu, then Uninstall Domine |
-| Secondary button border | The "View on GitHub" outline is 1.45:1 against the page, below 3:1 for UI edges | The label still identifies the button, but darken `--rule` on that border |
+| One line on opening an unsigned build | Releases are not notarized, so macOS blocks the installer on first open and the page never says why | macOS 14: right-click, Open. macOS 15 and later: System Settings > Privacy & Security > Open Anyway. Notarizing (needs a Developer ID, $99 a year) removes the line |
+| One screenshot of the main window, light and dark | Nothing shows what the app looks like | Replaces nothing; sits under the paragraph with `<picture>` like the header art |
+| Version next to the requirement | Shows the app is maintained | "Version 0.4.0, macOS 14.4 or later", linked to the release notes |
+| Secondary button border | The "View on GitHub" outline is 1.45:1 against the page, below 3:1 for UI edges | Darken `--rule` on that border only |
+
+For the README instead of the site: requirements (Apple silicon and Intel), a privacy note (audio never leaves the Mac; the only network request is the GitHub update check), three troubleshooting answers (one speaker missing, a phone took a speaker over, timing drifted), and how to uninstall.
 
 ## Planned: Headphones phase
 
