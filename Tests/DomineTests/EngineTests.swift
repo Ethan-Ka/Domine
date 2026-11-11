@@ -392,4 +392,29 @@ struct EngineTests {
         #expect(engine.reportedLatencyMs(uid: "usb") == 20)
         #expect(engine.reportedLatencyMs(uid: "missing") == nil)
     }
+
+    // MARK: - Default output listener
+
+    @Test func defaultOutputMovesWithoutRebuildKeepOneRateListener() async {
+        let engine = Engine(hal: hal, layoutAttempts: 3, layoutRetryDelay: .zero,
+                            diagnosticsInterval: .seconds(3600), formatCheckDelay: .seconds(3600))
+        let speakers = FakeHAL.Device(uid: "BuiltInSpeakerDevice", name: "MacBook Pro Speakers",
+                                      transportType: kAudioDeviceTransportTypeBuiltIn, sampleRate: 44_100)
+        hal.add(Self.gripA)
+        hal.add(Self.gripB)
+        hal.add(speakers)
+        hal.setDefault(uid: speakers.uid)
+        await engine.start(left: Self.gripA.uid, right: Self.gripB.uid)
+        #expect(engine.state == .running)
+        let listeners = hal.listenerCount
+        let aggregates = hal.ops.filter { $0 == .createAggregate }.count
+        for uid in [Self.gripA.uid, speakers.uid, Self.gripB.uid, speakers.uid] {
+            hal.setDefault(uid: uid) // every device here runs at the tap's 44.1 kHz
+            #expect(await engine.checkFormat() == false)
+            #expect(hal.listenerCount == listeners)
+        }
+        #expect(hal.ops.filter { $0 == .createAggregate }.count == aggregates)
+        engine.stop()
+        #expect(hal.listenerCount == 0)
+    }
 }

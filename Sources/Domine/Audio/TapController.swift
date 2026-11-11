@@ -29,6 +29,13 @@ struct TapController: Sendable {
         try EngineError.hal { () throws(HALError) in try hal.createProcessTap(including: processes) }
     }
 
+    /// Points a running per-app tap at a new process list without rebuilding it.
+    func updateApp(_ tap: ProcessTap, processes: [AudioObjectID]) throws(EngineError) {
+        try EngineError.hal { () throws(HALError) in
+            try hal.setProcessTapProcesses(tap.id, including: processes)
+        }
+    }
+
     func destroy(_ tap: ProcessTap) throws(HALError) {
         try hal.destroyProcessTap(tap.id)
     }

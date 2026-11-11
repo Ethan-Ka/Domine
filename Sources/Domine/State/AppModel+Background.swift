@@ -87,6 +87,7 @@ extension AppModel {
             preset: matched,
             isRouting: engine.state.isRouting,
             apps: statusMenuApps,
+            appVolumeLimitReached: appVolumeLimitReached,
             rooms: rooms,
             currentRoomID: currentRoomID)
     }

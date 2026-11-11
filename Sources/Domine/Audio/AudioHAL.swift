@@ -87,6 +87,9 @@ protocol AudioHAL: AnyObject, Sendable {
     /// (kAudioTapPropertyDescription). The tap keeps its ID and UID, so the
     /// aggregate built on it keeps playing.
     func setProcessTapExclusions(_ tap: AudioObjectID, excluding processes: [AudioObjectID]) throws(HALError)
+    /// Changes which processes a per-app tap (from `createProcessTap(including:)`)
+    /// mixes, in place (kAudioTapPropertyDescription). Keeps its ID and UID.
+    func setProcessTapProcesses(_ tap: AudioObjectID, including processes: [AudioObjectID]) throws(HALError)
     func destroyProcessTap(_ tap: AudioObjectID) throws(HALError)
     func tapFormat(of tap: AudioObjectID) throws(HALError) -> AudioStreamBasicDescription
 

@@ -22,7 +22,7 @@ struct StatusMenuAppRow: View {
                     .help("Play this app on its normal output")
             }
             HStack(spacing: 8) {
-                Slider(value: $app.volume, in: 0...1)
+                Slider(value: $app.volume, in: 0...AppTapRequest.maxGain)
                     .controlSize(.small)
                     .disabled(app.isExcluded)
                     .accessibilityLabel("\(app.name) volume")

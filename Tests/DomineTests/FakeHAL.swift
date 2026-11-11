@@ -62,6 +62,7 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
         case createAppTap(processes: [AudioObjectID])
         case destroyTap
         case setTapExclusions(excluding: [AudioObjectID])
+        case setAppTapProcesses(tap: String, processes: [AudioObjectID])
         case createAggregate
         case destroyAggregate
         case createIOProc
@@ -73,7 +74,7 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
 
     /// Calls that can be made to fail through `failures`.
     enum FailPoint: Hashable, CaseIterable {
-        case setSampleRate, ownProcess, createTap, setTapExclusions, tapFormat, createAggregate,
+        case setSampleRate, ownProcess, createTap, setTapExclusions, setAppTapProcesses, tapFormat, createAggregate,
              aggregateStreams, createIOProc, setStreamUsage, start
     }
 
@@ -657,6 +658,16 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
                 throw HALError(kAudioHardwareBadObjectError, "AudioObjectSetPropertyData", selector: kAudioTapPropertyDescription)
             }
             _ops.append(.setTapExclusions(excluding: processes))
+        }
+    }
+
+    func setProcessTapProcesses(_ tap: AudioObjectID, including processes: [AudioObjectID]) throws(HALError) {
+        try locked { () throws(HALError) in
+            try fail(.setAppTapProcesses, "AudioObjectSetPropertyData", selector: kAudioTapPropertyDescription)
+            guard let uid = taps[tap] else {
+                throw HALError(kAudioHardwareBadObjectError, "AudioObjectSetPropertyData", selector: kAudioTapPropertyDescription)
+            }
+            _ops.append(.setAppTapProcesses(tap: uid, processes: processes))
         }
     }
 
