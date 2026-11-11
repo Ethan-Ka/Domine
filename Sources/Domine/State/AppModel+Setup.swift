@@ -2,11 +2,26 @@ import CoreAudio
 
 /// Replaying the first-run checklist and its prompts from Settings > General.
 extension AppModel {
-    /// Output devices named "JBL Grip" in the catalog right now.
+    /// Output devices named "JBL Grip" in the catalog right now (the Grip
+    /// stereo-pairing check in the welcome checklist).
     var connectedGripCount: Int {
         var count = 0
         for device in catalog.outputs where device.name == DeviceCatalog.gripName { count += 1 }
         return count
+    }
+
+    /// Bluetooth speakers in the catalog right now, of any brand.
+    var connectedSpeakerCount: Int {
+        catalog.outputs.filter(\.isBluetooth).count
+    }
+
+    /// Speakers the current mode needs before it can play.
+    var speakersNeededForMode: Int {
+        switch routingMode {
+        case .single: 1
+        case .stereo: 2
+        case .surround: Self.surroundMinimumSpeakers
+        }
     }
 
     /// Reading `catalog.outputs` ties this to device list changes.
@@ -28,7 +43,8 @@ extension AppModel {
             isCheckingCapture: captureAccess.isProbing,
             accessibilityGranted: trusted,
             accessibilityLikelyStale: accessibilityLikelyStale && !trusted,
-            connectedGrips: connectedGripCount,
+            connectedSpeakers: connectedSpeakerCount,
+            speakersNeeded: speakersNeededForMode,
             loginItemNeedsApproval: loginItemNeedsApproval,
             virtualOutputInstalled: virtualOutputInstalled)
     }
@@ -48,6 +64,7 @@ extension AppModel {
             openPrivacySettings: { [weak self] in self?.openPrivacySettings() },
             grantAccessibility: { [weak self] in self?.grantAccessibility() },
             revealApp: { [weak self] in self?.revealAppInFinder() },
+            openBluetoothSpeakers: { [weak self] in self?.openBluetooth() },
             openBluetoothSettings: { [weak self] in self?.services.openURL(SystemServices.bluetoothSettingsURL) },
             openLoginItems: { [weak self] in self?.services.openLoginItemsSettings() },
             showInstallSteps: { [weak self] in self?.services.openURL(SystemServices.virtualOutputInstallURL) })

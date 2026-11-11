@@ -24,9 +24,9 @@ struct SetupSection: View {
             }
 
             LabeledContent("Speakers:") {
-                row(state.speakersText, ok: state.connectedGrips >= 2) {
-                    if state.connectedGrips < 2 {
-                        Button("Open Bluetooth Settings") { actions.openBluetoothSettings() }
+                row(state.speakersText, ok: state.hasEnoughSpeakers) {
+                    if !state.hasEnoughSpeakers {
+                        Button("Bluetooth Speakers\u{2026}") { actions.openBluetoothSpeakers() }
                     }
                 }
             }

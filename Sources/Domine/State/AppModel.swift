@@ -282,12 +282,15 @@ final class AppModel {
 
     // MARK: - Speakers
 
-    /// Picks the two JBL Grips when nothing is selected or restored.
+    /// Picks two Bluetooth speakers when nothing is selected or restored:
+    /// two JBL Grips if there are, else the first two of any brand.
     func chooseDefaultSpeakers() {
         guard leftUID == nil, rightUID == nil else { return }
-        let grips = catalog.outputs.filter { $0.name == DeviceCatalog.gripName }
-        guard grips.count >= 2 else { return }
-        setSpeakers(left: grips[0].uid, right: grips[1].uid)
+        let bluetooth = catalog.outputs.filter(\.isBluetooth)
+        let grips = bluetooth.filter { $0.name == DeviceCatalog.gripName }
+        let pick = grips.count >= 2 ? grips : bluetooth
+        guard pick.count >= 2 else { return }
+        setSpeakers(left: pick[0].uid, right: pick[1].uid)
         // First launch: the pair appearing counts as the speakers connecting.
         speakersWerePresent = false
     }

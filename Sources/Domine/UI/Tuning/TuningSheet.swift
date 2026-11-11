@@ -76,8 +76,8 @@ struct TuningSheet: View {
                     .padding(.top, 4)
             }
             HStack(spacing: 8) {
-                Spacer(minLength: 8)
                 clickTestButton
+                Spacer(minLength: 8)
                 undoCalibrationButton
                 autoCalibrateButton
             }

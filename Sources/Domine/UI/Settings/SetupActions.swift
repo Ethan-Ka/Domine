@@ -8,6 +8,8 @@ struct SetupActions {
     var grantAccessibility: @MainActor () -> Void = {}
     /// Show the running Domine.app in Finder, to drag into the list.
     var revealApp: @MainActor () -> Void = {}
+    /// Domine's own Bluetooth Speakers window.
+    var openBluetoothSpeakers: @MainActor () -> Void = {}
     var openBluetoothSettings: @MainActor () -> Void = {}
     var openLoginItems: @MainActor () -> Void = {}
     var showInstallSteps: @MainActor () -> Void = {}

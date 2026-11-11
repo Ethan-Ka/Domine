@@ -6,8 +6,13 @@ struct SetupState: Equatable, Sendable {
     /// Still not granted after a trip to System Settings: the entry there is
     /// likely for another build of Domine.
     var accessibilityLikelyStale = false
-    /// Output devices named "JBL Grip" that Core Audio lists now.
-    var connectedGrips = 0
+    /// Bluetooth speakers Core Audio lists now, of any brand.
+    var connectedSpeakers = 0
+    /// How many the current mode needs: 1 in Single, 2 in Stereo, the
+    /// surround minimum in Surround.
+    var speakersNeeded = 2
+
+    var hasEnoughSpeakers: Bool { connectedSpeakers >= speakersNeeded }
     /// The login item waits for approval in System Settings.
     var loginItemNeedsApproval = false
     /// The Domine virtual output driver is installed.
@@ -33,10 +38,10 @@ struct SetupState: Equatable, Sendable {
     }
 
     var speakersText: String {
-        switch connectedGrips {
-        case 0: "No JBL Grip connected"
-        case 1: "1 JBL Grip connected"
-        default: "\(connectedGrips) JBL Grips connected"
+        switch connectedSpeakers {
+        case 0: "No speakers connected"
+        case 1: "1 speaker connected"
+        default: "\(connectedSpeakers) speakers connected"
         }
     }
 }

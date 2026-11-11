@@ -220,6 +220,7 @@ struct SoundSheet: View {
                                 edit { fx in
                                     guard fx.eqBands.indices.contains(i) else { return }
                                     fx.eqBands[i].gainDb = Float(v.rounded())
+                                    fx.eqEnabled = true
                                 }
                             },
                             onDragging: { draggingBand = $0 ? i : (draggingBand == i ? nil : draggingBand) })
@@ -236,7 +237,8 @@ struct SoundSheet: View {
                     .help("\(band.type.label), \(label), \(SoundState.qLabel(band.q))")
                 }
             }
-            .disabled(!current.eqEnabled)
+            // Moving a band turns the EQ on, so it stays draggable while off.
+            .opacity(current.eqEnabled ? 1 : 0.5)
         }
         .sheet(isPresented: $showingBands) {
             BandEditorSheet(
@@ -262,17 +264,18 @@ struct SoundSheet: View {
             Picker("Night mode strength", selection: Binding(
                 get: { current.nightStrength },
                 set: { strength in
+                    // Picking a strength turns night mode on.
                     if state.surround != nil {
-                        edit { $0.nightStrength = strength }
+                        edit { $0.nightStrength = strength; $0.nightMode = true }
                     } else {
-                        actions.setEffects(state.effects.settingNightStrength(strength))
+                        actions.setEffects(state.effects.settingNightMode(true).settingNightStrength(strength))
                     }
                 })) {
                 ForEach(PairSettings.NightStrength.allCases, id: \.self) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented)
             .font(.callout)
-            .disabled(!current.nightMode)
+            .opacity(current.nightMode ? 1 : 0.5)
         }
     }
 
@@ -283,10 +286,10 @@ struct SoundSheet: View {
                 .toggleStyle(.checkbox)
             Slider(value: Binding(
                 get: { Double(current.bassAmount) },
-                set: { v in edit { $0.bassAmount = Float(v) } }), in: 0...1)
+                set: { v in edit { $0.bassAmount = Float(v); $0.bassEnabled = true } }), in: 0...1)
                 .labelsHidden()
                 .accessibilityLabel("Bass amount")
-                .disabled(!current.bassEnabled)
+                .opacity(current.bassEnabled ? 1 : 0.5)
         }
     }
 
@@ -299,11 +302,11 @@ struct SoundSheet: View {
                 Text("Amount").font(.callout)
                 Slider(value: Binding(
                     get: { Double(current.compressorAmount) },
-                    set: { v in edit { $0.compressorAmount = Float(v) } }), in: 0...1)
+                    set: { v in edit { $0.compressorAmount = Float(v); $0.compressorEnabled = true } }), in: 0...1)
                     .labelsHidden()
                     .accessibilityLabel("Compressor amount")
             }
-            .disabled(!current.compressorEnabled)
+            .opacity(current.compressorEnabled ? 1 : 0.5)
         }
     }
 }

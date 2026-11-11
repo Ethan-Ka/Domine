@@ -39,15 +39,33 @@ final class SetupTests {
         #expect(!model.welcomeState.isDone(.unpairJBL))
     }
 
-    @Test func speakersRowCountsGrips() {
+    @Test func speakersRowCountsBluetoothSpeakersOfAnyBrand() {
         model.start()
-        #expect(model.setupState.connectedGrips == 0)
-        #expect(model.setupState.speakersText == "No JBL Grip connected")
+        #expect(model.setupState.connectedSpeakers == 0)
+        #expect(model.setupState.speakersText == "No speakers connected")
         hal.add(AppModelTests.speakers)
         hal.add(AppModelTests.gripA)
-        #expect(model.setupState.speakersText == "1 JBL Grip connected")
-        hal.add(AppModelTests.gripB)
-        #expect(model.setupState.speakersText == "2 JBL Grips connected")
+        #expect(model.setupState.speakersText == "1 speaker connected")
+        #expect(!model.setupState.hasEnoughSpeakers)
+        hal.add(FakeHAL.Device(uid: "go4", name: "JBL Go 4"))
+        #expect(model.setupState.speakersText == "2 speakers connected")
+        #expect(model.setupState.hasEnoughSpeakers)
+    }
+
+    @Test func singleModeNeedsOneSpeaker() {
+        model.start()
+        hal.add(AppModelTests.gripA)
+        model.setRoutingMode(.single)
+        #expect(model.setupState.speakersNeeded == 1)
+        #expect(model.setupState.hasEnoughSpeakers)
+    }
+
+    @Test func defaultPairCanBeAnyBrand() {
+        hal.add(FakeHAL.Device(uid: "go4", name: "JBL Go 4"))
+        hal.add(FakeHAL.Device(uid: "flip", name: "Flip 6"))
+        model.start()
+        #expect(model.leftUID == "go4")
+        #expect(model.rightUID == "flip")
     }
 
     @Test func domineOutputRowNotInstalled() {
@@ -133,8 +151,8 @@ final class SetupTests {
 
     @Test func setupStateTexts() {
         var state = SetupState()
-        state.connectedGrips = 3
-        #expect(state.speakersText == "3 JBL Grips connected")
+        state.connectedSpeakers = 3
+        #expect(state.speakersText == "3 speakers connected")
         state.isCheckingCapture = true
         #expect(state.captureText == "Checking…")
     }

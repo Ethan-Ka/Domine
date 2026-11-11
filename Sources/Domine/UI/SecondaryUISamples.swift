@@ -23,13 +23,13 @@ extension SetupState {
     static let sample = SetupState(
         captureStatus: .notConfirmed,
         accessibilityGranted: false,
-        connectedGrips: 1,
+        connectedSpeakers: 1,
         loginItemNeedsApproval: true)
 
     static let sampleDone = SetupState(
         captureStatus: .working,
         accessibilityGranted: true,
-        connectedGrips: 2,
+        connectedSpeakers: 2,
         loginItemNeedsApproval: false)
 }
 

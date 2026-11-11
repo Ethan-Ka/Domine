@@ -611,12 +611,10 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
 
     const uint32_t n = s->rcount;
     uint8_t present[NSPK] = { 0 };
-    uint32_t nPresent = 0;
     OutCh oc[NSPK][2];
     for (uint32_t k = 0; k < n; k++) {
         const uint32_t off = k < offsetCount ? offsets[k] : DOMINE_NO_DEVICE;
         present[k] = off != DOMINE_NO_DEVICE;
-        nPresent += present[k];
         const int a = map_out(out, off, &oc[k][0]);
         const int b = present[k] && off != UINT32_MAX - 1 && map_out(out, off + 1, &oc[k][1]);
         if (!a) oc[k][0].data = NULL;

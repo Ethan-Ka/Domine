@@ -18,7 +18,8 @@ struct StageCardSizeTests {
     @Test func compactForCrowdedOrSmallStages() {
         #expect(StageLayout(size: Self.sizes[2], mode: .surround, speakerCount: 4).isCompact == false)
         #expect(StageLayout(size: Self.sizes[2], mode: .surround, speakerCount: 5).isCompact)
-        #expect(StageLayout(size: Self.sizes[0], mode: .surround, speakerCount: 2).isCompact)
+        #expect(StageLayout(size: CGSize(width: 480, height: 200), mode: .surround, speakerCount: 2).isCompact)
+        #expect(StageLayout(size: Self.sizes[0], mode: .surround, speakerCount: 2).isCompact == false)
         #expect(StageLayout(size: Self.sizes[0], mode: .single, speakerCount: 1).cardSize == StageLayout.cardSize)
     }
 
