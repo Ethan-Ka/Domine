@@ -78,6 +78,12 @@ struct SurroundSettings: Codable, Equatable, Sendable {
         copy.trims = trims.filter { kept.contains($0.key) }
         copy.offsetsMs = offsetsMs.filter { kept.contains($0.key) }
         copy.effects = effects.filter { kept.contains($0.key) }
+        // While linked, the shared effects live under the first speaker; if
+        // that speaker changes, they move to the new first one.
+        if linkEffects, let oldFirst = speakers.first?.uid, let newFirst = copy.speakers.first?.uid,
+           oldFirst != newFirst {
+            copy.effects[newFirst] = effects[oldFirst]
+        }
         copy.volumeOffsetsDb = volumeOffsetsDb.filter { kept.contains($0.key) }
         // A different set needs its timing measured again.
         if kept != Set(uids) {
