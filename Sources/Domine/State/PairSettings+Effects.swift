@@ -139,6 +139,8 @@ extension PairSettings {
             return e
         }
         var swapped: EffectsSettings {
+            // Linked: `left` drives both speakers, so it must stay `left`.
+            guard !linkSpeakers else { return self }
             var copy = self
             copy.left = right
             copy.right = left

@@ -52,9 +52,17 @@ struct EffectsSettingsTests {
 
     @Test func swappedPairSwapsEffects() {
         var s = PairSettings()
+        s.effects.linkSpeakers = false
         s.effects.left.bassEnabled = true
         #expect(s.swapped.effects.right.bassEnabled)
         #expect(!s.swapped.effects.left.bassEnabled)
+    }
+
+    @Test func swappedLinkedPairKeepsTheDrivingSide() {
+        var s = PairSettings()
+        s.effects.left.bassEnabled = true
+        #expect(s.swapped.effects.left.bassEnabled)
+        #expect(s.swapped.effects.effectiveRight.bassEnabled)
     }
 
     @Test func linkedRightFollowsLeft() {
