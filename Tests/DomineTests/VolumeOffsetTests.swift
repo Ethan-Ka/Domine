@@ -214,6 +214,17 @@ final class VolumeOffsetTests {
         #expect(!link.isAtMaximum(uid: Self.gripB.uid))
     }
 
+    @Test func relinkDoesNotCutTheOthersForASpeakerHeldAtFullScale() {
+        // B at full is short of its +12 dB (0.9 + 0.125 > 1); A must stay at 0.9.
+        let link = makeLink(a: 0.9, b: 1, offset: 12)
+        #expect(close(link.volume, 0.9))
+        #expect(close(volume(Self.gripA.uid), 0.9))
+        #expect(volume(Self.gripB.uid) == 1)
+        #expect(link.isAtMaximum(uid: Self.gripB.uid))
+        #expect(close(link.relink(), 0.9))
+        #expect(hal.volumeWrites.isEmpty)
+    }
+
     @Test func offsetPastTheDecibelCurveTopClamps() {
         let link = makeLink(offset: 12, decibels: -60...0)
         link.set(0.95)
