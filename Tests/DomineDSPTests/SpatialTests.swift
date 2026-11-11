@@ -120,31 +120,4 @@ struct SpatialTests {
         let (rl, rr) = Self.render(sp, l, r)
         #expect(rl == l && rr == r)
     }
-
-    @Test func quadHookAmountZeroEqualsMirror() {
-        let q = domine_quad_create(48000, 256)!
-        defer { domine_quad_destroy(q) }
-        domine_quad_set_rear_mode(q, Int32(DOMINE_REAR_SPATIAL))
-        domine_quad_set_rear_trim(q, 0.5)
-        let out = QuadKernelTests.run(q, offsets: QuadKernelTests.full)
-        #expect(out.channel(0) == QuadKernelTests.left)
-        #expect(out.channel(4) == QuadKernelTests.left.map { $0 * 0.5 })
-        #expect(out.channel(6) == QuadKernelTests.right.map { $0 * 0.5 })
-    }
-
-    @Test func quadHookSideInputReachesRears() {
-        let q = domine_quad_create(48000, 4800)!
-        defer { domine_quad_destroy(q) }
-        domine_quad_set_rear_mode(q, Int32(DOMINE_REAR_SPATIAL))
-        var p = DomineSpatialParams(amount: 1, roomMs: 5, highCutHz: 5000)
-        domine_quad_set_spatial(q, &p)
-        let s = Self.noise(4800, scale: 0.5)
-        var peak: Float = 0
-        for _ in 0..<3 {
-            let out = QuadKernelTests.run(q, offsets: QuadKernelTests.full, left: s, right: s.map { -$0 }, buffers: [8])
-            peak = max(peak, out.channel(4).map { abs($0) }.max() ?? 0)
-            #expect(out.channel(0) == s)
-        }
-        #expect(peak > 0.1)
-    }
 }

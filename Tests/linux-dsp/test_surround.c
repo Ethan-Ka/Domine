@@ -1,6 +1,5 @@
 // Tests for the N-speaker surround kernel (DomineSurround.h).
 #include "DomineSurround.h"
-#include "DomineQuad.h"
 #include "check.h"
 #include <stddef.h>
 #include <stdint.h>
@@ -293,34 +292,11 @@ static void test_one_speaker_bit_exact(void) {
     run(s, L, R, NF, &out, off);
     int ok = 1;
     for (uint32_t f = 0; f < NF; f++) {
-        const float mono = 0.5f * (L[f] + R[f]); // the quad kernel's formula
+        const float mono = 0.5f * (L[f] + R[f]); // mono sum
         ok &= *buf_at(&out, 0, f) == mono && *buf_at(&out, 1, f) == mono;
     }
     CHECK(ok);
     buf_free(&out);
-    domine_surround_destroy(s);
-}
-
-static void test_quad_layout_matches_quad_mirror(void) {
-    const float az[4] = { -30, 30, -110, 110 };
-    DomineSurround *s = make(48000, 4, az);
-    const DomineSpatialParams sp = { 0.0f, 15.0f, 5000.0f };
-    domine_surround_set_spatial(s, &sp);
-    domine_surround_set_surround_level(s, 1.0f);
-    DomineQuad *q = domine_quad_create(48000, 512);
-    const uint32_t off[4] = { 0, 2, 4, 6 };
-    for (int call = 0; call < 3; call++) {
-        fill_program();
-        Buf a = out_new(8, NF), b = out_new(8, NF);
-        run(s, L, R, NF, &a, off);
-        Buf in = stereo_in(L, R, NF);
-        domine_quad_process(q, in.list, b.list, NF, off);
-        buf_free(&in);
-        CHECK(memcmp(a.data[0], b.data[0], NF * 8 * sizeof(float)) == 0);
-        CHECK(*buf_at(&a, 4, 5) == L[5] && *buf_at(&a, 7, 5) == R[5]);
-        buf_free(&a); buf_free(&b);
-    }
-    domine_quad_destroy(q);
     domine_surround_destroy(s);
 }
 
@@ -974,7 +950,6 @@ int main(void) {
     test_one_speaker_bit_exact();
     test_mono();
     test_orbit_phase();
-    test_quad_layout_matches_quad_mirror();
     test_absent_speaker_redistribution();
     test_gain_ramp();
     test_delay();

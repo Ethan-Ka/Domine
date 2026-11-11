@@ -133,45 +133,4 @@ struct TapMixTests {
         domine_kernel_set_tap_gain(k.raw, 8, 0)
         domine_kernel_set_tap_gain(k.raw, 99, 0)
     }
-
-    @Test func quadSingleTapBitExactAndTwoTapsSum() {
-        let offsets: [UInt32] = [0, 2, 4, 6]
-        func run(_ q: OpaquePointer, _ input: TestBufferList) -> TestBufferList {
-            let out = TestBufferList(channelsPerBuffer: [8], frames: Self.n)
-            offsets.withUnsafeBufferPointer { domine_quad_process(q, input.pointer, out.pointer, UInt32(Self.n), $0.baseAddress!) }
-            return out
-        }
-        let plain = domine_quad_create(48000, 256)!
-        let tapped = domine_quad_create(48000, 256)!
-        defer { domine_quad_destroy(plain); domine_quad_destroy(tapped) }
-        Self.layout(1, first: [0], channels: [2], interleaved: [1]) { domine_quad_set_tap_layout(tapped, $0, $1, $2, $3) }
-        let a = run(plain, .interleaved(left: Self.l1, right: Self.r1))
-        let b = run(tapped, .interleaved(left: Self.l1, right: Self.r1))
-        for c in 0..<8 { #expect(a.channel(c).map(\.bitPattern) == b.channel(c).map(\.bitPattern)) }
-
-        let q = domine_quad_create(48000, 256)!
-        defer { domine_quad_destroy(q) }
-        Self.layout(2, first: [0, 1], channels: [2, 2], interleaved: [1, 1]) { domine_quad_set_tap_layout(q, $0, $1, $2, $3) }
-        domine_quad_set_tap_gain(q, 0, 0.5)
-        domine_quad_set_tap_gain(q, 1, 0.25)
-        let out = run(q, Self.twoTaps())
-        #expect(out.channel(0) == (0..<Self.n).map { Self.l1[$0] * 0.5 + Self.l2[$0] * 0.25 })
-        #expect(out.channel(2) == (0..<Self.n).map { Self.r1[$0] * 0.5 + Self.r2[$0] * 0.25 })
-        #expect(out.channel(4) == out.channel(0))
-
-        // Ramp: gain to 0 reaches 0 after 960 frames; also short/missing taps are safe.
-        domine_quad_set_tap_gain(q, 0, 0)
-        domine_quad_set_tap_gain(q, 1, 0)
-        let ones = [Float](repeating: 1, count: 1200)
-        let list = TestBufferList(channelsPerBuffer: [2, 2], frames: 1200, fill: 1)
-        let ramp = TestBufferList(channelsPerBuffer: [8], frames: 1200)
-        offsets.withUnsafeBufferPointer { domine_quad_process(q, list.pointer, ramp.pointer, 1200, $0.baseAddress!) }
-        #expect(ramp.channel(0)[1199] == 0)
-        #expect(ramp.channel(0)[0] > 0.74)
-        _ = ones
-        domine_quad_set_tap_gain(q, 99, 0)
-        let none = TestBufferList(channelsPerBuffer: [8], frames: Self.n)
-        offsets.withUnsafeBufferPointer { domine_quad_process(q, nil, none.pointer, UInt32(Self.n), $0.baseAddress!) }
-        #expect(none.channel(0) == [Float](repeating: 0, count: Self.n))
-    }
 }
