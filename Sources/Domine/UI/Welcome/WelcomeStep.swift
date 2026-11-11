@@ -7,20 +7,20 @@ struct WelcomeStep: Identifiable, Equatable, Sendable {
 
         var title: String {
             switch self {
-            case .unpairJBL: "Turn off JBL stereo pairing"
+            case .unpairJBL: "Turn off the speakers' own stereo pairing (for JBL: the JBL Portable app)"
             case .connectSpeakers: "Connect both speakers"
-            case .allowCapture: "Allow audio capture"
+            case .allowCapture: "Let Domine capture your Mac's audio"
             }
         }
 
         var detail: String {
             switch self {
             case .unpairJBL:
-                "Ungroup the two Grips in the JBL Portable app."
+                "Ungroup the two speakers so each one plays on its own."
             case .connectSpeakers:
                 "Disconnect them from your phone first."
             case .allowCapture:
-                "Without it, both speakers stay silent."
+                "Domine needs this to send sound to your speakers."
             }
         }
 
