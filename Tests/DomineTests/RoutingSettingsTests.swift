@@ -141,6 +141,39 @@ final class RoutingSettingsTests {
         #expect(model.engine.state == .idle)
     }
 
+    @Test func speakerConnectingAfterAModeSwitchAutoStarts() async {
+        hal.add(Self.speakers)
+        hal.add(Self.gripA)
+        model.start()
+        model.setSpeakers(left: Self.gripA.uid, right: Self.gripB.uid)
+        model.setRoutingMode(.single)
+        model.syncWithCatalog()
+        model.generalSettings.startWhenBothConnect = true
+        model.setRoutingMode(.stereo)
+        #expect(model.autoStartTask == nil)
+        connect(Self.gripB)
+        await waitForAutoStart()
+        #expect(model.engine.state == .running)
+    }
+
+    @Test func modeSwitchUpdatesWhichSpeakersReconnect() async {
+        let connector = RecordingConnector()
+        let model = AppModel(hal: hal, defaults: defaults, services: system.services,
+                             bluetooth: connector, reconnectSleep: { _ in })
+        let dropped = "AA-BB-CC-DD-EE-FF:output"
+        hal.add(Self.speakers)
+        hal.add(Self.gripA)
+        model.start()
+        model.setRoutingMode(.single)
+        model.setSpeakers(left: Self.gripA.uid, right: dropped)
+        model.syncWithCatalog()
+        await model.reconnector.waitForRetries()
+        #expect(connector.calls.isEmpty)  // Single does not use the right speaker
+        model.setRoutingMode(.stereo)
+        await model.reconnector.waitForRetries()
+        #expect(!connector.calls.isEmpty)
+    }
+
     // MARK: Closing the window
 
     @Test func closingWithStopPlayingStopsRouting() async {
@@ -211,5 +244,20 @@ final class RoutingSettingsTests {
         system.trusted = true
         model.refreshSystemStatus()
         #expect(model.mainWindowState.statusLine == "Playing")
+    }
+}
+
+private final class RecordingConnector: BluetoothConnecting, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _calls: [String] = []
+    var calls: [String] { lock.lock(); defer { lock.unlock() }; return _calls }
+
+    func connect(_ address: BluetoothAddress) async -> Bool {
+        record(address.string)
+        return false
+    }
+
+    private func record(_ s: String) {
+        lock.lock(); _calls.append(s); lock.unlock()
     }
 }

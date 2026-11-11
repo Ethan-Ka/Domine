@@ -313,10 +313,16 @@ final class AppModel {
         if wasActive { stopRouting() }
         routingMode = mode
         store.routingMode = mode
+        routingRefusal = nil
         if mode == .surround { seedSurroundSetIfEmpty() }
         if pairSettings.masterVolume > maxMasterVolume { updatePairSettings { $0.masterVolume = maxMasterVolume } }
+        // A mode switch is not a speaker connecting, but the next one that
+        // connects must count against the new mode's speakers.
+        speakersWerePresent = allSpeakersPresent
+        speakersPresenceKey = assignedSpeakersKey
         refreshCurrentRoom()
         syncVolumeLink()
+        syncReconnector()
         applyPairSettingsToEngine()
         if wasActive { Task { await startRouting() } }
     }
@@ -394,10 +400,12 @@ final class AppModel {
     static let noOtherOutputMessage = "Connect another output to start"
 
     /// The only refusal is `noOtherOutputMessage`; it goes away as soon as
-    /// an output outside the pair appears.
+    /// an output outside the speakers a start would route to appears.
     private func clearRefusalIfResolved() {
-        guard routingRefusal != nil,
-              catalog.outputs.contains(where: { $0.uid != leftUID && $0.uid != rightUID }) else { return }
+        guard routingRefusal != nil else { return }
+        let routed: [String?] = surroundRouteSpeakers?.map(\.uid)
+            ?? (routingMode == .single ? [leftUID] : [leftUID, rightUID])
+        guard catalog.outputs.contains(where: { !routed.contains($0.uid) }) else { return }
         routingRefusal = nil
     }
 

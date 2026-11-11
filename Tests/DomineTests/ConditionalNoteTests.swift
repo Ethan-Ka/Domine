@@ -186,6 +186,29 @@ final class ConditionalNoteTests {
         #expect(model.mainWindowState.statusLine == AppModel.noOtherOutputMessage)
     }
 
+    @Test func singleRefusalClearsWhenTheUnusedPairSpeakerConnects() async {
+        hal.add(Self.gripA)
+        hal.setDefault(uid: Self.gripA.uid)
+        model.start()
+        model.setSpeakers(left: Self.gripA.uid, right: Self.gripB.uid)
+        model.setRoutingMode(.single)
+        await model.startRouting()
+        #expect(model.mainWindowState.statusLine == AppModel.noOtherOutputMessage)
+        connect(Self.gripB)
+        #expect(model.mainWindowState.statusLine != AppModel.noOtherOutputMessage)
+    }
+
+    @Test func modeSwitchClearsTheRefusal() async {
+        hal.add(Self.gripA)
+        hal.add(Self.gripB)
+        hal.setDefault(uid: Self.gripA.uid)
+        model.start()
+        await model.startRouting()
+        #expect(model.mainWindowState.statusLine == AppModel.noOtherOutputMessage)
+        model.setRoutingMode(.single)
+        #expect(model.mainWindowState.statusLine != AppModel.noOtherOutputMessage)
+    }
+
     // MARK: Captions
 
     @Test func restoreCaptionOnlyWithAKnownPreviousOutput() {
