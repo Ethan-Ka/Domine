@@ -34,4 +34,7 @@ struct GeneralSettingsState: Equatable, Sendable {
     var reconnectDroppedSpeakers = true
     var keepSpeakersAwake = true
     var pauseOnExit = true
+    var meterStyle: MeterStyle = .segments
+    var meterPeakHold = true
+    var showMeters = true
 }

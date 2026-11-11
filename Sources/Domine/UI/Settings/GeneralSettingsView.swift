@@ -67,6 +67,10 @@ struct GeneralSettingsView: View {
 
             Divider()
 
+            DisplaySettingsSection(state: $state)
+
+            Divider()
+
             SetupSection(state: setup, actions: setupActions)
         }
         .formStyle(.columns)
