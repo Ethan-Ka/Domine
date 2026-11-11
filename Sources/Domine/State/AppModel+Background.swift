@@ -78,8 +78,9 @@ extension AppModel {
         return StatusMenuState(
             statusText: statusLine,
             isOn: engine.state.isActive,
-            left: statusMenuSpeaker(.frontLeft),
-            right: statusMenuSpeaker(.frontRight),
+            mode: routingMode,
+            isSurroundAvailable: isSurroundAvailable,
+            speakers: statusMenuSpeakers,
             masterVolume: Double(pairSettings.masterVolume),
             maxVolume: Double(maxMasterVolume),
             isMuted: isMuted,
@@ -93,6 +94,9 @@ extension AppModel {
     /// Applies an edit made through the menu's switch or volume slider.
     func applyStatusMenuEdit(_ edited: StatusMenuState) {
         let current = statusMenuState
+        if edited.mode != current.mode {
+            setRoutingMode(edited.mode)
+        }
         if edited.isOn != current.isOn {
             setRouting(edited.isOn)
         }
@@ -115,9 +119,13 @@ extension AppModel {
     var statusMenuActions: StatusMenuActions {
         StatusMenuActions(
             openMainWindow: { [weak self] in self?.showMainWindow() },
-            identifySpeaker: { [weak self] position in
-                guard let self, let uid = self.uid(at: position) else { return }
-                self.playAssignTone(uid: uid)
+            identifySpeaker: { [weak self] uid in
+                guard let self else { return }
+                if self.routingMode == .surround {
+                    self.playTestTone(surroundUID: uid)
+                } else {
+                    self.playAssignTone(uid: uid)
+                }
             },
             swapSides: { [weak self] in self?.swapSides() },
             autoCalibrate: { [weak self] in self?.autoCalibrate() },
@@ -137,12 +145,57 @@ extension AppModel {
             quit: { [weak self] in self?.quit() })
     }
 
-    private func statusMenuSpeaker(_ position: SpeakerPosition) -> StatusMenuSpeaker {
-        let card = card(for: position)
-        return StatusMenuSpeaker(
-            position: position.title,
-            deviceName: card.connection == .unassigned ? card.statusText : card.deviceName ?? "",
-            uidSuffix: card.uidSuffix ?? "",
-            isConnected: card.connection == .connected)
+    /// One row per card of the current mode, in the stage's order.
+    var statusMenuSpeakers: [StatusMenuSpeaker] {
+        let cards = routingMode == .surround
+            ? surroundCards
+            : SpeakerPosition.positions(in: routingMode).map { card(for: $0) }
+        return cards.map { card in
+            let uid = card.surround?.uid ?? uid(at: card.position)
+            return StatusMenuSpeaker(
+                position: card.title,
+                uid: uid,
+                deviceName: card.connection == .unassigned ? card.statusText : card.deviceName ?? "",
+                uidSuffix: card.uidSuffix ?? "",
+                connection: Self.statusMenuConnection(card),
+                batteryPercent: card.batteryPercent,
+                isPlayingTone: uid.map(isPlayingIdentifyTone(uid:)) ?? false)
+        }
+    }
+
+    nonisolated static func statusMenuConnection(_ card: SpeakerCardState) -> StatusMenuConnection {
+        switch card.connection {
+        case .connected: .connected
+        case .disconnected: card.isReconnecting ? .connecting : .notConnected
+        case .unassigned, .placeholder: .unassigned
+        }
+    }
+
+    /// The identification or test tone is sounding on this device, either
+    /// straight on the device or through the engine.
+    func isPlayingIdentifyTone(uid: String) -> Bool {
+        if tones.playingUID == uid { return true }
+        if routingMode == .surround { return surroundTestToneUID == uid }
+        guard engine.state.isRouting else { return false }
+        switch engine.testTone {
+        case .off: return false
+        case .left: return uid == leftUID
+        case .right: return uid == rightUID
+        }
+    }
+
+    // MARK: - Menu bar item
+
+    /// The icon's badge and text, per Settings > General > Menu bar shows.
+    var menuBarLabel: MenuBarLabelState {
+        var showsWarning = false
+        if case .degraded = engine.state { showsWarning = true }
+        let text: String?
+        switch menuBarShows {
+        case .iconOnly: text = nil
+        case .iconAndVolume: text = isMuted ? "Muted" : VolumeText.label(Double(pairSettings.masterVolume))
+        case .iconAndMode: text = routingMode.title
+        }
+        return MenuBarLabelState(showsWarning: showsWarning, text: text)
     }
 }

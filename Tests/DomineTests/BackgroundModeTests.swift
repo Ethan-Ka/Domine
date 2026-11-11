@@ -212,7 +212,7 @@ final class BackgroundModeTests {
         let before = model.engine.swapSides
         model.statusMenuActions.swapSides()
         #expect(model.engine.swapSides != before)
-        model.statusMenuActions.identifySpeaker(.frontLeft)
+        model.statusMenuActions.identifySpeaker(Self.gripA.uid)
     }
 
     // MARK: Menu content
@@ -224,12 +224,14 @@ final class BackgroundModeTests {
         #expect(state.statusText == "Playing")
         #expect(state.statusText == model.statusLine)
         #expect(state.isOn)
-        #expect(state.left == StatusMenuSpeaker(
-            position: "Front Left", deviceName: "JBL Grip",
-            uidSuffix: OutputDevice.suffix(forUID: Self.gripA.uid), isConnected: true))
-        #expect(state.right == StatusMenuSpeaker(
-            position: "Front Right", deviceName: "JBL Grip",
-            uidSuffix: OutputDevice.suffix(forUID: Self.gripB.uid), isConnected: true))
+        #expect(state.speakers == [
+            StatusMenuSpeaker(
+                position: "Front Left", uid: Self.gripA.uid, deviceName: "JBL Grip",
+                uidSuffix: OutputDevice.suffix(forUID: Self.gripA.uid), connection: .connected),
+            StatusMenuSpeaker(
+                position: "Front Right", uid: Self.gripB.uid, deviceName: "JBL Grip",
+                uidSuffix: OutputDevice.suffix(forUID: Self.gripB.uid), connection: .connected),
+        ])
         #expect(state.masterVolume == Double(model.pairSettings.masterVolume))
     }
 
@@ -239,18 +241,18 @@ final class BackgroundModeTests {
         model.syncWithCatalog()
         let state = model.statusMenuState
         #expect(!state.isOn)
-        #expect(state.left.isConnected == false)
-        #expect(state.left.deviceName == "JBL Grip")
-        #expect(state.left.uidSuffix == OutputDevice.suffix(forUID: Self.gripA.uid))
-        #expect(state.right.isConnected)
+        #expect(state.speakers[0].connection == .notConnected)
+        #expect(state.speakers[0].deviceName == "JBL Grip")
+        #expect(state.speakers[0].uidSuffix == OutputDevice.suffix(forUID: Self.gripA.uid))
+        #expect(state.speakers[1].isConnected)
     }
 
     @Test func menuShowsUnchosenSpeakers() {
         model.start()
         let state = model.statusMenuState
         #expect(state.statusText == "Choose two speakers")
-        #expect(state.left == StatusMenuSpeaker(
-            position: "Front Left", deviceName: "Choose a speaker", uidSuffix: "", isConnected: false))
+        #expect(state.speakers[0] == StatusMenuSpeaker(
+            position: "Front Left", deviceName: "Choose a speaker", uidSuffix: "", connection: .unassigned))
     }
 
     @Test func menuSwitchAndSliderDriveTheModel() async {

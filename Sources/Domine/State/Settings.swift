@@ -14,7 +14,7 @@ final class SettingsStore {
         case keepSpeakersAwake, pauseOnExit
         case previousOutputUID, outputNeedsRestore, excludedAppsPlayThroughUID, exclusions, appVolumes
         case hasCompletedWelcome, audioCaptureWorking, audioCaptureSignature
-        case rooms, currentRoomID, rememberedSpeakers
+        case rooms, currentRoomID, rememberedSpeakers, menuBarShows
 
         var name: String { SettingsStore.keyPrefix + rawValue }
     }
@@ -159,6 +159,12 @@ final class SettingsStore {
     func setQuadSettings(_ settings: QuadSettings, uids: [String]) {
         guard let data = try? JSONEncoder().encode(settings) else { return }
         defaults.set(data, forKey: QuadSettings.storageKey(uids: uids))
+    }
+
+    /// What the menu bar item shows beside its icon. Icon only by default.
+    var menuBarShows: MenuBarContent {
+        get { string(.menuBarShows).flatMap(MenuBarContent.init(rawValue:)) ?? .iconOnly }
+        set { set(newValue.rawValue, .menuBarShows) }
     }
 
     /// SPEC section 4b. Off by default.

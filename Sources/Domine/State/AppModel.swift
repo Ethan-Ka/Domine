@@ -135,6 +135,8 @@ final class AppModel {
 
     /// Set by the mute key (AppModel+VolumeKeys). Not saved.
     var isMuted = false
+    /// Settings > General > Menu bar shows. Saved on change.
+    var menuBarShows: MenuBarContent = .iconOnly { didSet { store.menuBarShows = menuBarShows } }
     /// The volume key tap and its HUD. Tests replace both.
     @ObservationIgnored var volumeKeyTap: any VolumeKeyTapping = VolumeKeyTap()
     @ObservationIgnored var showVolumeHUD: @MainActor (_ volume: Double, _ isMuted: Bool) -> Void = { volume, muted in
@@ -206,6 +208,7 @@ final class AppModel {
         rearLeftUID = store.lastRearLeftUID
         rearRightUID = store.lastRearRightUID
         routingMode = store.routingMode
+        menuBarShows = store.menuBarShows
         rooms = store.rooms
         store.migrateQuadSets(rooms: rooms)
         surroundSettings = Self.loadSurroundSettings(store: store)

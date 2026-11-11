@@ -65,6 +65,8 @@ struct GeneralSettingsView: View {
                 EmptyView()
             }
 
+            MenuBarSettingsSection()
+
             Divider()
 
             SetupSection(state: setup, actions: setupActions)

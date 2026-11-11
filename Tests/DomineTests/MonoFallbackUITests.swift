@@ -87,7 +87,7 @@ final class MonoFallbackUITests {
         let right = model.mainWindowState.speaker(at: .frontRight)
         #expect(right.connection == .disconnected)
         #expect(right.statusText == "Not connected")
-        #expect(model.statusMenuState.right.isConnected == false)
+        #expect(model.statusMenuState.speakers[1].isConnected == false)
         #expect(model.statusMenuState.statusText == "Mono fallback")
     }
 
