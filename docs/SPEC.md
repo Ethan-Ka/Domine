@@ -701,3 +701,47 @@ JBL Grips roll off below about 70 to 80 Hz (section 1a: 70 Hz at -6 dB, one smal
 - Other Paired Speakers: paired audio devices not in My Speakers, in a collapsed group.
 - Nearby: Search runs an IOBluetooth inquiry for about 10 s and lists unpaired audio devices. Pair pairs, then connects.
 - Only audio-class devices are shown. Nothing is ever opened for input.
+
+## 17. Headphones
+
+A fourth routing mode, "Headphones", next to Single, Stereo and Surround. It plays the full stereo mix on one or more headphones at once, each with its own levels, effects and delay. Wired, USB, built-in headphone jack and Bluetooth headphones all count. Speakers and headphones are not mixed in one setup (later phase).
+
+### 17.1 What a headphone is
+- `OutputDevice.kind`: `.headphones`, `.speaker` or `.other`.
+  - Headphones: the built-in output while its data source is headphones (`kAudioDevicePropertyDataSource` = 'hdpn'); a Bluetooth device whose class of device is audio with minor class headphones (0x06) or wearable headset (0x01); or a name containing "AirPods", "Beats", "Headphones", "Buds" or "Earbuds" (case-insensitive).
+  - Speaker: any other Bluetooth audio output.
+  - Other: everything else (displays, AirPlay, aggregates, Domine's own devices).
+- The user can override the kind per UID (stored), from the context menu of a card or a row: "Treat as Headphones" / "Treat as Speaker".
+- Kind only sorts and filters lists (headphones first in Headphones mode). Any output can be added to a headphone set.
+- Never open a Bluetooth headphone for input (CLAUDE.md). Domine only ever uses output streams, so a headset stays in its high-quality output profile.
+
+### 17.2 Kernel (`Sources/DomineDSP/headphones.c`, `include/DomineHeadphones.h`)
+- Up to 8 devices (`DOMINE_HEADPHONES_MAX`), each a stereo output: first channel left, second right. A one-channel device gets (L + R) / 2.
+- Per device, in order: tap mix (TapMix.h, like the other kernels), mono ((L + R) / 2 on both, when on), crossfeed, effects chain (EQ, bass, compressor; two instances per device, same parameters, one per ear), ear levels, gain, delay, mute fade, peak meters per ear.
+- Crossfeed amount 0...1: each ear gets amount times 0.5 times the other ear's signal through a one-pole low-pass at 700 Hz and a 0.3 ms delay; the direct path is scaled so a centered mono signal keeps its level. Amount 0 skips it bit-exactly.
+- Ear levels: left and right gain, 0...1 each (UI in dB, -30...0). Never above 1: the kernel never adds gain (section 4d).
+- Gain 0...1 per device (volume share and the volume limit). Delay 0...300 ms per device (ring sized for 300 ms at 96 kHz, allocated at create).
+- Test tone per device and ear (`domine_headphones_set_test_tone(h, device, ear)`, ear 0 left, 1 right, 2 both, device -1 off) and the click test on every device through the delay line, for lining headphones up by ear.
+- Bit-exact at unity: mono off, crossfeed 0, effects off, ear levels 1, gain 1, delay 0, not muted gives each device exactly the input L and R.
+- Same real-time rules as every kernel: no allocation, locks, logging or I/O in render; parameters through C11 atomics (effects through the existing seqlocks).
+
+### 17.3 Settings
+- `HeadphoneSettings` per UID (`Domine.headphone.<uid>`): leftLevelDb and rightLevelDb (-30...0, default 0), mono (false), crossfeed (0...1, default 0), delayMs (0...300, default 0), volumeOffsetDb (the speaker offset range, default 0), maxVolume (0.1...1, default 1), effects (`PairSettings.SideEffects`). Missing or bad fields fall back one by one.
+- The headphone set: ordered UIDs, up to 8 (`Domine.headphoneSet`). The routing mode `.headphones` is stored like the others; rooms store and restore the set.
+
+### 17.4 Engine
+- `start(headphones: [String])`: one private aggregate, outputs in set order, the first present one the clock, drift compensation on the rest and on the tap (as 13.2). Missing devices are left out and rejoin when they return (rebuild), like Surround. None present: idle, previous output restored.
+- Controls from AppModel per UID: ear levels, mono, crossfeed, effects, gain (kernel share of volume and the limit), delay.
+
+### 17.5 Volume
+- The master volume drives every headphone's hardware volume through the volume link, each with its own offset. A headphone's maxVolume caps its hardware volume and its kernel gain, so it never plays louder than its limit whatever the master says. Headphones without hardware volume get the volume as kernel gain.
+
+### 17.6 UI
+- Mode picker: Single, Stereo, Surround, Headphones.
+- Stage: one card per headphone in a row (wrapping to compact cards like Surround), each with name and UID suffix, status, battery, and a two-bar meter (left and right ear). "Add Headphones…" opens the assign sheet with headphones listed first. Context menu on a card: Settings…, Test Left, Test Right, Remove, Treat as Speaker.
+- Headphone settings sheet (one headphone): Volume offset, Volume limit, Left and Right level (with Test Left and Test Right buttons), Mono, Crossfeed, Delay (slider plus the nudge buttons and the click test), and "Sound…" which opens the Sound sheet for that headphone's effects. No captions that repeat a label.
+- Menu bar menu lists the headphones in Headphones mode like speakers in the other modes.
+
+### 17.7 Not now
+- Mic auto-calibration for headphones: the Mac's microphone hears headphones too faintly and too unevenly to time them, so delay is set by ear with the click test.
+- Speakers and headphones in one setup.
