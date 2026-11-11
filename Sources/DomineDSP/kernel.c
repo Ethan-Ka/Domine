@@ -677,9 +677,13 @@ static RenderResult render(DomineKernel *k,
     OutChannel a0 = {0}, a1 = {0}, b0 = {0}, b1 = {0};
     const int hasA0 = map_out_channel(out, outAChannelOffset, &a0);
     const int hasB0 = map_out_channel(out, outBChannelOffset, &b0);
+    // A one-channel device's "second" channel is the next device's first:
+    // never let it overwrite the other position.
     const int hasA1 = bothChannels && outAChannelOffset != DOMINE_NO_DEVICE
+        && outAChannelOffset + 1 != outBChannelOffset
         && map_out_channel(out, outAChannelOffset + 1, &a1);
     const int hasB1 = bothChannels && outBChannelOffset != DOMINE_NO_DEVICE
+        && outBChannelOffset + 1 != outAChannelOffset
         && map_out_channel(out, outBChannelOffset + 1, &b1);
 
     const uint32_t mask = k->ringMask;
