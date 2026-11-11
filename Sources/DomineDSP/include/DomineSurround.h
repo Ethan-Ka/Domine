@@ -115,6 +115,13 @@ void domine_surround_set_delay_ms(DomineSurround *s, uint32_t speaker, float ms)
 void domine_surround_set_eq(DomineSurround *s, uint32_t speaker, const DomineEQParams *params);
 void domine_surround_set_bass(DomineSurround *s, uint32_t speaker, const DomineBassParams *params);
 void domine_surround_set_compressor(DomineSurround *s, uint32_t speaker, const DomineCompressorParams *params);
+/// Per-speaker role and crossover (DomineCrossover.h), after the compressor
+/// and before trim gain and delay. Full range (default) is skipped. A
+/// subwoofer is left out of VBAP and the demo panning (the other speakers'
+/// gains are as if it were absent, and it does not count toward the 2
+/// speakers the ambience needs) and plays 0.5 * L + 0.5 * R low-passed, with
+/// the switch crossfaded over 10 ms. A satellite plays its pan mix high-passed.
+void domine_surround_set_crossover(DomineSurround *s, uint32_t speaker, const DomineCrossoverParams *params);
 
 /// Mute with the 50 ms fade (DOMINE_FADE_MS).
 void domine_surround_set_muted(DomineSurround *s, int muted);

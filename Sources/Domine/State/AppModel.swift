@@ -493,7 +493,8 @@ final class AppModel {
         change(&s)
         s = PairSettings(delayMs: s.delayMs, balance: s.balance, masterVolume: s.masterVolume, effects: s.effects,
                          crossfeed: s.crossfeed, sameOnBoth: s.sameOnBoth,
-                         leftVolumeOffsetDb: s.leftVolumeOffsetDb, rightVolumeOffsetDb: s.rightVolumeOffsetDb)
+                         leftVolumeOffsetDb: s.leftVolumeOffsetDb, rightVolumeOffsetDb: s.rightVolumeOffsetDb,
+                         leftRole: s.leftRole, rightRole: s.rightRole, crossoverHz: s.crossoverHz)
         guard s != pairSettings else { return }
         pairSettings = s
         mirrorMasterToVirtualOutput()
@@ -515,6 +516,10 @@ final class AppModel {
         engine.boost = PairSettings.boostGain(forMaster: min(pairSettings.masterVolume, maxMasterVolume))
         engine.crossfeed = pairSettings.effectiveCrossfeed
         engine.setEffects(left: pairSettings.effects.left, right: pairSettings.effects.effectiveRight)
+        // Single mode has one speaker: it plays the whole range.
+        engine.setRoles(a: single ? .fullRange : pairSettings.leftRole,
+                        b: single ? .fullRange : pairSettings.rightRole,
+                        crossoverHz: pairSettings.crossoverHz)
         applySurroundSettingsToEngine()
     }
 
@@ -536,6 +541,7 @@ final class AppModel {
         engine.surroundTimingMeasured = s.timingMeasured
         engine.surroundLevelMeasured = s.levelMeasured
         engine.setSurroundEffects(effects)
+        engine.setSurroundRoles(s.roles, crossoverHz: s.crossoverHz)
         engine.surroundWidth = s.width
         engine.surroundLevel = s.surroundLevel
         engine.surroundMono = s.mono

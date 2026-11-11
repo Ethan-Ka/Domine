@@ -20,6 +20,7 @@
 #include "DomineEQ.h"
 #include "DomineBass.h"
 #include "DomineCompressor.h"
+#include "DomineCrossover.h"
 #include "DomineSpatial.h"
 #include <CoreAudio/CoreAudioTypes.h>
 #include <CoreAudio/AudioHardwareBase.h> // AudioObjectID only; no Core Audio calls
@@ -202,6 +203,13 @@ void domine_kernel_set_eq(DomineKernel *k, int position, const DomineEQParams *p
 /// the EQ in that order; a disabled stage is skipped once settled.
 void domine_kernel_set_bass(DomineKernel *k, int position, const DomineBassParams *params);
 void domine_kernel_set_compressor(DomineKernel *k, int position, const DomineCompressorParams *params);
+/// Speaker role and crossover for one position (0 = A, 1 = B; DomineCrossover.h).
+/// Runs after the compressor, before the click source, delay and trim gain.
+/// Full range (default) is skipped. Subwoofer: the position plays the mono
+/// sum (L + R) / 2 low-passed in place of its side (crossfaded over 10 ms),
+/// ignoring swap and crossfeed. Satellite: its own side, high-passed. The
+/// caller sends full range while the kernel is in mono fallback.
+void domine_kernel_set_crossover(DomineKernel *k, int position, const DomineCrossoverParams *params);
 
 /// Muted (nonzero) or unmuted (0). The output gain ramps linearly toward the
 /// target over 50 ms of samples (round(0.05 * sampleRate)). A new kernel

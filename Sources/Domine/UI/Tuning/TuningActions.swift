@@ -17,6 +17,10 @@ struct TuningActions: Sendable {
     var setSurroundTrim: @MainActor @Sendable (_ uid: String, _ trim: Double) -> Void = { _, _ in }
     var setSurroundOffset: @MainActor @Sendable (_ uid: String, _ ms: Double) -> Void = { _, _ in }
 
+    /// One speaker's role, and the crossover frequency in Hz.
+    var setSpeakerRole: @MainActor @Sendable (_ uid: String, _ role: SpeakerRole) -> Void = { _, _ in }
+    var setCrossoverHz: @MainActor @Sendable (_ hz: Double) -> Void = { _ in }
+
     /// One speaker's hardware volume offset in dB.
     var setSpeakerVolumeOffset: @MainActor @Sendable (_ uid: String, _ db: Double) -> Void = { _, _ in }
 
