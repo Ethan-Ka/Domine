@@ -447,8 +447,24 @@ extension AppModel {
     }
 
     /// Changes the field controls only; speakers, offsets, trims and effects stay.
+    /// Values that match no preset are kept first, so "No Preset" can bring them back.
     func applySurroundFieldPreset(_ preset: SurroundFieldPreset) {
+        if currentSurroundPresetName == nil {
+            customSurroundField = SurroundFieldPreset(name: "", from: surroundSettings)
+        }
         updateSurroundSettings { preset.apply(to: &$0) }
+    }
+
+    /// "No Preset": the field controls the user had before applying a preset.
+    /// Does nothing when there is nothing to go back to.
+    func clearSurroundFieldPreset() {
+        guard currentSurroundPresetName != nil, let custom = customSurroundField else { return }
+        updateSurroundSettings { custom.apply(to: &$0) }
+    }
+
+    /// "No Preset" can be picked: a preset is active and earlier values are kept.
+    var canClearSurroundFieldPreset: Bool {
+        currentSurroundPresetName != nil && customSurroundField != nil
     }
 
     /// Saves the current field controls under `name`, replacing a user preset

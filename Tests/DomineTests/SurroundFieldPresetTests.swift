@@ -40,6 +40,20 @@ final class SurroundFieldPresetTests {
         #expect(model.currentSurroundPresetName == "Music")
     }
 
+    @Test func noPresetBringsBackTheUsersOwnValues() {
+        let model = makeModel()
+        model.setSurroundWidth(42)
+        #expect(model.currentSurroundPresetName == nil)
+        #expect(!model.canClearSurroundFieldPreset)
+        let own = model.surroundSettings
+        model.applySurroundFieldPreset(.movie)
+        model.applySurroundFieldPreset(.voice)
+        #expect(model.canClearSurroundFieldPreset)
+        model.clearSurroundFieldPreset()
+        #expect(model.surroundSettings == own)
+        #expect(model.currentSurroundPresetName == nil)
+    }
+
     @Test func userPresetRoundTrips() {
         let model = makeModel()
         model.setSurroundWidth(70)

@@ -22,7 +22,13 @@ struct SurroundPresetMenu: View {
     var body: some View {
         if let model {
             let current = model.currentSurroundPresetName
-            Menu("Preset") {
+            Menu(current ?? "No Preset") {
+                Section {
+                    Toggle("No Preset", isOn: Binding(
+                        get: { current == nil },
+                        set: { _ in model.clearSurroundFieldPreset() }))
+                        .disabled(current == nil || !model.canClearSurroundFieldPreset)
+                }
                 Section {
                     ForEach(SurroundFieldPreset.builtIn) { preset in
                         item(preset, current: current, model: model)
@@ -52,6 +58,9 @@ struct SurroundPresetMenu: View {
                 }
             }
             .fixedSize()
+            .help("Surround preset")
+            .accessibilityLabel("Surround preset")
+            .accessibilityValue(current ?? "No Preset")
             .sheet(item: $prompt) { prompt in
                 SurroundPresetNameSheet(
                     title: title(prompt), name: $name,

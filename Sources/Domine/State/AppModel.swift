@@ -66,6 +66,8 @@ final class AppModel {
     var rooms: [Room] = []
     /// The user's surround presets (the built-in ones are `SurroundFieldPreset.builtIn`).
     var surroundFieldPresets: [SurroundFieldPreset] = []
+    /// The user's own field controls from before a preset was applied, for "No Preset".
+    var customSurroundField: SurroundFieldPreset?
     var currentRoomID: UUID?
     var showsSaveRoom = false
     var showsManageRooms = false
