@@ -102,23 +102,50 @@ extension AppModel {
         engine.calibrationChirpGains = ChirpGains()
         if engine.surroundCalibrationPair != nil { engine.surroundCalibrationPair = nil }
         if calibrationStatus?.isInProgress == true { calibrationStatus = nil }
+        // Undo lasts only while the sheet is open.
+        if !showsTuning { calibrationUndo = nil }
     }
 
     /// offset = arrival(right) - arrival(left). Saved through the same path
     /// as the slider (clamped to -300...300 ms).
     /// With `levels` (left plays the rising chirp, right the falling one),
     /// also sets the balance so the louder speaker is cut to the quieter one.
+    /// Keeps the old delay and balance for Undo Calibration.
     func applyCalibration(offsetMs offset: Double, levels: ChirpLevels? = nil) {
-        setDelayMs(CalibrationAnalyzer.delaySetting(forOffsetMs: offset))
+        let undo = CalibrationUndo.stereo(delayMs: pairSettings.delayMs, balance: pairSettings.balance)
+        let setting = CalibrationAnalyzer.delaySetting(forOffsetMs: offset)
+        applyDelayMs(setting)
         let balance = levels.flatMap { Self.calibratedBalance(levels: $0) }
-        if let balance { setBalance(balance) }
+        if let balance { applyBalance(balance) }
+        calibrationUndo = undo
         let what = balance == nil ? "Delay set." : "Delay and balance set."
-        let late = Int(abs(offset).rounded())
-        if late == 0 {
+        if setting == 0 {
             calibrationStatus = .done("Speakers are in sync. \(what)")
         } else {
+            let late = TuningState.msText(abs(setting))
             calibrationStatus = .done("\(offset > 0 ? "Right" : "Left") was \(late) ms late. \(what)")
         }
+    }
+
+    /// Puts back what the last run replaced, exactly, and clears the result line.
+    func undoCalibration() {
+        guard let undo = calibrationUndo else { return }
+        calibrationUndo = nil
+        switch undo {
+        case .stereo(let delayMs, let balance):
+            updatePairSettings { s in
+                s.delayMs = delayMs
+                s.balance = balance
+            }
+        case .surround(let offsetsMs, let trims, let timingMeasured, let levelMeasured):
+            updateSurroundSettings { s in
+                s.offsetsMs = offsetsMs
+                s.trims = trims
+                s.timingMeasured = timingMeasured
+                s.levelMeasured = levelMeasured
+            }
+        }
+        if case .done? = calibrationStatus { calibrationStatus = nil }
     }
 
     /// The balance that cuts the louder speaker to the quieter one's level

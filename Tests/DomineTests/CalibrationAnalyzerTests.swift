@@ -95,8 +95,11 @@ struct CalibrationAnalyzerTests {
     }
 
     @Test func delaySign() {
-        #expect(CalibrationAnalyzer.delaySetting(forOffsetMs: -23.4) == 23)
-        #expect(CalibrationAnalyzer.delaySetting(forOffsetMs: 7.5) == -8)
+        #expect(CalibrationAnalyzer.delaySetting(forOffsetMs: -23.4) == 23.5)
+        #expect(CalibrationAnalyzer.delaySetting(forOffsetMs: -23.2) == 23)
+        #expect(CalibrationAnalyzer.delaySetting(forOffsetMs: 7.5) == -7.5)
+        #expect(CalibrationAnalyzer.delaySetting(forOffsetMs: 7.8) == -8)
         #expect(CalibrationAnalyzer.delaySetting(forOffsetMs: 0) == 0)
+        #expect(CalibrationAnalyzer.delaySetting(forOffsetMs: 0.1).sign == .plus)
     }
 }

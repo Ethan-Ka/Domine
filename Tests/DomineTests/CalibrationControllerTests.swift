@@ -174,8 +174,61 @@ final class CalibrationControllerTests {
     @Test func leftLateBeyondFiftyMs() async {
         setUp(offset: -120.4)
         await calibrate()
-        #expect(model.pairSettings.delayMs == 120)
-        #expect(model.tuningState.calibrationStatus == .done("Left was 120 ms late. Delay set."))
+        #expect(model.pairSettings.delayMs == 120.5)
+        #expect(model.tuningState.calibrationStatus == .done("Left was 120.5 ms late. Delay set."))
+    }
+
+    // MARK: Undo Calibration
+
+    @Test func undoRestoresDelayAndBalanceExactly() async {
+        setUp(offset: 12)
+        script.levels = ChirpLevels(rising: 1, falling: 0.5)
+        model.updatePairSettings { $0.delayMs = 3.5; $0.balance = -0.125 }
+        #expect(model.tuningActions.undoCalibration == nil)
+        await calibrate()
+        #expect(model.pairSettings.delayMs == -12)
+        #expect(model.pairSettings.balance != -0.125)
+        #expect(model.tuningState.canUndoCalibration)
+        model.tuningActions.undoCalibration?()
+        #expect(model.pairSettings.delayMs == 3.5)
+        #expect(model.pairSettings.balance == -0.125)
+        #expect(!model.tuningState.canUndoCalibration)
+        #expect(model.tuningActions.undoCalibration == nil)
+        #expect(model.tuningState.calibrationStatus == nil)
+    }
+
+    @Test func handEditEndsUndo() async {
+        setUp(offset: 12)
+        await calibrate()
+        #expect(model.tuningState.canUndoCalibration)
+        model.tuningActions.setDelayMs(-11)
+        #expect(!model.tuningState.canUndoCalibration)
+        #expect(model.pairSettings.delayMs == -11)
+
+        await calibrate()
+        #expect(model.tuningState.canUndoCalibration)
+        model.tuningActions.setBalance(0.25)
+        #expect(!model.tuningState.canUndoCalibration)
+    }
+
+    @Test func closingTheSheetEndsUndo() async {
+        setUp(offset: 12)
+        await calibrate()
+        #expect(model.tuningState.canUndoCalibration)
+        model.tuningActions.done()
+        #expect(!model.tuningState.canUndoCalibration)
+        model.openTuning()
+        #expect(model.tuningActions.undoCalibration == nil)
+        #expect(model.pairSettings.delayMs == -12)
+    }
+
+    @Test func unavailableReasonIsShownWithoutMic() {
+        setUp(withMic: false)
+        model.openTuning()
+        #expect(model.tuningState.calibrationUnavailableReason == AppModel.calibrationUnavailableText)
+        hal.add(Self.mic)
+        model.openTuning()
+        #expect(model.tuningState.calibrationUnavailableReason == nil)
     }
 
     @Test func analyzerFailureShowsReason() async {

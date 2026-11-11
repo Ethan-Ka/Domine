@@ -144,6 +144,9 @@ extension AppModel {
             return "\(uids[i]) delay \(String(format: "%.1f", offsetsMs[i])) ms, level \(trim)"
         }.joined(separator: "; ")
         Self.calibrationLog.notice("Surround calibration applied: \(summary, privacy: .public)")
+        let before = surroundSettings
+        calibrationUndo = .surround(offsetsMs: before.offsetsMs, trims: before.trims,
+                                    timingMeasured: before.timingMeasured, levelMeasured: before.levelMeasured)
         updateSurroundSettings { s in
             for (uid, ms) in zip(uids, offsetsMs) { s.offsetsMs[uid] = Float(ms) }
             s.timingMeasured = true
@@ -159,6 +162,7 @@ extension AppModel {
     /// Reset in Surround Sync & Balance: every trim and offset back to
     /// default, and neither timing nor levels count as measured.
     func resetSurroundTuning() {
+        calibrationUndo = nil
         updateSurroundSettings { s in
             s.trims = [:]
             s.offsetsMs = [:]
