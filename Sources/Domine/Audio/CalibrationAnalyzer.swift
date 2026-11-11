@@ -102,8 +102,10 @@ struct CalibrationAnalyzer {
 
     /// Domine's delay convention: positive delays the right speaker (B).
     /// offset = arrival(B) - arrival(A); B early (negative) means delay B.
-    static func delaySetting(forOffsetMs offset: Double) -> Int {
-        Int((-offset).rounded())
+    /// Rounded to the nearest 0.5 ms, the delay setting's resolution.
+    static func delaySetting(forOffsetMs offset: Double) -> Double {
+        let ms = (-offset * 2).rounded() / 2
+        return ms == 0 ? 0 : ms
     }
 
     private static func median(_ values: [Double]) -> Double {

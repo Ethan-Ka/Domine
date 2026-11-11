@@ -90,6 +90,10 @@ final class AppModel {
     var calibrationStatus: CalibrationStatus?
     /// Whether a built-in microphone exists; read when the tuning sheet opens.
     var isCalibrationAvailable = false
+    /// What the last Auto-calibrate replaced; nil once Undo is no longer offered.
+    var calibrationUndo: CalibrationUndo?
+    /// Sync & Balance nudge step sizes; read from `store` when the sheet opens.
+    var delayNudgeSteps: DelayNudgeSteps = .normal
     @ObservationIgnored var calibrationTask: Task<Void, Never>?
 
     /// First-run checklist sheet.

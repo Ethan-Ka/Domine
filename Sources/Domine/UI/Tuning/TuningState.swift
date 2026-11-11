@@ -1,8 +1,8 @@
 /// Everything the Sync & Balance sheet shows (docs/mockups/Tuning.dc.html).
 struct TuningState: Equatable, Sendable {
-    /// Signed offset in ms. Positive delays the right speaker, negative the
-    /// left (SPEC section 4).
-    var delayMs: Int
+    /// Signed offset in ms, in 0.5 ms steps. Positive delays the right
+    /// speaker, negative the left (SPEC section 4).
+    var delayMs: Double
     /// -1 (all left) ... 0 (centered) ... 1 (all right).
     var balance: Double
     /// e.g. "Reported latency: left 182 ms, right 176 ms".
@@ -15,6 +15,12 @@ struct TuningState: Equatable, Sendable {
     var clickTestMessage: String?
     /// Auto-calibrate progress or result; nil before a run.
     var calibrationStatus: CalibrationStatus?
+    /// Why Auto-calibrate cannot run, shown as a line in the sheet; nil when it can.
+    var calibrationUnavailableReason: String?
+    /// The last run can be undone: shows Undo Calibration.
+    var canUndoCalibration = false
+    /// Step sizes for the nudge buttons and arrow keys.
+    var nudgeSteps: DelayNudgeSteps = .normal
     /// The showcase demo is playing; the button reads Stop Demo.
     var isDemoPlaying = false
     /// The demo's current part, e.g. "Orbit", shown under the button.
@@ -58,23 +64,39 @@ struct TuningState: Equatable, Sendable {
     }
 
     /// One range for every pair: wide enough for mixed speaker models.
-    static let delayRange = -300...300
+    static let delayRange: ClosedRange<Double> = -300...300
+
+    /// Before the first run, so the button explains itself.
+    static let calibrationCaption = "Uses the Mac's microphone to line up the speakers. Put the Mac where you sit."
 
     var delayReadout: String { Self.delayReadout(delayMs) }
 
     /// The delay after nudging by `step` ms, kept inside the current range.
-    func nudgedDelay(by step: Int) -> Int {
+    func nudgedDelay(by step: Double) -> Double {
         Self.nudge(delayMs, by: step, in: Self.delayRange)
     }
 
-    static func nudge(_ ms: Int, by step: Int, in range: ClosedRange<Int>) -> Int {
-        min(max(ms + step, range.lowerBound), range.upperBound)
+    static func nudge(_ ms: Double, by step: Double, in range: ClosedRange<Double>) -> Double {
+        min(max(roundedDelay(ms + step), range.lowerBound), range.upperBound)
     }
+
+    /// Nearest 0.5 ms.
+    static func roundedDelay(_ ms: Double) -> Double {
+        (ms * 2).rounded() / 2
+    }
+
+    /// "4" or "4.5": whole numbers without a decimal point.
+    static func msText(_ ms: Double) -> String {
+        let value = roundedDelay(ms)
+        return value == value.rounded() ? "\(Int(value))" : String(format: "%.1f", value)
+    }
+
     var balanceReadout: String { Self.balanceReadout(balance) }
 
-    static func delayReadout(_ ms: Int) -> String {
-        if ms > 0 { return "Right +\(ms) ms" }
-        if ms < 0 { return "Left +\(-ms) ms" }
+    static func delayReadout(_ ms: Double) -> String {
+        let value = roundedDelay(ms)
+        if value > 0 { return "Right +\(msText(value)) ms" }
+        if value < 0 { return "Left +\(msText(-value)) ms" }
         return "In sync"
     }
 

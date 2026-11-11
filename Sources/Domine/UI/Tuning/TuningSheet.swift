@@ -38,7 +38,8 @@ struct TuningSheet: View {
         .onKeyPress(phases: [.down, .repeat]) { press in
             guard state.surroundRows == nil,
                   press.key == .leftArrow || press.key == .rightArrow else { return .ignored }
-            let size = press.modifiers.contains(.shift) ? 5 : 1
+            let steps = state.nudgeSteps
+            let size = press.modifiers.contains(.shift) ? steps.large : steps.small
             actions.setDelayMs(state.nudgedDelay(by: press.key == .leftArrow ? -size : size))
             return .handled
         }
@@ -61,11 +62,11 @@ struct TuningSheet: View {
                 }
                 Slider(
                     value: Binding(
-                        get: { Double(state.delayMs) },
-                        set: { actions.setDelayMs(Int($0.rounded())) }),
-                    // Rounded in the setter rather than `step:`, which draws
-                    // a tick for every millisecond.
-                    in: Double(TuningState.delayRange.lowerBound)...Double(TuningState.delayRange.upperBound))
+                        get: { state.delayMs },
+                        set: { actions.setDelayMs($0) }),
+                    // Rounded to 0.5 ms by the model rather than `step:`,
+                    // which draws a tick for every step.
+                    in: TuningState.delayRange)
                     .labelsHidden()
                     .accessibilityLabel("Delay offset")
                     .accessibilityValue(state.delayReadout)
@@ -74,6 +75,7 @@ struct TuningSheet: View {
             HStack(spacing: 8) {
                 Spacer(minLength: 8)
                 clickTestButton
+                undoCalibrationButton
                 autoCalibrateButton
             }
             calibrationLine
@@ -102,7 +104,20 @@ struct TuningSheet: View {
     private var autoCalibrateButton: some View {
         Button("Auto-calibrate") { actions.autoCalibrate?() }
             .disabled(actions.autoCalibrate == nil || state.calibrationStatus?.isInProgress == true)
-            .help(actions.autoCalibrate == nil ? "Needs the Mac's built-in microphone" : "")
+            .help(state.calibrationUnavailableReason ?? TuningState.calibrationCaption)
+    }
+
+    /// Shown after a successful run until the sheet closes or a hand edit.
+    @ViewBuilder
+    private var undoCalibrationButton: some View {
+        if state.canUndoCalibration, let undo = actions.undoCalibration {
+            Button("Undo Calibration", action: undo)
+        }
+    }
+
+    /// A hand edit in Surround ends the offer to undo the last run.
+    private func discardUndo() {
+        if state.canUndoCalibration { actions.discardCalibrationUndo() }
     }
 
     private var clickTestButton: some View {
@@ -142,7 +157,7 @@ struct TuningSheet: View {
                     Slider(
                         value: Binding(
                             get: { row.offsetMs },
-                            set: { actions.setSurroundOffset(row.uid, $0.rounded()) }),
+                            set: { discardUndo(); actions.setSurroundOffset(row.uid, $0.rounded()) }),
                         in: SurroundTuningRow.offsetRange)
                         .labelsHidden()
                         .accessibilityLabel("\(row.label) delay")
@@ -155,6 +170,7 @@ struct TuningSheet: View {
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 8)
                 clickTestButton
+                undoCalibrationButton
                 autoCalibrateButton
             }
             if let note = state.surroundMeasuredNote {
@@ -177,7 +193,7 @@ struct TuningSheet: View {
                     Slider(
                         value: Binding(
                             get: { row.trim },
-                            set: { actions.setSurroundTrim(row.uid, $0) }),
+                            set: { discardUndo(); actions.setSurroundTrim(row.uid, $0) }),
                         in: 0...1)
                         .labelsHidden()
                         .accessibilityLabel("\(row.label) level")
@@ -219,7 +235,10 @@ struct TuningSheet: View {
             }
             .font(.subheadline)
         case nil:
-            EmptyView()
+            Text(state.calibrationUnavailableReason ?? TuningState.calibrationCaption)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -320,21 +339,44 @@ struct TuningSheet: View {
     }
 
     /// Positive steps delay the right speaker more, negative the left.
+    /// The menu picks the step sizes, which the arrow keys use too.
     private var nudgeButtons: some View {
         HStack(spacing: 4) {
-            ForEach([-5, -1, 1, 5], id: \.self) { step in
-                Button(step < 0 ? "\u{2212}\(-step)" : "+\(step)") {
+            ForEach(state.nudgeSteps.buttonSteps, id: \.self) { step in
+                Button(Self.nudgeTitle(step)) {
                     actions.setDelayMs(state.nudgedDelay(by: step))
                 }
                 .accessibilityLabel(Self.nudgeLabel(step))
             }
+            Menu {
+                Picker("Nudge step", selection: Binding(
+                    get: { state.nudgeSteps },
+                    set: { actions.setNudgeSteps($0) })) {
+                    ForEach(DelayNudgeSteps.allCases) { steps in
+                        Text(steps.menuTitle).tag(steps)
+                    }
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            } label: {
+                Text(state.nudgeSteps.title)
+            }
+            .fixedSize()
+            .help("Nudge step size")
+            .accessibilityLabel("Nudge step size")
+            .accessibilityValue(state.nudgeSteps.menuTitle)
         }
     }
 
-    static func nudgeLabel(_ step: Int) -> String {
+    /// "\u{2212}0.5" or "+5".
+    static func nudgeTitle(_ step: Double) -> String {
+        step < 0 ? "\u{2212}\(TuningState.msText(-step))" : "+\(TuningState.msText(step))"
+    }
+
+    static func nudgeLabel(_ step: Double) -> String {
         let unit = abs(step) == 1 ? "millisecond" : "milliseconds"
         let side = step < 0 ? "left" : "right"
-        return "Delay \(abs(step)) \(unit) more on the \(side)"
+        return "Delay \(TuningState.msText(abs(step))) \(unit) more on the \(side)"
     }
 
     private func endLabels(_ leading: String, _ trailing: String) -> some View {

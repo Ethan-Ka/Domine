@@ -90,6 +90,34 @@ final class SurroundCalibrationTests {
         #expect(model.engine.state == .running)
     }
 
+    @Test func undoRestoresOffsetsTrimsAndMarks() async {
+        await setUp(arrivals: [0, 12, -5, 30], levels: [1, 0.5, 0.25, 1])
+        model.setSurroundOffset(uid: uids[2], ms: 7)
+        model.setSurroundTrim(uid: uids[1], 0.75)
+        let before = model.surroundSettings
+        await calibrate()
+        #expect(model.surroundSettings.timingMeasured)
+        #expect(model.surroundSettings.levelMeasured)
+        #expect(model.tuningSheetState.canUndoCalibration)
+        model.tuningSheetActions.undoCalibration?()
+        let after = model.surroundSettings
+        #expect(after.offsetsMs == before.offsetsMs)
+        #expect(after.trims == before.trims)
+        #expect(after.timingMeasured == before.timingMeasured)
+        #expect(after.levelMeasured == before.levelMeasured)
+        #expect(after == before)
+        #expect(!model.tuningSheetState.canUndoCalibration)
+    }
+
+    @Test func surroundHandEditEndsUndo() async {
+        await setUp(arrivals: [0, 12, -5, 30])
+        await calibrate()
+        #expect(model.tuningSheetState.canUndoCalibration)
+        model.tuningSheetActions.discardCalibrationUndo()
+        #expect(!model.tuningSheetState.canUndoCalibration)
+        #expect(model.tuningSheetActions.undoCalibration == nil)
+    }
+
     @Test func pairDeltasMatchTheRingFormula() {
         #expect(AppModel.ringOffsets(pairDeltasMs: [12, -17, 35, -30]) == [30, 18, 35, 0])
         // Any closure is spread evenly, never fatal: 40 ms takes 10 off each pair.

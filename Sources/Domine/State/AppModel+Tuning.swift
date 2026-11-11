@@ -3,26 +3,38 @@
 extension AppModel {
     var tuningState: TuningState {
         TuningState(
-            delayMs: Int(pairSettings.delayMs.rounded()),
+            delayMs: TuningState.roundedDelay(Double(pairSettings.delayMs)),
             balance: Double(pairSettings.balance),
             reportedLatencies: reportedLatencyText,
             isClickTestPlaying: engine.clickTest,
             isClickTestAvailable: engine.state != .starting && engine.state != .stopping
                 && calibrationStatus?.isInProgress != true,
             clickTestMessage: clickTestMessage,
-            calibrationStatus: calibrationStatus)
+            calibrationStatus: calibrationStatus,
+            calibrationUnavailableReason: isCalibrationAvailable ? nil : Self.calibrationUnavailableText,
+            canUndoCalibration: calibrationUndo != nil,
+            nudgeSteps: delayNudgeSteps)
     }
+
+    static let calibrationUnavailableText = "Auto-calibrate needs the Mac's built-in microphone."
 
     var tuningActions: TuningActions {
         var calibrate: (@MainActor @Sendable () -> Void)?
         if isCalibrationAvailable {
             calibrate = { [weak self] in self?.autoCalibrate() }
         }
+        var undo: (@MainActor @Sendable () -> Void)?
+        if calibrationUndo != nil {
+            undo = { [weak self] in self?.undoCalibration() }
+        }
         return TuningActions(
             setDelayMs: { [weak self] in self?.setDelayMs($0) },
             setBalance: { [weak self] in self?.setBalance($0) },
             playClickTest: { [weak self] in self?.toggleClickTest() },
             autoCalibrate: calibrate,
+            undoCalibration: undo,
+            discardCalibrationUndo: { [weak self] in self?.calibrationUndo = nil },
+            setNudgeSteps: { [weak self] in self?.setDelayNudgeSteps($0) },
             openMicrophoneSettings: { [weak self] in self?.openMicrophoneSettings() },
             reset: { [weak self] in self?.resetTuning() },
             done: { [weak self] in self?.showsTuning = false })
@@ -32,8 +44,15 @@ extension AppModel {
         reportedLatencyText = readReportedLatencies()
         clickTestMessage = nil
         calibrationStatus = nil
+        calibrationUndo = nil
         isCalibrationAvailable = calibration.isAvailable
+        delayNudgeSteps = store.delayNudgeSteps
         showsTuning = true
+    }
+
+    func setDelayNudgeSteps(_ steps: DelayNudgeSteps) {
+        delayNudgeSteps = steps
+        store.delayNudgeSteps = steps
     }
 
     /// Clicks on both speakers at once, through the delay line, so moving the
@@ -78,18 +97,34 @@ extension AppModel {
         return Self.routingErrorMessage
     }
 
-    func setDelayMs(_ ms: Int) {
-        let range = TuningState.delayRange
-        updatePairSettings { $0.delayMs = Float(min(max(ms, range.lowerBound), range.upperBound)) }
+    /// A hand edit: rounded to 0.5 ms, clamped to -300...300, and the last
+    /// calibration can no longer be undone.
+    func setDelayMs(_ ms: Double) {
+        calibrationUndo = nil
+        applyDelayMs(ms)
     }
 
     func setBalance(_ balance: Double) {
+        calibrationUndo = nil
+        applyBalance(balance)
+    }
+
+    /// `setDelayMs` without touching the undo.
+    func applyDelayMs(_ ms: Double) {
+        guard ms.isFinite else { return }
+        let range = TuningState.delayRange
+        let value = min(max(TuningState.roundedDelay(ms), range.lowerBound), range.upperBound)
+        updatePairSettings { $0.delayMs = Float(value) }
+    }
+
+    func applyBalance(_ balance: Double) {
         updatePairSettings { $0.balance = Float(balance) }
     }
 
     /// Delay, range, and balance back to defaults. Master volume is not part
     /// of the sheet, and the speaker volume offsets describe the speakers.
     func resetTuning() {
+        calibrationUndo = nil
         updatePairSettings { s in
             let old = s
             s = PairSettings()

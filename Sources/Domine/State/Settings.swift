@@ -15,7 +15,7 @@ final class SettingsStore {
         case meterStyle, meterPeakHold, showMeters
         case previousOutputUID, outputNeedsRestore, excludedAppsPlayThroughUID, exclusions, appVolumes
         case hasCompletedWelcome, audioCaptureWorking, audioCaptureSignature
-        case rooms, currentRoomID, rememberedSpeakers
+        case rooms, currentRoomID, rememberedSpeakers, delayNudgeSteps
 
         var name: String { SettingsStore.keyPrefix + rawValue }
     }
@@ -285,6 +285,12 @@ final class SettingsStore {
     var audioCaptureSignature: String? {
         get { string(.audioCaptureSignature) }
         set { set(newValue, .audioCaptureSignature) }
+    }
+
+    /// Sync & Balance nudge step sizes. Normal by default.
+    var delayNudgeSteps: DelayNudgeSteps {
+        get { string(.delayNudgeSteps).flatMap(DelayNudgeSteps.init(rawValue:)) ?? .normal }
+        set { set(newValue.rawValue, .delayNudgeSteps) }
     }
 
     /// Saved rooms. Missing or corrupt reads as none; a room that fails to
