@@ -56,10 +56,7 @@ struct TuningSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             sectionTitle("TIMING")
             VStack(spacing: 4) {
-                HStack(spacing: 6) {
-                    readoutRow("Delay offset", value: state.delayReadout)
-                    nudgeButtons
-                }
+                readoutRow("Delay offset", value: state.delayReadout)
                 Slider(
                     value: Binding(
                         get: { state.delayMs },
@@ -71,6 +68,9 @@ struct TuningSheet: View {
                     .accessibilityLabel("Delay offset")
                     .accessibilityValue(state.delayReadout)
                 endLabels("Delay left", "Delay right")
+                nudgeButtons
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 4)
             }
             HStack(spacing: 8) {
                 Spacer(minLength: 8)
@@ -342,12 +342,18 @@ struct TuningSheet: View {
     /// The menu picks the step sizes, which the arrow keys use too.
     private var nudgeButtons: some View {
         HStack(spacing: 4) {
+            Text("Nudge")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .padding(.trailing, 2)
             ForEach(state.nudgeSteps.buttonSteps, id: \.self) { step in
                 Button(Self.nudgeTitle(step)) {
                     actions.setDelayMs(state.nudgedDelay(by: step))
                 }
+                .fixedSize()
                 .accessibilityLabel(Self.nudgeLabel(step))
             }
+            Spacer(minLength: 8)
             Menu {
                 Picker("Nudge step", selection: Binding(
                     get: { state.nudgeSteps },
