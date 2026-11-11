@@ -46,10 +46,30 @@ DomineCompressor *domine_compressor_create(double sampleRate) {
 
 void domine_compressor_destroy(DomineCompressor *c) { free(c); }
 
+// Non-finite values take the default; finite ones clamp to the range.
+static float sane(float v, float lo, float hi, float dflt) {
+    if (!isfinite(v)) return dflt;
+    return v < lo ? lo : (v > hi ? hi : v);
+}
+
+DomineCompressorParams domine_compressor_sanitize(const DomineCompressorParams *p) {
+    const DomineCompressorParams d = default_params();
+    DomineCompressorParams q;
+    q.enabled = p->enabled != 0;
+    q.thresholdDb = sane(p->thresholdDb, DOMINE_COMP_THRESHOLD_MIN_DB, 0.0f, d.thresholdDb);
+    q.ratio = sane(p->ratio, 1.0f, DOMINE_COMP_RATIO_MAX, d.ratio);
+    q.attackMs = sane(p->attackMs, 0.0f, DOMINE_COMP_ATTACK_MAX_MS, d.attackMs);
+    q.releaseMs = sane(p->releaseMs, 0.0f, DOMINE_COMP_RELEASE_MAX_MS, d.releaseMs);
+    q.makeupDb = sane(p->makeupDb, -DOMINE_COMP_MAKEUP_MAX_DB, DOMINE_COMP_MAKEUP_MAX_DB, d.makeupDb);
+    q.limiterCeilingDb = sane(p->limiterCeilingDb, DOMINE_COMP_CEILING_MIN_DB, 0.0f, d.limiterCeilingDb);
+    return q;
+}
+
 void domine_compressor_set_params(DomineCompressor *c, const DomineCompressorParams *p) {
     if (!c || !p) return;
+    const DomineCompressorParams q = domine_compressor_sanitize(p);
     uint32_t w[PARAM_WORDS];
-    memcpy(w, p, sizeof *p);
+    memcpy(w, &q, sizeof q);
     const uint32_t s = atomic_load_explicit(&c->seq, memory_order_relaxed);
     atomic_store_explicit(&c->seq, s + 1, memory_order_relaxed);
     atomic_thread_fence(memory_order_release);
@@ -109,7 +129,7 @@ void domine_compressor_process(DomineCompressor *c, float *samples, uint32_t fra
     double m = c->mix;
 
     const double thr = p->thresholdDb;
-    const double ratio = p->ratio < 1.0f ? 1.0 : p->ratio;
+    const double ratio = p->ratio; // sanitised in set_params
     const double makeup = p->makeupDb;
     const double aC = coeff(p->attackMs, c->sampleRate);
     const double rC = coeff(p->releaseMs, c->sampleRate);
@@ -120,8 +140,10 @@ void domine_compressor_process(DomineCompressor *c, float *samples, uint32_t fra
     double lg = c->limGain;
     for (uint32_t i = 0; i < frames; i++) {
         float x = samples[i];
+        if (!isfinite(x)) x = 0.0f; // a bad sample comes out silent and leaves the state alone
         double a = fabs((double)x);
         if (a < 1e-6) a = 1e-6;
+        else if (a > 1e6) a = 1e6;
         double target = static_gain_db(20.0 * log10(a), thr, ratio) + makeup;
         double k = target < g ? aC : rC;
         g = target + k * (g - target);
@@ -143,6 +165,7 @@ void domine_compressor_process(DomineCompressor *c, float *samples, uint32_t fra
         }
         samples[i] = m >= 1.0 ? y : x + (float)m * (y - x);
     }
+    if (!isfinite(g) || !isfinite(lg)) { g = 0.0; lg = 1.0; } // never keep a poisoned state
     c->mix = m;
     c->gainDb = g;
     c->limGain = lg;

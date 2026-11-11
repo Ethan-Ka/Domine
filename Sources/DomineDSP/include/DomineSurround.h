@@ -118,11 +118,14 @@ void domine_surround_set_compressor(DomineSurround *s, uint32_t speaker, const D
 
 /// Mute with the 50 ms fade (DOMINE_FADE_MS).
 void domine_surround_set_muted(DomineSurround *s, int muted);
+/// Drops the mute fade to silence at the start of the next render call, so
+/// audio fades in over DOMINE_FADE_MS. Safe from any thread at any time (the
+/// request crosses to the render thread through an atomic counter).
 void domine_surround_start_faded_out(DomineSurround *s);
 
 /// Test tone: speaker index plays the shared chime (DomineChime.h) in place of
 /// program audio and the other speakers are silent; -1 (or any value out of
-/// range) is off. Same contract as domine_kernel_set_test_tone: 40 ms
+/// range, including an index at or past the current speaker count) is off. Same contract as domine_kernel_set_test_tone: 40 ms
 /// (DOMINE_TONE_FADE_MS) crossfade against program audio, a new request takes
 /// over once the current tone has faded out, the tone ignores pan, trim gain
 /// and delay, and follows the mute fade. Default -1.
@@ -143,7 +146,8 @@ void domine_surround_set_click_test(DomineSurround *s, int on);
 /// other speaker is silent. The chirps replace program audio after the trim
 /// gain and bypass the delay line, so a measurement sees each speaker's raw
 /// arrival time. 40 ms crossfade with program audio like the click test.
-/// a < 0, b < 0, a == b, or an index out of range turns it off. Default off.
+/// a < 0, b < 0, a == b, or an index out of range (including one at or past
+/// the current speaker count) turns it off. Default off.
 void domine_surround_set_calibration_pair(DomineSurround *s, int a, int b);
 /// Calibration chirp gain for speaker `index` (SPEC 12, test volume): its
 /// chirp is multiplied by gain, clamped to 0...1 (NaN counts as 1). Only the

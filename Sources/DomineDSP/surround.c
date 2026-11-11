@@ -55,6 +55,7 @@ struct DomineSurround {
     _Atomic uint32_t delaySamples[NSPK];
     _Atomic uint32_t peakBits[NSPK];
     _Atomic int muted;
+    _Atomic uint32_t fadeOutReq; // bumped by start_faded_out, picked up by render
     _Atomic int keepAlive;
     _Atomic int toneSpeaker; // -1 off
     _Atomic int clickOn;
@@ -84,6 +85,7 @@ struct DomineSurround {
     float gPrev[NPROG][NSPK];
     uint32_t fadeLength;   // samples in a full mute fade (also the demo crossfade)
     uint32_t fadePosition; // 0 = silent, fadeLength = full gain
+    uint32_t seenFadeOutReq;
     // Keep-alive, render thread state only (see domine_surround_set_keep_alive).
     uint32_t kaSilent;     // consecutive frames below the threshold
     float kaLevel;         // fade 0..1
@@ -293,6 +295,7 @@ DomineSurround *domine_surround_create(double sampleRate, uint32_t maxFrames) {
     atomic_init(&s->mono, 0);
     atomic_init(&s->orbitPhaseBits, f2u(0.0f));
     atomic_init(&s->muted, 0);
+    atomic_init(&s->fadeOutReq, 0);
     atomic_init(&s->keepAlive, 0);
     atomic_init(&s->demoStartReq, 0);
     atomic_init(&s->demoWanted, 0);
@@ -441,7 +444,8 @@ void domine_surround_set_muted(DomineSurround *s, int muted) {
 
 void domine_surround_start_faded_out(DomineSurround *s) {
     if (s == NULL) return;
-    s->fadePosition = 0;
+    // The render thread owns fadePosition; it drops it to 0 on its next call.
+    atomic_fetch_add_explicit(&s->fadeOutReq, 1, memory_order_relaxed);
 }
 
 void domine_surround_set_test_tone(DomineSurround *s, int speaker) {
@@ -671,9 +675,17 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
     for (int v = 0; v < DOMINE_DEMO_VOICES; v++) { voiceAz[v] = NAN; voiceOmni[v] = NAN; }
 
     const uint32_t fadeTarget = atomic_load_explicit(&s->muted, memory_order_relaxed) ? 0 : s->fadeLength;
-    const int toneReq = atomic_load_explicit(&s->toneSpeaker, memory_order_relaxed);
+    {
+        const uint32_t req = atomic_load_explicit(&s->fadeOutReq, memory_order_relaxed);
+        if (req != s->seenFadeOutReq) { s->seenFadeOutReq = req; s->fadePosition = 0; }
+    }
+    // A tone or chirp index past the current speaker count is off, not a
+    // request that silences every speaker.
+    int toneReq = atomic_load_explicit(&s->toneSpeaker, memory_order_relaxed);
+    if (toneReq >= (int)n) toneReq = -1;
     const int clickOn = atomic_load_explicit(&s->clickOn, memory_order_relaxed);
-    const uint32_t calReq = atomic_load_explicit(&s->calPair, memory_order_relaxed);
+    uint32_t calReq = atomic_load_explicit(&s->calPair, memory_order_relaxed);
+    if (calReq != CAL_OFF && ((calReq & 0xFFFFu) >= n || (calReq >> 16) >= n)) calReq = CAL_OFF;
     const uint32_t tfull = s->toneFadeLength;
     const int mono = atomic_load_explicit(&s->mono, memory_order_relaxed);
     const int keepAlive = atomic_load_explicit(&s->keepAlive, memory_order_relaxed);
