@@ -97,10 +97,12 @@ struct MainBottomBar: View {
                     get: { state.masterVolume },
                     set: { actions.setMasterVolume($0) }), in: 0...max(1, state.maxVolume))
                     .labelsHidden()
+                    .background { boostRegion }
                     .accessibilityLabel("Master volume")
                     .accessibilityValue(state.isMuted ? "Muted, \(VolumeText.accessibility(state.masterVolume))" : VolumeText.accessibility(state.masterVolume))
                 Text(VolumeText.label(state.masterVolume))
                     .font(.callout)
+                    .foregroundStyle(state.masterVolume > 1 ? Color.orange : Color.primary)
                     .monospacedDigit()
                     .frame(width: 48, alignment: .trailing)
                     .accessibilityHidden(true)
@@ -124,13 +126,32 @@ struct MainBottomBar: View {
         }
     }
 
-    /// A plain button: each press plays one short tone. The side that is
-    /// playing is shown by the accessibility value only, so the button keeps
-    /// a single stable identity.
+    /// The part of the slider above 100%, tinted. It starts where the
+    /// volume passes 1 and runs to the end of the track.
+    @ViewBuilder
+    private var boostRegion: some View {
+        if state.maxVolume > 1 {
+            GeometryReader { proxy in
+                let start = proxy.size.width / state.maxVolume
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Color.orange.opacity(0.3))
+                    .frame(width: max(0, proxy.size.width - start), height: 4)
+                    .position(x: start + max(0, proxy.size.width - start) / 2, y: proxy.size.height / 2)
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+    }
+
+    /// Each press plays one short tone; while that side plays, the button
+    /// reads "Stop" and ends it.
     private func testButton(_ title: String, side: StereoSide) -> some View {
-        Button(title) { actions.playTestTone(side) }
-            .accessibilityValue(state.testToneSide == side ? "Playing" : "")
-            .disabled(!state.canPlayTestTones)
+        let playing = state.testToneSide == side
+        return Button(playing ? "Stop" : title) {
+            if playing { actions.stopTestTone() } else { actions.playTestTone(side) }
+        }
+        .accessibilityLabel(playing ? "Stop \(title)" : title)
+        .disabled(!state.canPlayTestTones)
     }
 }
 

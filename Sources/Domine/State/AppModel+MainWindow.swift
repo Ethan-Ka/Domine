@@ -32,7 +32,7 @@ extension AppModel {
             canPlayTestTones: isSurround
                 ? !connectedSurroundSpeakers.isEmpty
                 : engine.state.isRouting || anyAssigned,
-            bannerMessage: monoFallbackBanner ?? phoneTakeoverHint ?? (showsGripPairingHint ? Self.gripPairingHint : nil),
+            banner: stageBanner(cards: cards),
             surround: SurroundControls(
                 width: Double(settings.width),
                 level: Double(settings.surroundLevel),
@@ -63,6 +63,10 @@ extension AppModel {
                 self?.setMuted(false)
             },
             playTestTone: { [weak self] in self?.playTestTone($0) },
+            stopTestTone: { [weak self] in
+                self?.tones.stop()
+                self?.cancelTone()
+            },
             testSurroundSpeakers: { [weak self] in self?.testSurroundSpeakers() },
             selectSpeaker: { [weak self] in self?.openAssign($0) },
             reconnectSpeaker: { [weak self] in self?.reconnector.reconnectNow(uid: $0) },
@@ -265,6 +269,23 @@ extension AppModel {
         guard let missing = monoFallbackMissingPosition else { return nil }
         let playing: SpeakerPosition = missing == .frontLeft ? .frontRight : .frontLeft
         return "\(missing.title) disconnected. \(playing.title) plays both sides until it reconnects. A phone connected to it can take over, so check for one."
+    }
+
+    /// The stage banner: the most serious message that applies.
+    func stageBanner(cards: [SpeakerCardState]) -> StageBannerState? {
+        var routingFailed = false
+        if case .error = engine.state { routingFailed = true }
+        let missingUID = monoFallbackMissingPosition.flatMap { position in
+            cards.first { $0.surround == nil && $0.position == position }?.reconnectUID
+        }
+        return StageBannerState.choose(
+            routingFailed: routingFailed,
+            monoFallbackText: monoFallbackBanner,
+            monoFallbackReconnectUID: missingUID,
+            phoneTakeoverText: phoneTakeoverHint,
+            volumeKeysNeedAccessibility: volumeKeysNeedAccessibility && engine.state.isRouting,
+            speakers: cards,
+            pairingHint: showsGripPairingHint ? Self.gripPairingHint : nil)
     }
 
     /// One short phrase for the window subtitle.

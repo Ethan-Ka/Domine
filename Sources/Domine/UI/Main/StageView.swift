@@ -11,6 +11,9 @@ struct StageView: View {
 
     /// The card being dragged and where its speaker was when the drag began.
     @State private var drag: DragAnchor?
+    /// The banner the user closed; it stays away until its text changes.
+    @State private var dismissedBannerID: String?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private struct DragAnchor: Equatable {
         var uid: String
@@ -41,16 +44,67 @@ struct StageView: View {
                     demoMarker(layout: layout)
                 }
 
-                if let banner = state.bannerMessage {
-                    StageBanner(message: banner)
+                Text("FRONT")
+                    .font(.caption2.weight(.semibold))
+                    .tracking(1.2)
+                    .foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 3)
+                    .accessibilityHidden(true)
+
+                if state.showsNothingPlaying {
+                    Text("Nothing playing")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 3)
+                        .padding(.horizontal, 10)
+                        .background(.regularMaterial, in: Capsule())
+                        .position(x: layout.macCenter.x, y: layout.macCenter.y + 78)
+                }
+
+                if state.isMuted {
+                    Label("Muted", systemImage: "speaker.slash.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 3)
+                        .padding(.horizontal, 10)
+                        .background(.regularMaterial, in: Capsule())
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        .padding(8)
+                }
+
+                if let id = dragCaptionID, let info = dragInfo(id), let text = distanceCaption(info) {
+                    Text(text)
+                        .font(.caption.weight(.semibold))
+                        .monospacedDigit()
+                        .padding(.vertical, 2)
+                        .padding(.horizontal, 8)
+                        .background(.regularMaterial, in: Capsule())
+                        .position(captionPoint(info, layout: layout))
+                        .allowsHitTesting(false)
+                }
+
+                if !state.isOn {
+                    dimmedOverlay
+                }
+
+                if let banner = visibleBanner {
+                    StageBanner(
+                        banner: banner,
+                        isWorking: isWorking(banner),
+                        onAction: { perform(banner) },
+                        onDismiss: { dismissedBannerID = banner.id })
                         .frame(width: layout.bannerWidth)
                         .frame(
                             width: layout.size.width,
                             height: max(0, layout.size.height - layout.bannerBottomInset),
                             alignment: .bottom)
+                        .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
                 }
             }
             .coordinateSpace(Self.space)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: state.banner?.id)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: state.isOn)
         }
         .background {
             let shape = RoundedRectangle(cornerRadius: 10)
@@ -58,6 +112,36 @@ struct StageView: View {
                 .overlay(shape.strokeBorder(Color(nsColor: .separatorColor)))
         }
         .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    // MARK: - Banner and off state
+
+    private var visibleBanner: StageBannerState? {
+        guard let banner = state.banner, banner.id != dismissedBannerID else { return nil }
+        return banner
+    }
+
+    private func isWorking(_ banner: StageBannerState) -> Bool {
+        if case .reconnect(let uid) = banner.action { return state.isReconnecting(uid: uid) }
+        return false
+    }
+
+    private func perform(_ banner: StageBannerState) {
+        guard case .reconnect(let uid) = banner.action else { return }
+        if let uid { actions.reconnectSpeaker(uid) } else { actions.setOn(true) }
+    }
+
+    /// While Domine is off the stage fades and offers the switch.
+    private var dimmedOverlay: some View {
+        ZStack {
+            Rectangle()
+                .fill(Color(nsColor: .windowBackgroundColor).opacity(0.6))
+                .allowsHitTesting(false)
+            Button("Turn On") { actions.setOn(true) }
+                .controlSize(.large)
+                .buttonStyle(.borderedProminent)
+        }
+        .transition(.opacity)
     }
 
     // MARK: - Stereo
@@ -98,15 +182,13 @@ struct StageView: View {
 
         // The demo plays with rotation and orbit off, and draws its own marker.
         if !state.demo.isPlaying {
-            SoundFieldView(controls: state.surround, layout: layout, heardPhase: actions.heardOrbitPhase)
+            // Reduce Motion: draw the field still, without the orbit.
+            SoundFieldView(
+                controls: fieldControls, layout: layout,
+                heardPhase: reduceMotion ? { nil } : actions.heardOrbitPhase)
         }
 
-        Text("FRONT")
-            .font(.caption.weight(.semibold))
-            .tracking(1.2)
-            .foregroundStyle(.tertiary)
-            .frame(maxWidth: .infinity)
-            .padding(.top, 10)
+        ringLabels(layout: layout)
 
         thisMac
             .position(x: layout.macCenter.x, y: layout.macCenter.y + 8)
@@ -150,6 +232,48 @@ struct StageView: View {
                 }
             }
             .position(layout.surroundCardCenter(azimuth: info.azimuth, distance: info.distance))
+            .animation(reduceMotion || drag != nil ? nil : .smooth(duration: 0.25),
+                       value: layout.surroundCardCenter(azimuth: info.azimuth, distance: info.distance))
+    }
+
+    // MARK: - Surround readouts
+
+    private var fieldControls: SurroundControls {
+        var controls = state.surround
+        if reduceMotion { controls.orbitRate = 0 }
+        return controls
+    }
+
+    /// "1 m" and "2 m" on faint rings around the Mac.
+    private func ringLabels(layout: StageLayout) -> some View {
+        ForEach([1.0, 2.0], id: \.self) { metres in
+            let radius = layout.surroundRadius(forDistance: metres)
+            Circle()
+                .stroke(.quaternary, style: StrokeStyle(lineWidth: 1, dash: [2, 4]))
+                .frame(width: radius * 2, height: radius * 2)
+                .position(layout.macCenter)
+            Text("\(Int(metres)) m")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .position(layout.point(azimuth: 90, radius: radius + 12))
+        }
+        .accessibilityHidden(true)
+    }
+
+    private var dragCaptionID: String? { state.mode == .surround ? drag?.uid : nil }
+
+    private func dragInfo(_ uid: String) -> SurroundCardInfo? {
+        state.surroundCards.compactMap(\.surround).first { $0.uid == uid }
+    }
+
+    private func distanceCaption(_ info: SurroundCardInfo) -> String? {
+        String(format: "%.1f m", info.distance)
+    }
+
+    /// Just above the card being dragged, kept inside the stage.
+    private func captionPoint(_ info: SurroundCardInfo, layout: StageLayout) -> CGPoint {
+        let center = layout.surroundCardCenter(azimuth: info.azimuth, distance: info.distance)
+        return CGPoint(x: center.x, y: max(12, center.y - StageLayout.cardSize.height / 2 - 10))
     }
 
     /// Moves the speaker with the pointer. The anchor is the speaker's own
@@ -190,9 +314,9 @@ struct StageView: View {
         Circle()
             .fill(Color.accentColor)
             .frame(width: 14, height: 14)
-            .shadow(color: Color.accentColor.opacity(0.6), radius: 6)
+            .shadow(color: Color.accentColor.opacity(reduceMotion ? 0 : 0.6), radius: 6)
             .position(layout.demoMarker(azimuth: state.demo.azimuth))
-            .animation(.linear(duration: 0.12), value: state.demo.azimuth)
+            .animation(reduceMotion ? nil : .linear(duration: 0.12), value: state.demo.azimuth)
             .accessibilityHidden(true)
     }
 
