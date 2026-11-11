@@ -25,9 +25,30 @@ struct StatusMenu: View {
 
             StatusMenuSeparator()
 
+            HStack {
+                Text("Mode")
+                Spacer()
+                ModePicker(
+                    selection: state.mode,
+                    isSurroundEnabled: state.isSurroundAvailable || state.mode == .surround,
+                    onChange: { state.mode = $0 })
+                    .controlSize(.small)
+                    .accessibilityLabel("Mode")
+            }
+            .font(.callout)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+
             VStack(alignment: .leading, spacing: 0) {
-                speakerButton(state.left, .frontLeft)
-                speakerButton(state.right, .frontRight)
+                if state.speakers.isEmpty {
+                    Text("No speakers placed")
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                }
+                ForEach(state.speakers) { speaker in
+                    speakerButton(speaker)
+                }
             }
             .font(.callout)
 
@@ -81,8 +102,10 @@ struct StatusMenu: View {
 
             StatusMenuSeparator()
 
-            Button { actions.swapSides() } label: {
-                StatusMenuItemLabel(title: "Swap Left and Right")
+            if state.canSwap {
+                Button { actions.swapSides() } label: {
+                    StatusMenuItemLabel(title: "Swap Left and Right")
+                }
             }
             if state.isRouting {
                 Button { actions.autoCalibrate() } label: {
@@ -145,12 +168,15 @@ struct StatusMenu: View {
         Binding(get: { state.preset }, set: { state.preset = $0 })
     }
 
-    private func speakerButton(_ speaker: StatusMenuSpeaker, _ position: SpeakerPosition) -> some View {
-        Button { actions.identifySpeaker(position) } label: {
+    private func speakerButton(_ speaker: StatusMenuSpeaker) -> some View {
+        Button {
+            if let uid = speaker.uid { actions.identifySpeaker(uid) }
+        } label: {
             StatusMenuSpeakerRow(speaker: speaker)
         }
         .disabled(!speaker.isConnected)
-        .help("Play identification tone")
+        .help(speaker.isPlayingTone ? "Playing identification tone" : "Play identification tone")
+        .accessibilityHint(speaker.isConnected ? "Plays the identification tone" : "")
     }
 }
 
@@ -162,6 +188,16 @@ struct StatusMenu: View {
 
 #Preview("Status menu, left off") {
     @Previewable @State var state = StatusMenuState.sampleLeftOff
+    StatusMenu(state: $state)
+}
+
+#Preview("Status menu, single") {
+    @Previewable @State var state = StatusMenuState.sampleSingle
+    StatusMenu(state: $state)
+}
+
+#Preview("Status menu, surround") {
+    @Previewable @State var state = StatusMenuState.sampleSurround
     StatusMenu(state: $state)
 }
 #endif

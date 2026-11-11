@@ -54,11 +54,20 @@ extension WelcomeState {
 }
 
 extension StatusMenuState {
+    static func sampleSpeaker(_ position: String, _ suffix: String, battery: Int? = nil) -> StatusMenuSpeaker {
+        StatusMenuSpeaker(
+            position: position, uid: "60-FD-A6-19-\(suffix):output", deviceName: "JBL Grip",
+            uidSuffix: suffix, connection: .connected, batteryPercent: battery)
+    }
+
     static let sample = StatusMenuState(
         statusText: "Playing",
         isOn: true,
-        left: StatusMenuSpeaker(position: "Front Left", deviceName: "JBL Grip", uidSuffix: "4F2A", isConnected: true),
-        right: StatusMenuSpeaker(position: "Front Right", deviceName: "JBL Grip", uidSuffix: "9C11", isConnected: true),
+        isSurroundAvailable: true,
+        speakers: [
+            sampleSpeaker("Front Left", "4F2A", battery: 62),
+            sampleSpeaker("Front Right", "9C11", battery: 12),
+        ],
         masterVolume: 0.62
     )
 
@@ -73,8 +82,32 @@ extension StatusMenuState {
 
     static var sampleLeftOff: StatusMenuState {
         var state = sample
-        state.statusText = "Left speaker off"
-        state.left.isConnected = false
+        state.statusText = "Mono fallback"
+        state.speakers[0].connection = .connecting
+        state.speakers[0].batteryPercent = nil
+        state.speakers[1].isPlayingTone = true
+        return state
+    }
+
+    static var sampleSingle: StatusMenuState {
+        var state = sample
+        state.mode = .single
+        state.speakers = [sampleSpeaker("Speaker", "4F2A", battery: 80)]
+        return state
+    }
+
+    static var sampleSurround: StatusMenuState {
+        var state = sample
+        state.mode = .surround
+        state.statusText = "Surround, some speakers missing"
+        state.speakers = [
+            sampleSpeaker("Front Left", "4F2A", battery: 62),
+            sampleSpeaker("Front Right", "9C11", battery: 55),
+            sampleSpeaker("Center", "5D80"),
+            sampleSpeaker("Rear Left", "22B7", battery: 9),
+            sampleSpeaker("Rear Right", "E03D"),
+        ]
+        state.speakers[4].connection = .notConnected
         return state
     }
 }

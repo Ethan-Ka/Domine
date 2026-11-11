@@ -42,9 +42,11 @@ struct DomineApp: App {
         }
 
         // Always present, except in the test host (SPEC 6a).
-        MenuBarExtra("Domine", image: "MenuBarIcon", isInserted: menuBarItemInserted) {
+        MenuBarExtra(isInserted: menuBarItemInserted) {
             BackgroundMenu()
                 .environment(model)
+        } label: {
+            MenuBarLabel(state: model.menuBarLabel)
         }
         .menuBarExtraStyle(.window)
     }
