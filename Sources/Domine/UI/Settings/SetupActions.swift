@@ -11,4 +11,6 @@ struct SetupActions {
     var openBluetoothSettings: @MainActor () -> Void = {}
     var openLoginItems: @MainActor () -> Void = {}
     var showInstallSteps: @MainActor () -> Void = {}
+    /// Install, Update or Remove the driver, after the user confirmed it.
+    var driver: @MainActor (DriverAction) -> Void = { _ in }
 }

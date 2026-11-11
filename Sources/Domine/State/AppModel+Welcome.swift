@@ -10,6 +10,13 @@ extension AppModel {
         state.setDone(.allowCapture, captureAccess.status == .working)
         state.isCheckingCapture = captureAccess.isProbing
         state.showsPrivacySettings = captureAccess.status == .notConfirmed
+        // A build without a bundled driver has nothing to install.
+        if services.driverInstaller.bundledDriverURL == nil {
+            state.steps.removeAll { $0.kind == .installDriver }
+        }
+        state.setDone(.installDriver, skippedDriverInstall || driverStatus == .installed)
+        state.isInstallingDriver = driverActivity == .install || driverActivity == .update
+        state.driverFailure = driverFailure
         return state
     }
 
@@ -17,7 +24,12 @@ extension AppModel {
         WelcomeActions(
             perform: { [weak self] in self?.performWelcomeStep($0) },
             openPrivacySettings: { [weak self] in self?.openPrivacySettings() },
-            continueSetup: { [weak self] in self?.completeWelcome() })
+            continueSetup: { [weak self] in self?.completeWelcome() },
+            installDriver: { [weak self] in
+                guard let self else { return }
+                Task { await self.installDriverFromWelcome() }
+            },
+            skipDriver: { [weak self] in self?.skippedDriverInstall = true })
     }
 
     func performWelcomeStep(_ kind: WelcomeStep.Kind) {
@@ -25,6 +37,16 @@ extension AppModel {
         case .unpairJBL: markedJBLUnpaired = true
         case .connectSpeakers: services.openURL(SystemServices.bluetoothSettingsURL)
         case .allowCapture: Task { await requestCaptureAccess() }
+        case .installDriver: Task { await installDriverFromWelcome() }
+        }
+    }
+
+    /// Install when missing, Update when the installed driver is older.
+    func installDriverFromWelcome() async {
+        switch driverStatus {
+        case .notInstalled: await performDriverAction(.install)
+        case .updateAvailable: await performDriverAction(.update)
+        case .installed: break
         }
     }
 

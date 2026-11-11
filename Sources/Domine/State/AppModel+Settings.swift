@@ -91,6 +91,7 @@ extension AppModel {
         if generalSettings.launchAtLogin != launch { generalSettings.launchAtLogin = launch }
         let approval = services.launchAtLoginRequiresApproval()
         if loginItemNeedsApproval != approval { loginItemNeedsApproval = approval }
+        refreshDriverVersion()
     }
 
     /// Output lists and names that follow the catalog.

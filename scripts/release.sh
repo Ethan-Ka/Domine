@@ -96,7 +96,8 @@ run xcodebuild -exportArchive -quiet \
     -exportPath "$EXPORT" \
     -exportOptionsPlist "$OPTIONS"
 
-# The driver is not part of the app archive. Build it on its own with the same identity.
+# The app carries a copy of the driver in Resources for in-app install. The pkg
+# installs its own copy, so build it on its own with the same identity.
 run xcodebuild build -quiet \
     -project Domine.xcodeproj -target DomineDriver -configuration Release \
     SYMROOT="$DRIVER_BUILD" \

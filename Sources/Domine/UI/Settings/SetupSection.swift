@@ -6,6 +6,12 @@ import SwiftUI
 struct SetupSection: View {
     let state: SetupState
     var actions = SetupActions()
+    /// The driver action waiting for the restart warning to be confirmed.
+    @State private var confirming: DriverAction?
+
+    private var isConfirming: Binding<Bool> {
+        Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } })
+    }
 
     var body: some View {
         Group {
@@ -43,11 +49,25 @@ struct SetupSection: View {
             }
 
             LabeledContent("Domine output:") {
-                row(state.virtualOutputText, ok: state.virtualOutputInstalled) {
-                    if !state.virtualOutputInstalled {
+                row(state.virtualOutputText, ok: state.driverStatus == .installed,
+                    note: state.driverFailure, busy: state.driverActivity != nil) {
+                    if let action = state.primaryDriverAction {
+                        Button(action.buttonTitle) { confirming = action }
+                            .disabled(state.driverActivity != nil)
+                    } else if state.driverStatus == .notInstalled {
                         Button("Show Install Steps") { actions.showInstallSteps() }
                     }
+                    if state.showsRemoveDriver {
+                        Button("Remove") { confirming = .remove }
+                            .disabled(state.driverActivity != nil)
+                    }
                 }
+            }
+            .alert(confirming?.confirmTitle ?? "", isPresented: isConfirming, presenting: confirming) { action in
+                Button(action.buttonTitle, role: action == .remove ? .destructive : nil) { actions.driver(action) }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text(DriverAction.confirmMessage)
             }
 
             if state.loginItemNeedsApproval {
@@ -61,13 +81,18 @@ struct SetupSection: View {
     }
 
     /// Status text on the first line, buttons under it.
-    private func row(_ status: String, ok: Bool, note: String? = nil, @ViewBuilder buttons: () -> some View) -> some View {
+    private func row(_ status: String, ok: Bool, note: String? = nil, busy: Bool = false,
+                     @ViewBuilder buttons: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Label {
                 Text(status)
             } icon: {
-                Image(systemName: ok ? "checkmark.circle.fill" : "exclamationmark.circle")
-                    .foregroundStyle(ok ? Color.green : Color.secondary)
+                if busy {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: ok ? "checkmark.circle.fill" : "exclamationmark.circle")
+                        .foregroundStyle(ok ? Color.green : Color.secondary)
+                }
             }
             if let note {
                 Text(note).font(.callout).foregroundStyle(.secondary)

@@ -5,4 +5,8 @@ struct WelcomeActions {
     var perform: @MainActor (WelcomeStep.Kind) -> Void = { _ in }
     var openPrivacySettings: @MainActor () -> Void = {}
     var continueSetup: @MainActor () -> Void = {}
+    /// Install or update the driver, after the restart warning was confirmed.
+    var installDriver: @MainActor () -> Void = {}
+    /// "Not Now" on the driver step. Domine routes without the driver.
+    var skipDriver: @MainActor () -> Void = {}
 }

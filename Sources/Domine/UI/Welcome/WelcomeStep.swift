@@ -4,12 +4,14 @@ struct WelcomeStep: Identifiable, Equatable, Sendable {
         case unpairJBL = 1
         case connectSpeakers
         case allowCapture
+        case installDriver
 
         var title: String {
             switch self {
             case .unpairJBL: "Turn off JBL stereo pairing"
             case .connectSpeakers: "Connect both speakers"
             case .allowCapture: "Allow audio capture"
+            case .installDriver: "Install the Domine output (recommended)"
             }
         }
 
@@ -21,6 +23,8 @@ struct WelcomeStep: Identifiable, Equatable, Sendable {
                 "Disconnect them from your phone first."
             case .allowCapture:
                 "Without it, both speakers stay silent."
+            case .installDriver:
+                "Lets the volume keys control your speakers. macOS audio restarts for a few seconds."
             }
         }
 
@@ -29,6 +33,7 @@ struct WelcomeStep: Identifiable, Equatable, Sendable {
             case .unpairJBL: "Done"
             case .connectSpeakers: "Open Bluetooth"
             case .allowCapture: "Allow…"
+            case .installDriver: "Install"
             }
         }
     }

@@ -115,6 +115,15 @@ final class AppModel {
     /// Accessibility trust in `refreshSystemStatus`.
     var loginItemNeedsApproval = false
     @ObservationIgnored var isRefreshingSystemStatus = false
+    /// CFBundleVersion of the driver in /Library/Audio/Plug-Ins/HAL, nil if
+    /// not installed (AppModel+Driver).
+    var installedDriverVersion: String?
+    /// Install, Update or Remove is running.
+    var driverActivity: DriverAction?
+    /// One line under the Domine output row after a failed or cancelled action.
+    var driverFailure: String?
+    /// "Not Now" on the checklist's driver step. Cleared by Show Setup Again.
+    var skippedDriverInstall = false
 
     static let log = Logger(subsystem: "com.ethankawley.Domine", category: "AppModel")
 
@@ -201,6 +210,7 @@ final class AppModel {
         generalSettings = Self.makeGeneralSettings(store: store, services: services)
         exclusionsSettings = Self.makeExclusionsSettings(store: store, services: services)
         loginItemNeedsApproval = services.launchAtLoginRequiresApproval()
+        installedDriverVersion = services.driverInstaller.version(ofDriverAt: DriverPaths.installed)
         leftUID = store.lastLeftUID
         rightUID = store.lastRightUID
         rearLeftUID = store.lastRearLeftUID
