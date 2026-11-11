@@ -9,6 +9,7 @@ struct SoundSheet: View {
     @State private var surroundSelection: String?
     /// The EQ band being dragged, for the live readout.
     @State private var draggingBand: Int?
+    @State private var showingBands = false
 
     static let width: CGFloat = 420
     private static let customTag = "Custom"
@@ -36,6 +37,7 @@ struct SoundSheet: View {
             GroupBox { eq.padding(2) }
             GroupBox { bass.padding(2) }
             GroupBox { compressor.padding(2) }
+            GroupBox { nightMode.padding(2) }
             HStack {
                 Button(resetTitle, action: reset)
                 Spacer()
@@ -192,12 +194,17 @@ struct SoundSheet: View {
 
     private var eq: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Toggle("EQ", isOn: Binding(
-                get: { current.eqEnabled }, set: { v in edit { $0.eqEnabled = v } }))
-                .toggleStyle(.checkbox)
+            HStack {
+                Toggle("EQ", isOn: Binding(
+                    get: { current.eqEnabled }, set: { v in edit { $0.eqEnabled = v } }))
+                    .toggleStyle(.checkbox)
+                Spacer()
+                Button("Edit Bands\u{2026}") { showingBands = true }
+            }
             HStack(spacing: 0) {
-                ForEach(Array(current.eqBands.enumerated()), id: \.offset) { i, band in
-                    let label = SoundState.bandLabel(freqHz: band.freqHz)
+                ForEach(current.eqBands.indices, id: \.self) { i in
+                    let band = current.eqBands[i]
+                    let label = SoundState.frequencyLabel(band.freqHz)
                     VStack(spacing: 6) {
                         Text(draggingBand == i ? SoundState.gainText(band.gainDb) : " ")
                             .font(.caption.monospacedDigit())
@@ -205,22 +212,67 @@ struct SoundSheet: View {
                             .frame(height: 14)
                             .accessibilityHidden(true)
                         VerticalGainSlider(
-                            value: Double(band.gainDb),
+                            value: Double(band.type.usesGain ? band.gainDb : 0),
                             range: Double(SoundState.gainRange.lowerBound)...Double(SoundState.gainRange.upperBound),
                             axLabel: "\(label) gain",
-                            axValue: SoundState.gainText(band.gainDb),
-                            onChange: { v in edit { $0.eqBands[i].gainDb = Float(v) } },
+                            axValue: band.type.usesGain ? SoundState.gainLabel(band.gainDb) : "Notch",
+                            onChange: { v in
+                                edit { fx in
+                                    guard fx.eqBands.indices.contains(i) else { return }
+                                    fx.eqBands[i].gainDb = Float(v.rounded())
+                                }
+                            },
                             onDragging: { draggingBand = $0 ? i : (draggingBand == i ? nil : draggingBand) })
                             .frame(width: 24, height: 110)
+                            .disabled(!band.type.usesGain)
                         Text(label)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .fixedSize()
                             .accessibilityHidden(true)
                     }
                     .frame(maxWidth: .infinity)
+                    .help("\(band.type.label), \(label), \(SoundState.qLabel(band.q))")
                 }
             }
             .disabled(!current.eqEnabled)
+        }
+        .sheet(isPresented: $showingBands) {
+            BandEditorSheet(
+                bands: current.eqBands,
+                onChange: { bands in edit { $0.eqBands = bands } },
+                done: { showingBands = false })
+        }
+    }
+
+    private var nightMode: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Toggle("Night mode", isOn: Binding(
+                get: { current.nightMode },
+                set: { on in
+                    if state.surround != nil {
+                        edit { $0.nightMode = on }
+                    } else {
+                        actions.setEffects(state.effects.settingNightMode(on))
+                    }
+                }))
+                .toggleStyle(.checkbox)
+                .help("Quieter peaks and fuller sound at low volume")
+            Picker("Night mode strength", selection: Binding(
+                get: { current.nightStrength },
+                set: { strength in
+                    if state.surround != nil {
+                        edit { $0.nightStrength = strength }
+                    } else {
+                        actions.setEffects(state.effects.settingNightStrength(strength))
+                    }
+                })) {
+                ForEach(PairSettings.NightStrength.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .font(.callout)
+            .disabled(!current.nightMode)
         }
     }
 

@@ -1,3 +1,5 @@
+import Foundation
+
 /// Everything the Sound sheet shows.
 struct SoundState: Equatable, Sendable {
     typealias Effects = PairSettings.EffectsSettings
@@ -9,22 +11,56 @@ struct SoundState: Equatable, Sendable {
     /// Set in Surround mode: every speaker's effects and the link.
     var surround: SurroundSound?
 
-    /// "80 Hz", "1 kHz": derived from a band's frequency so edits follow.
-    static func bandLabel(freqHz: Float) -> String {
-        if freqHz >= 1000 {
-            let k = Double(freqHz) / 1000
-            let text = k == k.rounded() ? String(Int(k)) : String(format: "%.1f", k)
-            return "\(text) kHz"
-        }
-        return "\(Int(freqHz.rounded())) Hz"
+    typealias Band = PairSettings.SideEffects.Band
+
+    static let gainRange: ClosedRange<Float> = PairSettings.SideEffects.gainRange
+
+    /// "80 Hz", "1 kHz", "12.5 kHz".
+    static func frequencyLabel(_ hz: Float) -> String {
+        if hz < 1000 { return "\(Int(hz.rounded())) Hz" }
+        let k = (Double(hz) / 100).rounded() / 10
+        return "\(k.formatted(.number.precision(.fractionLength(0...1)))) kHz"
     }
 
-    /// "+3 dB", "0 dB", "-2 dB".
-    static func gainText(_ db: Float) -> String {
-        let n = Int(db.rounded())
-        return n > 0 ? "+\(n) dB" : "\(n) dB"
+    /// "Q 0.7", "Q 1", "Q 2.25".
+    static func qLabel(_ q: Float) -> String {
+        "Q \(Double(q).formatted(.number.precision(.fractionLength(0...2))))"
     }
-    static let gainRange: ClosedRange<Float> = -12...12
+
+    /// "+3 dB", "0 dB", "-3 dB".
+    static func gainLabel(_ db: Float) -> String {
+        let v = Int(db.rounded())
+        return v > 0 ? "+\(v) dB" : "\(v) dB"
+    }
+
+    /// A new peak band in the widest gap (on a log scale) between the
+    /// existing bands and the ends of the range, kept in frequency order.
+    /// Unchanged at the band limit.
+    static func addingBand(to bands: [Band]) -> [Band] {
+        guard bands.count < PairSettings.SideEffects.maxBands else { return bands }
+        let range = PairSettings.SideEffects.freqRange
+        let edges = [range.lowerBound] + bands.map(\.freqHz).sorted() + [range.upperBound]
+        var best = (lo: edges[0], hi: edges[1])
+        for i in 1..<edges.count where log(edges[i] / edges[i - 1]) > log(best.hi / best.lo) {
+            best = (edges[i - 1], edges[i])
+        }
+        let hz = (sqrt(best.lo * best.hi)).rounded()
+        var out = bands
+        let at = out.firstIndex { $0.freqHz > hz } ?? out.count
+        out.insert(Band(freqHz: hz), at: at)
+        return out
+    }
+
+    /// Bands with one removed; the last band cannot be removed.
+    static func removingBand(at index: Int, from bands: [Band]) -> [Band] {
+        guard bands.count > 1, bands.indices.contains(index) else { return bands }
+        var out = bands
+        out.remove(at: index)
+        return out
+    }
+
+    static func bandLabel(freqHz: Float) -> String { frequencyLabel(freqHz) }
+    static func gainText(_ db: Float) -> String { gainLabel(db) }
 
     /// The preset the settings match, or nil when they have been edited.
     var preset: PairSettings.Preset? {
