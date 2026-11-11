@@ -47,7 +47,8 @@ extension AppModel {
                 let (outcome, used) = await self.calibration.runAdjusting(
                     kernelRate: rate, label: "pair\(k + 1)",
                     names: (self.calibrationLabel(uid: risingUID), self.calibrationLabel(uid: fallingUID)),
-                    gains: ChirpGains(rising: chirpGains[risingUID] ?? 1, falling: chirpGains[fallingUID] ?? 1),
+                    gains: ChirpGains(rising: chirpGains[risingUID] ?? self.calibration.startGain,
+                                      falling: chirpGains[fallingUID] ?? self.calibration.startGain),
                     setGains: { engine.calibrationChirpGains = $0 },
                     onRetry: { self.calibrationStatus = .adjustingVolume },
                     setSilent: { engine.muted = $0 || wasMuted }) { on in

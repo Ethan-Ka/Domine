@@ -99,6 +99,8 @@ void domine_surround_set_mono(DomineSurround *s, int on);
 /// of silence, so speakers do not power off. Same behaviour as
 /// domine_kernel_set_keep_alive. Off by default.
 void domine_surround_set_keep_alive(DomineSurround *s, int on);
+/// Same as domine_kernel_set_keep_alive_params, with the same limits and defaults.
+void domine_surround_set_keep_alive_params(DomineSurround *s, double holdSeconds, double frequencyHz, double amplitude);
 /// Surround level 0...2, default 0.7 (non-finite is 0). Up to 1 it scales the
 /// ambience sources. Above 1 the ambience gains are times the level and L and
 /// R also play at -REAR_AZ and +REAR_AZ times (level - 1) ("rear fill"), with

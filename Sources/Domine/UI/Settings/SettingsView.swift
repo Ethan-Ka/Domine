@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Content for the SwiftUI `Settings` scene: General and Exclusions tabs.
+/// Content for the SwiftUI `Settings` scene: General, Exclusions and Advanced tabs.
 struct SettingsView: View {
     @Binding var general: GeneralSettingsState
     @Binding var exclusions: ExclusionsState
@@ -10,6 +10,10 @@ struct SettingsView: View {
     /// Nil hides the update checkbox (updates are off for this build).
     var automaticUpdates: Binding<Bool>?
     var exclusionsActions = ExclusionsActions()
+    /// Nil hides the Advanced tab (previews and render tests).
+    var advanced: Binding<AdvancedSettings>?
+    var clockChoices: [AdvancedClockChoice] = []
+    var restoreAdvancedDefaults: () -> Void = {}
 
     var body: some View {
         TabView {
@@ -18,6 +22,11 @@ struct SettingsView: View {
                 .tabItem { Label("General", systemImage: "gearshape") }
             ExclusionsView(state: $exclusions, actions: exclusionsActions)
                 .tabItem { Label("Exclusions", systemImage: "nosign") }
+            if let advanced {
+                AdvancedSettingsView(settings: advanced, clockChoices: clockChoices,
+                                     restoreDefaults: restoreAdvancedDefaults)
+                    .tabItem { Label("Advanced", systemImage: "slider.horizontal.3") }
+            }
         }
     }
 }

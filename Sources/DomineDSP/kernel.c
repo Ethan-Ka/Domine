@@ -28,9 +28,9 @@
 _Static_assert(sizeof(DomineKernelStats) % sizeof(uint64_t) == 0, "stats must pack into whole words");
 
 #define KEEP_ALIVE_THRESHOLD 1.0e-4f // -80 dBFS
-#define KEEP_ALIVE_AMPLITUDE 1.0e-3  // -60 dBFS
-#define KEEP_ALIVE_HZ 15.0
-#define KEEP_ALIVE_HOLD_S 2.0
+#define KEEP_ALIVE_AMPLITUDE 1.0e-3  // -60 dBFS, default
+#define KEEP_ALIVE_HZ 15.0           // default
+#define KEEP_ALIVE_HOLD_S 2.0        // default
 #define KEEP_ALIVE_FADE_IN_S 0.05
 #define KEEP_ALIVE_FADE_OUT_S 0.01
 // Volume boost (SPEC 4a, above 100%): limiter ceiling (-1 dBFS) and release.
@@ -53,6 +53,9 @@ struct DomineKernel {
     _Atomic int toneSide;
     _Atomic int muted;
     _Atomic int keepAlive;
+    _Atomic uint64_t kaHoldBits; // doubles: idle seconds, tone Hz, amplitude
+    _Atomic uint64_t kaHzBits;
+    _Atomic uint64_t kaAmpBits;
     _Atomic int clickTest; // 0 off, 1 clicks, 2 chirps, 3 chirps swapped
     _Atomic uint32_t chirpGainABits; // calibration chirp gains, 0...1
     _Atomic uint32_t chirpGainBBits;
@@ -171,6 +174,25 @@ static inline float bits_float(uint32_t u) {
     float f;
     memcpy(&f, &u, sizeof f);
     return f;
+}
+
+static inline uint64_t double_bits(double d) {
+    uint64_t u;
+    memcpy(&u, &d, sizeof u);
+    return u;
+}
+
+static inline double bits_double(uint64_t u) {
+    double d;
+    memcpy(&d, &u, sizeof d);
+    return d;
+}
+
+// Keep-alive parameters (SPEC 4, Advanced settings). Each value is clamped;
+// a non-finite value takes the default.
+static inline double ka_clamp(double v, double lo, double hi, double fallback) {
+    if (!isfinite(v)) return fallback;
+    return v < lo ? lo : v > hi ? hi : v;
 }
 
 // Trim gains only ever attenuate: Domine never adds gain (SPEC section 4,
@@ -330,6 +352,9 @@ DomineKernel *domine_kernel_create(double sampleRate, uint32_t maxFrames) {
     if (k->chirpLength < 2) k->chirpLength = 2;
     if (k->clickPeriod <= k->chirpLength) k->clickPeriod = k->chirpLength + 1;
     atomic_init(&k->keepAlive, 0);
+    atomic_init(&k->kaHoldBits, double_bits(KEEP_ALIVE_HOLD_S));
+    atomic_init(&k->kaHzBits, double_bits(KEEP_ALIVE_HZ));
+    atomic_init(&k->kaAmpBits, double_bits(KEEP_ALIVE_AMPLITUDE));
     atomic_init(&k->clickTest, 0);
     atomic_init(&k->chirpGainABits, float_bits(1.0f));
     atomic_init(&k->chirpGainBBits, float_bits(1.0f));
@@ -445,6 +470,16 @@ void domine_kernel_set_compressor(DomineKernel *k, int position, const DomineCom
 void domine_kernel_set_keep_alive(DomineKernel *k, int on) {
     if (k == NULL) return;
     atomic_store_explicit(&k->keepAlive, on != 0, memory_order_relaxed);
+}
+
+void domine_kernel_set_keep_alive_params(DomineKernel *k, double holdSeconds, double frequencyHz, double amplitude) {
+    if (k == NULL) return;
+    atomic_store_explicit(&k->kaHoldBits, double_bits(ka_clamp(holdSeconds, DOMINE_KEEP_ALIVE_MIN_HOLD_S,
+        DOMINE_KEEP_ALIVE_MAX_HOLD_S, KEEP_ALIVE_HOLD_S)), memory_order_relaxed);
+    atomic_store_explicit(&k->kaHzBits, double_bits(ka_clamp(frequencyHz, DOMINE_KEEP_ALIVE_MIN_HZ,
+        DOMINE_KEEP_ALIVE_MAX_HZ, KEEP_ALIVE_HZ)), memory_order_relaxed);
+    atomic_store_explicit(&k->kaAmpBits, double_bits(ka_clamp(amplitude, DOMINE_KEEP_ALIVE_MIN_AMPLITUDE,
+        DOMINE_KEEP_ALIVE_MAX_AMPLITUDE, KEEP_ALIVE_AMPLITUDE)), memory_order_relaxed);
 }
 
 void domine_kernel_set_muted(DomineKernel *k, int muted) {
@@ -669,6 +704,9 @@ static RenderResult render(DomineKernel *k,
     const float chirpGainA = bits_float(atomic_load_explicit(&k->chirpGainABits, memory_order_relaxed));
     const float chirpGainB = bits_float(atomic_load_explicit(&k->chirpGainBBits, memory_order_relaxed));
     const int keepAlive = atomic_load_explicit(&k->keepAlive, memory_order_relaxed);
+    const double kaHold = bits_double(atomic_load_explicit(&k->kaHoldBits, memory_order_relaxed));
+    const double kaHz = bits_double(atomic_load_explicit(&k->kaHzBits, memory_order_relaxed));
+    const double kaAmp = bits_double(atomic_load_explicit(&k->kaAmpBits, memory_order_relaxed));
 
     const uint32_t delayA = delay < 0 ? (uint32_t)(-delay) : 0;
     const uint32_t delayB = delay > 0 ? (uint32_t)delay : 0;
@@ -861,13 +899,13 @@ static RenderResult render(DomineKernel *k,
             else if (k->toneLevel > toneTarget) k->toneLevel--;
         }
 
-        // Keep-alive: a 15 Hz sine at -60 dBFS after 2 s of silence, so
+        // Keep-alive: a 15 Hz sine at -60 dBFS after 2 s of silence (by default), so
         // speakers do not power off. Fades in over 50 ms, out over 10 ms.
         // Absent while muted or while a tone, click or chirp is playing.
         if (keepAlive || k->kaLevel > 0.0f) {
             const int quiet = keepAlive && !muted && toneSide == 0 && k->playingToneSide == 0
                 && clickTest == 0 && k->clickLevel == 0 && k->chirpLevel == 0;
-            const uint32_t hold = (uint32_t)lround(k->sampleRate * KEEP_ALIVE_HOLD_S);
+            const uint32_t hold = (uint32_t)lround(k->sampleRate * kaHold);
             if (quiet && k->kaSilent > hold) { // counted this frame, so > waits the full hold
                 k->kaLevel += (float)(1.0 / (k->sampleRate * KEEP_ALIVE_FADE_IN_S));
                 if (k->kaLevel > 1.0f) k->kaLevel = 1.0f;
@@ -876,11 +914,11 @@ static RenderResult render(DomineKernel *k,
                 if (k->kaLevel < 0.0f) k->kaLevel = 0.0f;
             }
             if (k->kaLevel > 0.0f) {
-                const float ka = (float)(KEEP_ALIVE_AMPLITUDE * sin(2.0 * M_PI * k->kaPhase)) * k->kaLevel;
+                const float ka = (float)(kaAmp * sin(2.0 * M_PI * k->kaPhase)) * k->kaLevel;
                 outA += ka;
                 outB += ka;
             }
-            k->kaPhase += KEEP_ALIVE_HZ / k->sampleRate;
+            k->kaPhase += kaHz / k->sampleRate;
             if (k->kaPhase >= 1.0) k->kaPhase -= 1.0;
         }
 

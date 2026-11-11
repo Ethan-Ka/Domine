@@ -116,6 +116,12 @@ final class AppModel {
     var exclusionsSettings: ExclusionsState {
         didSet { exclusionsDidChange(from: oldValue) }
     }
+    /// Settings > Advanced. Edits are written to `store` (AppModel+Advanced).
+    var advancedSettings: AdvancedSettings {
+        didSet { advancedSettingsDidChange(from: oldValue) }
+    }
+    /// The rebuild after a new clock speaker, so tests can wait for it.
+    @ObservationIgnored var clockChangeTask: Task<Void, Never>?
     @ObservationIgnored let services: SystemServices
     /// The login item waits for approval in System Settings. Re-read with
     /// Accessibility trust in `refreshSystemStatus`.
@@ -209,6 +215,7 @@ final class AppModel {
         showsWelcome = !store.hasCompletedWelcome
         generalSettings = Self.makeGeneralSettings(store: store, services: services)
         exclusionsSettings = Self.makeExclusionsSettings(store: store, services: services)
+        advancedSettings = store.advanced
         loginItemNeedsApproval = services.launchAtLoginRequiresApproval()
         leftUID = store.lastLeftUID
         rightUID = store.lastRightUID
@@ -226,6 +233,7 @@ final class AppModel {
         volumeLink.onExternalChange = { [weak self] volume in self?.adoptHardwareVolume(volume) }
         engine.onRoutingEnded = { [weak self] in self?.engineEndedRouting() }
         engine.keepAlive = store.keepSpeakersAwake
+        applyAdvancedSettings()
         let engine = engine
         exclusionResolver.onChange = { [weak self] processes in
             self?.outputRestorer.setExclusionsActive(!processes.isEmpty)
@@ -471,7 +479,7 @@ final class AppModel {
 
     /// Surround's kernel has no boost, so its master stops at 100%.
     var maxMasterVolume: Float {
-        routingMode == .surround ? 1 : PairSettings.maxMasterVolume
+        routingMode == .surround ? 1 : min(Float(advancedSettings.maxVolume), PairSettings.maxMasterVolume)
     }
 
     /// Shows a volume read from the speakers as the master value, without

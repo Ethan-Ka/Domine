@@ -43,6 +43,14 @@ final class Engine {
     /// Inaudible tone during silence so speakers do not power off. Pushed to
     /// whichever kernel is running, and to the next start.
     var keepAlive = true { didSet { if keepAlive != oldValue { applyControls() } } }
+    /// Keep-alive idle time, frequency and level (Settings > Advanced).
+    var keepAliveParams = KeepAliveParams() { didSet { if keepAliveParams != oldValue { applyControls() } } }
+    /// The speaker that clocks the aggregate, by UID; nil or a speaker not in
+    /// the route is the first present speaker. Used by the next build;
+    /// `setClockSpeaker` also rebuilds a running route.
+    var clockSpeakerUID: String?
+    /// The clock UID of the aggregate built last.
+    private(set) var builtClockUID: String?
     var testTone: TestTone = .off { didSet { applyControls() } }
     /// Clicks on both speakers through the delay line, to line them up by
     /// ear. Every stop turns it off.
@@ -593,8 +601,8 @@ final class Engine {
     /// that is not in the aggregate falls back to that speaker.
     private func createAggregate(_ present: [SubDevice]) throws(EngineError) {
         guard let tap = resources.tap, !present.isEmpty else { throw .kernelUnavailable }
-        var clock = AggregateBuilder.clock
-        if case .device(let uid) = clock, !present.contains(where: { $0.uid == uid }) { clock = .leftSpeaker }
+        let clock = aggregateClock(present: present.map(\.uid))
+        builtClockUID = Self.clockUID(clock, present: present.map(\.uid))
         let description = AggregateBuilder.description(
             outputUIDs: present.map(\.uid), tapUID: tap.uid,
             appTapUIDs: resources.appTaps.map(\.tap.uid), clock: clock)
@@ -997,6 +1005,48 @@ final class Engine {
         }
     }
 
+    // MARK: - Clock speaker (Settings > Advanced)
+
+    /// The clock for an aggregate of `present` (UIDs, main sub-device first):
+    /// the chosen speaker when it is present, else the first.
+    func aggregateClock(present: [String]) -> AggregateClock {
+        guard let uid = clockSpeakerUID, uid != present.first, present.contains(uid) else { return .leftSpeaker }
+        return .device(uid: uid)
+    }
+
+    static func clockUID(_ clock: AggregateClock, present: [String]) -> String? {
+        if case .device(let uid) = clock { return uid }
+        return present.first
+    }
+
+    /// The UIDs in the running aggregate, main sub-device first.
+    private var presentRouteUIDs: [String] {
+        if let route = surroundRoute {
+            let ids = resources.surroundIDs
+            return route.indices.filter { $0 < ids.count && ids[$0] != nil }.map { route[$0] }
+        }
+        guard let speakers else { return [] }
+        return [resources.speakerIDs.a.map { _ in speakers.left },
+                resources.speakerIDs.b.map { _ in speakers.right }].compactMap { $0 }
+    }
+
+    /// Sets the clock speaker. While routing, rebuilds once if the
+    /// aggregate's clock would change.
+    func setClockSpeaker(_ uid: String?) async {
+        guard uid != clockSpeakerUID else { return }
+        clockSpeakerUID = uid
+        guard state.isRouting else { return }
+        let present = presentRouteUIDs
+        let wanted = Self.clockUID(aggregateClock(present: present), present: present)
+        guard wanted != nil, wanted != builtClockUID else { return }
+        Self.log.info("Clock speaker changed; rebuilding")
+        if let route = surroundRoute {
+            await rebuildSurround(uids: route, ids: resources.surroundIDs)
+        } else if let speakers {
+            await rebuild(uidA: speakers.left, uidB: speakers.right, ids: resources.speakerIDs)
+        }
+    }
+
     private func rebuildForTapChange() async {
         // A build since the change (a restart or another rebuild) already made these taps.
         guard state.isRouting, resources.appTapSignature != Self.appTapSignature(appTapRequests) else { return }
@@ -1275,6 +1325,8 @@ final class Engine {
         if let surround = resources.surround { return applySurroundControls(surround) }
         guard let kernel = resources.kernel else { return }
         domine_kernel_set_keep_alive(kernel, keepAlive ? 1 : 0)
+        domine_kernel_set_keep_alive_params(kernel, keepAliveParams.holdSeconds, keepAliveParams.frequencyHz,
+                                            keepAliveParams.amplitude)
         domine_kernel_set_mode(kernel, monoPerSpeaker ? 1 : 0, swapSides ? 1 : 0, kernelMonoFallback ? 1 : 0)
         domine_kernel_set_test_tone(kernel, testTone.rawValue)
         let chirpGains = calibrationChirpGains
@@ -1481,6 +1533,8 @@ extension Engine {
     /// and mute. While the demo plays, rotation and orbit are 0 (SPEC 14.3).
     fileprivate func applySurroundControls(_ surround: OpaquePointer) {
         domine_surround_set_keep_alive(surround, keepAlive ? 1 : 0)
+        domine_surround_set_keep_alive_params(surround, keepAliveParams.holdSeconds, keepAliveParams.frequencyHz,
+                                              keepAliveParams.amplitude)
         let entries = surroundEntries()
         let count = entries.count
         guard count > 0 else { return }

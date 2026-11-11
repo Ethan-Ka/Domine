@@ -26,7 +26,8 @@ extension AppModel {
             // Two recordings with the chirps swapped: the same speaker reads a
             // few dB louder through the rising template, so each speaker's
             // level is the mean of its rising and falling reading (SPEC 12).
-            var gains = ChirpGains()
+            let start = self.calibration.startGain
+            var gains = ChirpGains(rising: start, falling: start)
             var results: [(offset: Double, levels: ChirpLevels?)] = []
             for swapped in [false, true] {
                 engine.calibrationChirpsSwapped = swapped
