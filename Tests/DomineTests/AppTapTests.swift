@@ -62,6 +62,24 @@ struct AppTapTests {
         engine.stop()
     }
 
+    @Test func restartWithinTheDebounceDoesNotRebuildAgain() async {
+        let engine = await startedEngine([AppTapRequest(key: "com.a", processes: [7], gain: 0.5)])
+        engine.appTapDebounce = .milliseconds(200)
+        let built = aggregates()
+        engine.setAppTaps([
+            AppTapRequest(key: "com.a", processes: [7], gain: 0.5),
+            AppTapRequest(key: "com.b", processes: [9], gain: 0.5),
+        ])
+        engine.stop()
+        await engine.start(left: Self.gripA.uid, right: Self.gripB.uid)
+        #expect(aggregates() == built + 1)
+        await engine.appTapRebuild?.value
+        // The restart already built the new set of taps.
+        #expect(aggregates() == built + 1)
+        #expect(engine.state == .running)
+        engine.stop()
+    }
+
     @Test func capsAtSevenAppTaps() async {
         let requests = (0..<10).map { AppTapRequest(key: "com.app\($0)", processes: [AudioObjectID(10 + $0)], gain: 0.5) }
         let engine = await startedEngine(requests)

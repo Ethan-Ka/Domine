@@ -207,6 +207,8 @@ final class Engine {
         var tap: ProcessTap?
         /// Per-app taps in aggregate order, by app key.
         var appTaps: [(key: String, tap: ProcessTap)] = []
+        /// `appTapSignature` of the requests the app taps were built from.
+        var appTapSignature: [[String]] = []
         var aggregate: AudioObjectID?
         var kernel: OpaquePointer?
         var surround: OpaquePointer?
@@ -537,6 +539,9 @@ final class Engine {
             }
         }
         resources.tapFormat = format
+        // The default output the tap follows, recorded now so a format check
+        // during the rest of the build compares against it.
+        resources.defaultOutputUID = currentDefaultOutputUID()
         try createAppTaps()
         return true
     }
@@ -553,6 +558,12 @@ final class Engine {
             let tap = try taps.createApp(processes: request.processes)
             resources.appTaps.append((request.key, tap))
         }
+        resources.appTapSignature = Self.appTapSignature(appTapRequests)
+    }
+
+    /// What decides the per-app taps: each app's key and processes, not its gain.
+    private static func appTapSignature(_ requests: [AppTapRequest]) -> [[String]] {
+        requests.map { [$0.key] + $0.processes.map(String.init) }
     }
 
     /// The first present speaker is the main sub-device. A clock device
@@ -757,7 +768,6 @@ final class Engine {
     /// Re-checks the tap format when the default output or a rate changes,
     /// and rebuilds if what the tap delivers changed (SPEC section 7).
     private func watchFormat() {
-        resources.defaultOutputUID = currentDefaultOutputUID()
         var properties: [HALProperty] = [.defaultOutputDevice]
         if let aggregate = resources.aggregate { properties.append(.nominalSampleRate(aggregate)) }
         if let id = try? hal.defaultOutputDevice(), id != kAudioObjectUnknown {
@@ -837,13 +847,9 @@ final class Engine {
             return true
         }
         guard let speakers else { return false }
-        if state != .running || isSingleSpeaker {
-            // Mono fallback cannot go through start, which needs both speakers.
-            await rebuild(uidA: speakers.left, uidB: speakers.right, ids: resources.speakerIDs)
-            return true
-        }
-        halt()
-        await start(left: speakers.left, right: speakers.right)
+        // A rebuild fades out and in, and a failure ends routing through
+        // `onRoutingEnded` so the caller restores the output.
+        await rebuild(uidA: speakers.left, uidB: speakers.right, ids: resources.speakerIDs)
         return true
     }
 
@@ -899,8 +905,7 @@ final class Engine {
     /// rebuild; a changed set of apps or processes rebuilds after `appTapDebounce`.
     func setAppTaps(_ requests: [AppTapRequest]) {
         let new = Array(requests.sorted { $0.key < $1.key }.prefix(Self.maxAppTaps))
-        let changed = new.map { [$0.key] + $0.processes.map(String.init) }
-            != appTapRequests.map { [$0.key] + $0.processes.map(String.init) }
+        let changed = Self.appTapSignature(new) != Self.appTapSignature(appTapRequests)
         appTapRequests = new
         applyTapGains()
         guard changed, state.isRouting else { return }
@@ -914,7 +919,8 @@ final class Engine {
     }
 
     private func rebuildForTapChange() async {
-        guard state.isRouting else { return }
+        // A build since the change (a restart or another rebuild) already made these taps.
+        guard state.isRouting, resources.appTapSignature != Self.appTapSignature(appTapRequests) else { return }
         Self.log.info("App taps changed to \(self.appTapRequests.count, privacy: .public); rebuilding")
         if let route = surroundRoute {
             await rebuildSurround(uids: route, ids: resources.surroundIDs)
