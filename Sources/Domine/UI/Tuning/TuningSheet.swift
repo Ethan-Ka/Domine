@@ -20,6 +20,9 @@ struct TuningSheet: View {
                 GroupBox { timing.padding(2) }
                 GroupBox { level.padding(2) }
             }
+            if !state.speakerRoles.isEmpty {
+                GroupBox { roles.padding(2) }
+            }
             demo
             HStack {
                 Button("Reset", action: reset)
@@ -134,8 +137,9 @@ struct TuningSheet: View {
     /// Level rows also carry the speaker volume line.
     private static let surroundLevelRowHeight: CGFloat = 72
 
-    private func surroundList<Row: View>(_ rows: [SurroundTuningRow], rowHeight: CGFloat = surroundRowHeight,
-                                         @ViewBuilder row: @escaping (SurroundTuningRow) -> Row) -> some View {
+    private func surroundList<Item: Identifiable, Row: View>(
+        _ rows: [Item], rowHeight: CGFloat = surroundRowHeight,
+        @ViewBuilder row: @escaping (Item) -> Row) -> some View {
         ScrollView {
             VStack(spacing: 8) {
                 ForEach(rows) { item in
@@ -268,6 +272,42 @@ struct TuningSheet: View {
             }
         }
     }
+
+    /// Role per speaker and the shared crossover.
+    private var roles: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("ROLE")
+            surroundList(state.speakerRoles, rowHeight: Self.roleRowHeight) { row in
+                Picker(row.label, selection: Binding(
+                    get: { row.role },
+                    set: { actions.setSpeakerRole(row.uid, $0) })) {
+                    ForEach(SpeakerRole.allCases) { role in
+                        Text(role.title).tag(role)
+                    }
+                }
+                .font(.callout)
+                .accessibilityLabel("\(row.label) role")
+            }
+            VStack(spacing: 4) {
+                readoutRow("Crossover", value: state.crossoverReadout)
+                Slider(
+                    value: Binding(
+                        get: { state.crossoverHz },
+                        set: { actions.setCrossoverHz($0.rounded()) }),
+                    in: Double(SpeakerRole.crossoverRange.lowerBound)...Double(SpeakerRole.crossoverRange.upperBound))
+                    .labelsHidden()
+                    .accessibilityLabel("Crossover")
+                    .accessibilityValue(state.crossoverReadout)
+            }
+            .disabled(!state.isCrossoverEnabled)
+            Text("Satellites skip the deep bass; a subwoofer plays only the bass.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+    }
+
+    private static let roleRowHeight: CGFloat = 30
 
     /// Hardware volume offset for one speaker (SPEC 4a), with a note when
     /// it is held at the speaker's maximum or cannot be raised.

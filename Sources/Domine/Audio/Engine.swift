@@ -91,6 +91,21 @@ final class Engine {
         effectsB = right
         applyControls()
     }
+    /// Role per physical speaker (A, B) and the crossover they share. Like
+    /// the effects, roles stay with the speaker when the sides swap.
+    private(set) var roleA = SpeakerRole.fullRange
+    private(set) var roleB = SpeakerRole.fullRange
+    private(set) var crossoverHz = SpeakerRole.defaultCrossoverHz
+    func setRoles(a: SpeakerRole, b: SpeakerRole, crossoverHz hz: Float) {
+        guard a != roleA || b != roleB || hz != crossoverHz else { return }
+        roleA = a
+        roleB = b
+        crossoverHz = hz
+        applyControls()
+    }
+    /// Test hook: the roles last pushed to the kernel for A and B (full range
+    /// in mono fallback, where one speaker plays everything).
+    private(set) var pushedRoles: [SpeakerRole] = []
     /// Fades the output out (or back in) over 50 ms in the kernel.
     var muted = false { didSet { applyControls() } }
     /// Called when the engine stops routing on its own: both speakers
@@ -163,6 +178,15 @@ final class Engine {
         surroundEffects = effects
         applyControls()
     }
+    /// Role per speaker UID (missing is full range) and the set's crossover.
+    private(set) var surroundRoles: [String: SpeakerRole] = [:]
+    private(set) var surroundCrossoverHz = SpeakerRole.defaultCrossoverHz
+    func setSurroundRoles(_ roles: [String: SpeakerRole], crossoverHz hz: Float) {
+        guard roles != surroundRoles || hz != surroundCrossoverHz else { return }
+        surroundRoles = roles
+        surroundCrossoverHz = hz
+        applyControls()
+    }
     /// The surround speaker playing the chime test tone, by UID; nil is off.
     var surroundTestTone: String? = nil { didSet { if surroundTestTone != oldValue { applyControls() } } }
     /// The UIDs of a surround routing in list order; nil in stereo.
@@ -199,6 +223,7 @@ final class Engine {
     }
     struct PushedSurround: Equatable, Sendable {
         var azimuths: [Float]
+        var roles: [SpeakerRole] = []
         var gains: [Float]
         var delaysMs: [Float]
         var width: Float
@@ -1349,6 +1374,12 @@ final class Engine {
             domine_kernel_set_compressor(kernel, position, &comp)
             pushedEQ.append(eq)
         }
+        // Mono fallback: the one speaker left plays the whole range.
+        pushedRoles = kernelMonoFallback ? [.fullRange, .fullRange] : [roleA, roleB]
+        for (position, role) in pushedRoles.enumerated() {
+            var xo = role.crossoverParams(hz: crossoverHz)
+            domine_kernel_set_crossover(kernel, Int32(position), &xo)
+        }
     }
 }
 
@@ -1505,6 +1536,7 @@ extension Engine {
         let gain: Float
         let offsetMs: Float
         let effects: PairSettings.SideEffects
+        let role: SpeakerRole
     }
 
     /// The stereo demo plays A at -30 and B at +30 (swapped: the other way
@@ -1515,8 +1547,10 @@ extension Engine {
         if stereoDemo, uids.count == 2 {
             let left: Float = swapSides ? 30 : -30
             return [
-                SurroundEntry(azimuth: left, distance: 2, gain: leftGain, offsetMs: max(-delayMs, 0), effects: effectsA),
-                SurroundEntry(azimuth: -left, distance: 2, gain: rightGain, offsetMs: max(delayMs, 0), effects: effectsB),
+                SurroundEntry(azimuth: left, distance: 2, gain: leftGain, offsetMs: max(-delayMs, 0), effects: effectsA,
+                              role: roleA),
+                SurroundEntry(azimuth: -left, distance: 2, gain: rightGain, offsetMs: max(delayMs, 0), effects: effectsB,
+                              role: roleB),
             ]
         }
         return uids.map { uid in
@@ -1524,7 +1558,8 @@ extension Engine {
             return SurroundEntry(
                 azimuth: speaker?.azimuth ?? 0, distance: speaker?.distance ?? 2,
                 gain: surroundGains[uid] ?? 1, offsetMs: surroundDelaysMs[uid] ?? 0,
-                effects: surroundEffects[uid] ?? PairSettings.SideEffects())
+                effects: surroundEffects[uid] ?? PairSettings.SideEffects(),
+                role: surroundRoles[uid] ?? .fullRange)
         }
     }
 
@@ -1564,6 +1599,13 @@ extension Engine {
         let levelMeasured = surroundLevelMeasured && !stereoDemo
         let gains = (0..<count).map { min(max(entries[$0].gain, 0), 1) * (levelMeasured ? 1 : distanceGain[$0]) }
 
+        // Roles apply only while some present speaker still plays the
+        // panned field and more than one speaker is present; otherwise every
+        // speaker plays the whole range.
+        let panned = presentIndexes.filter { entries[$0].role != .subwoofer }
+        let rolesApply = presentIndexes.count > 1 && !panned.isEmpty
+        let roles = entries.map { rolesApply ? $0.role : SpeakerRole.fullRange }
+        let hz = stereoDemo ? crossoverHz : surroundCrossoverHz
         let azimuths = entries.map(\.azimuth)
         domine_surround_set_speakers(surround, UInt32(count), azimuths)
         for index in 0..<count {
@@ -1577,6 +1619,8 @@ extension Engine {
             domine_surround_set_eq(surround, speaker, &eq)
             domine_surround_set_bass(surround, speaker, &bass)
             domine_surround_set_compressor(surround, speaker, &comp)
+            var xo = roles[index].crossoverParams(hz: hz)
+            domine_surround_set_crossover(surround, speaker, &xo)
         }
         let width: Float = stereoDemo ? 30 : surroundWidth
         let demoField = demoRequested || stereoDemo
@@ -1600,7 +1644,7 @@ extension Engine {
         }
         domine_surround_set_calibration_pair(surround, Int32(pair?.rising ?? -1), Int32(pair?.falling ?? -1))
         domine_surround_set_muted(surround, muted || fadingOut ? 1 : 0)
-        pushedSurround = PushedSurround(azimuths: azimuths, gains: gains, delaysMs: totals,
+        pushedSurround = PushedSurround(azimuths: azimuths, roles: roles, gains: gains, delaysMs: totals,
                                         width: width, rotation: fieldRotation, orbitRate: orbit)
     }
 

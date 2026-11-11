@@ -119,6 +119,8 @@ extension AppModel {
         } else {
             state.speakerVolumes = stereoSpeakerVolumeRows
         }
+        state.speakerRoles = speakerRoleRows
+        state.crossoverHz = Double(speakerCrossoverHz)
         return state
     }
 
@@ -130,6 +132,8 @@ extension AppModel {
         actions.setSpeakerVolumeOffset = { [weak self] uid, db in
             self?.setSpeakerVolumeOffset(uid: uid, db: Float(db.rounded()))
         }
+        actions.setSpeakerRole = { [weak self] uid, role in self?.setSpeakerRole(uid: uid, role) }
+        actions.setCrossoverHz = { [weak self] hz in self?.setSpeakerCrossover(hz: Float(hz)) }
         actions.setSurroundOffset = { [weak self] uid, ms in
             self?.setSurroundOffset(uid: uid, ms: Float(ms.rounded()))
         }

@@ -236,8 +236,9 @@ Built-in effects run inside the kernel, per output position, so position A and p
 1. EQ (five bands: low shelf, three peaking, high shelf; each +-12 dB, with frequency and Q).
 2. Bass enhancer.
 3. Compressor/limiter.
-4. Trim gain (section 4a).
-5. Delay (section 4).
+4. Role crossover (`DomineCrossover.h`): Full range (default, skipped, bit-exact), Satellite (LR4 high-pass) or Subwoofer (LR4 low-pass, fed the mono sum (L + R) / 2 in place of its side). Two cascaded Butterworth biquads, 24 dB/oct; low-pass plus high-pass sums flat. The crossover, 40 to 200 Hz (default 80), is shared by the setup. Role changes crossfade over 10 ms. Stored as `leftRole`, `rightRole`, `crossoverHz` in the pair settings (swapping the stored pair swaps the roles) and as `roles` by UID plus `crossoverHz` in the surround record; missing is Full range. In Surround a subwoofer is left out of VBAP, so the other speakers pan as if it were absent. Single mode, mono fallback, and a surround build with one present speaker or no panned speaker play every speaker full range. Set in Sync & Balance (ROLE group).
+5. Trim gain (section 4a).
+6. Delay (section 4).
 
 The chain runs on the program source right after the side mapping (swap, mono fallback) and before the click source and the delay line, so it works on one continuous stream per position, test signals are never colored by it, and changing the delay does not disturb filter state. The calibration chirp and test tone bypass it.
 

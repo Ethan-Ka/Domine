@@ -122,7 +122,7 @@ extension AppModel {
     }
 
     /// Delay, range, and balance back to defaults. Master volume is not part
-    /// of the sheet, and the speaker volume offsets describe the speakers.
+    /// of the sheet, and the speaker volume offsets and roles describe the speakers.
     func resetTuning() {
         calibrationUndo = nil
         updatePairSettings { s in
@@ -131,6 +131,10 @@ extension AppModel {
             s.masterVolume = old.masterVolume
             s.leftVolumeOffsetDb = old.leftVolumeOffsetDb
             s.rightVolumeOffsetDb = old.rightVolumeOffsetDb
+            // Roles describe the speakers, like their volume offsets.
+            s.leftRole = old.leftRole
+            s.rightRole = old.rightRole
+            s.crossoverHz = old.crossoverHz
         }
     }
 

@@ -100,6 +100,13 @@ struct DomineSurround {
     DomineEQ *eq[NSPK];
     DomineBass *bass[NSPK];
     DomineCompressor *comp[NSPK];
+    // Role and crossover per speaker, after the effects. Subwoofers are left
+    // out of panning and fed the mono sum; subMix crossfades a speaker's
+    // input between its pan mix (0) and the mono sum (subMixLength).
+    DomineCrossover *xo[NSPK];
+    _Atomic int role[NSPK];
+    uint32_t subMix[NSPK];
+    uint32_t subMixLength;
     DomineSpatial *spatial;
     // Demo, render side.
     DomineDemo demo;
@@ -290,6 +297,8 @@ DomineSurround *domine_surround_create(double sampleRate, uint32_t maxFrames) {
         s->eq[i] = domine_eq_create(sampleRate);
         s->bass[i] = domine_bass_create(sampleRate);
         s->comp[i] = domine_compressor_create(sampleRate);
+        s->xo[i] = domine_crossover_create(sampleRate);
+        atomic_init(&s->role[i], DOMINE_ROLE_FULL_RANGE);
         atomic_init(&s->gainBits[i], f2u(1.0f));
         atomic_init(&s->delaySamples[i], 0);
         atomic_init(&s->peakBits[i], 0);
@@ -329,6 +338,10 @@ DomineSurround *domine_surround_create(double sampleRate, uint32_t maxFrames) {
     }
     s->demoSection = DOMINE_DEMO_SECTION_IDLE;
     {
+        const uint32_t n = (uint32_t)lround(sampleRate * DOMINE_CROSSOVER_SMOOTH_MS / 1000.0);
+        s->subMixLength = n > 0 ? n : 1;
+    }
+    {
         const uint32_t toneFade = (uint32_t)lround(sampleRate * DOMINE_TONE_FADE_MS / 1000.0);
         s->toneFadeLength = toneFade > 0 ? toneFade : 1;
         s->tonePhaseStep = 1.0 / sampleRate;
@@ -344,7 +357,7 @@ DomineSurround *domine_surround_create(double sampleRate, uint32_t maxFrames) {
     for (int i = 0; i < NSPK; i++) atomic_init(&s->chirpGainBits[i], f2u(1.0f));
     s->playingPair = CAL_OFF;
     int ok = s->spatial != NULL;
-    for (int i = 0; i < NSPK; i++) ok = ok && s->ring[i] && s->eq[i] && s->bass[i] && s->comp[i];
+    for (int i = 0; i < NSPK; i++) ok = ok && s->ring[i] && s->eq[i] && s->bass[i] && s->comp[i] && s->xo[i];
     if (!ok) { domine_surround_destroy(s); return NULL; }
     const DomineSpatialParams sp = { SPATIAL_AMOUNT_DEFAULT, 15.0f, 5000.0f };
     domine_spatial_set_params(s->spatial, &sp);
@@ -358,6 +371,7 @@ void domine_surround_destroy(DomineSurround *s) {
         if (s->eq[i]) domine_eq_destroy(s->eq[i]);
         if (s->bass[i]) domine_bass_destroy(s->bass[i]);
         if (s->comp[i]) domine_compressor_destroy(s->comp[i]);
+        domine_crossover_destroy(s->xo[i]);
     }
     domine_spatial_destroy(s->spatial);
     free(s);
@@ -445,6 +459,14 @@ void domine_surround_set_bass(DomineSurround *s, uint32_t speaker, const DomineB
 }
 void domine_surround_set_compressor(DomineSurround *s, uint32_t speaker, const DomineCompressorParams *p) {
     if (s != NULL && speaker < NSPK) domine_compressor_set_params(s->comp[speaker], p);
+}
+
+void domine_surround_set_crossover(DomineSurround *s, uint32_t speaker, const DomineCrossoverParams *p) {
+    if (s == NULL || p == NULL || speaker >= NSPK) return;
+    const int role = p->role == DOMINE_ROLE_SATELLITE || p->role == DOMINE_ROLE_SUBWOOFER
+        ? p->role : DOMINE_ROLE_FULL_RANGE;
+    atomic_store_explicit(&s->role[speaker], role, memory_order_relaxed);
+    domine_crossover_set_params(s->xo[speaker], p);
 }
 
 void domine_surround_set_keep_alive(DomineSurround *s, int on) {
@@ -600,8 +622,18 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
         if (!a) oc[k][0].data = NULL;
         if (!b) oc[k][1].data = NULL;
     }
+    // Subwoofers are out of panning: VBAP (and the demo) only sees the
+    // other present speakers, so their gains are as if the subs were absent.
+    uint8_t isSub[NSPK] = { 0 };
+    uint8_t panPresent[NSPK] = { 0 };
+    uint32_t nPan = 0;
+    for (uint32_t k = 0; k < n; k++) {
+        isSub[k] = atomic_load_explicit(&s->role[k], memory_order_relaxed) == DOMINE_ROLE_SUBWOOFER;
+        panPresent[k] = present[k] && !isSub[k];
+        nPan += panPresent[k];
+    }
     PanLayout pan;
-    pan_build(&pan, n, s->raz, present);
+    pan_build(&pan, n, s->raz, panPresent);
 
     // Field: rotation plus orbit phase (end of this call).
     const float width = u2f(atomic_load_explicit(&s->widthBits, memory_order_relaxed));
@@ -619,7 +651,7 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
     memset(gT, 0, sizeof gT);
     const double srcAz[NPROG] = { -(double)width, (double)width,
                                   -(double)DOMINE_SURROUND_REAR_AZ, (double)DOMINE_SURROUND_REAR_AZ };
-    const int nsrc = nPresent >= 2 ? NPROG : 2;
+    const int nsrc = nPan >= 2 ? NPROG : 2;
     for (int src = 0; src < nsrc; src++) pan_source(&pan, srcAz[src] + field, gT[src]);
     // The surround level is part of the ambience gains, so it ramps with the
     // matrix and a lowered level frees headroom for the direct sources.
@@ -686,7 +718,7 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
         s->seenDemoReq = demoReq;
         float az[NSPK];
         uint32_t m = 0;
-        for (uint32_t k = 0; k < n; k++) if (present[k]) az[m++] = s->raz[k];
+        for (uint32_t k = 0; k < n; k++) if (panPresent[k]) az[m++] = s->raz[k];
         domine_demo_reset(&s->demo, s->sampleRate, m, az);
         s->demoPlaying = 1;
         s->demoSection = DOMINE_DEMO_SECTION_ROLL_CALL;
@@ -750,7 +782,7 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
                 if (voices[v].azimuth != voiceAz[v] || voices[v].omni != voiceOmni[v]) {
                     voiceAz[v] = voices[v].azimuth;
                     voiceOmni[v] = voices[v].omni;
-                    demo_voice_gains(&pan, present, nPresent, &voices[v], voiceGain[v]);
+                    demo_voice_gains(&pan, panPresent, nPan, &voices[v], voiceGain[v]);
                 }
                 for (uint32_t k = 0; k < n; k++) demoMix[k] += voiceGain[v][k] * voices[v].sample;
             }
@@ -869,9 +901,20 @@ static void surround_render(DomineSurround *s, InCh inL, InCh inR, const TapSet 
                 if (progAmt != 1.0f) x *= progAmt;
                 x += demoAmt * demoMix[k];
             }
+            // Subwoofer: the mono sum of the program in place of its pan
+            // mix (which is 0, since it is out of panning), crossfaded.
+            if (isSub[k] && s->subMix[k] < s->subMixLength) s->subMix[k]++;
+            else if (!isSub[k] && s->subMix[k] > 0) s->subMix[k]--;
+            if (s->subMix[k] != 0) {
+                float sum = 0.5f * L + 0.5f * R;
+                if (demoActive && progAmt != 1.0f) sum *= progAmt;
+                x = s->subMix[k] == s->subMixLength ? sum
+                    : x + (sum - x) * ((float)s->subMix[k] / (float)s->subMixLength);
+            }
             if (!domine_eq_is_idle(s->eq[k])) domine_eq_process(s->eq[k], &x, 1);
             if (!domine_bass_is_idle(s->bass[k])) domine_bass_process(s->bass[k], &x, 1);
             if (!domine_compressor_is_idle(s->comp[k])) domine_compressor_process(s->comp[k], &x, 1);
+            if (!domine_crossover_is_idle(s->xo[k])) domine_crossover_process(s->xo[k], &x, 1);
             if (clickActive) x = clickKeep == 0.0f ? click : x * clickKeep + click;
 
             GainState *g = &s->gain[k];

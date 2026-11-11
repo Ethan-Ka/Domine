@@ -34,6 +34,14 @@ struct TuningState: Equatable, Sendable {
     var isSurroundTimingMeasured = false
     /// Each speaker's hardware volume offset (SPEC 4a), in row order.
     var speakerVolumes: [SpeakerVolumeRow] = []
+    /// Each speaker's role, in row order. Empty hides the role controls.
+    var speakerRoles: [SpeakerRoleRow] = []
+    /// Crossover every satellite and subwoofer of the setup shares, 40...200 Hz.
+    var crossoverHz: Double = Double(SpeakerRole.defaultCrossoverHz)
+
+    var crossoverReadout: String { SpeakerRole.crossoverReadout(crossoverHz) }
+    /// The crossover slider only matters once a speaker is not full range.
+    var isCrossoverEnabled: Bool { speakerRoles.contains { $0.role != .fullRange } }
 
     func speakerVolume(uid: String) -> SpeakerVolumeRow? {
         speakerVolumes.first { $0.uid == uid }

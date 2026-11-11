@@ -80,6 +80,13 @@ struct DomineKernel {
     DomineEQ *eq[2];
     DomineBass *bass[2];
     DomineCompressor *comp[2];
+    // Role and crossover (DomineCrossover.h), after the effects. The role
+    // atomics pick the subwoofer's mono feed; subMix crossfades a position's
+    // source between its own side (0) and the mono sum (subMixLength).
+    DomineCrossover *xo[2];
+    _Atomic int role[2];
+    uint32_t subMix[2];
+    uint32_t subMixLength;
 
     // Render thread state only.
     float *ringA;
@@ -305,12 +312,18 @@ DomineKernel *domine_kernel_create(double sampleRate, uint32_t maxFrames) {
         k->eq[i] = domine_eq_create(sampleRate);
         k->bass[i] = domine_bass_create(sampleRate);
         k->comp[i] = domine_compressor_create(sampleRate);
-        if (k->eq[i] == NULL || k->bass[i] == NULL || k->comp[i] == NULL) {
+        k->xo[i] = domine_crossover_create(sampleRate);
+        atomic_init(&k->role[i], DOMINE_ROLE_FULL_RANGE);
+        if (k->eq[i] == NULL || k->bass[i] == NULL || k->comp[i] == NULL || k->xo[i] == NULL) {
             domine_kernel_destroy(k);
             return NULL;
         }
     }
     // END EFFECTS BLOCK
+    {
+        const uint32_t n = (uint32_t)lround(sampleRate * DOMINE_CROSSOVER_SMOOTH_MS / 1000.0);
+        k->subMixLength = n > 0 ? n : 1;
+    }
     k->ringMask = ringSize - 1;
     k->maxDelaySamples = (int32_t)(ringSize - 1);
     k->fifoMask = fifoSize - 1;
@@ -379,6 +392,7 @@ void domine_kernel_destroy(DomineKernel *k) {
         domine_eq_destroy(k->eq[i]);
         if (k->bass[i] != NULL) domine_bass_destroy(k->bass[i]);
         domine_compressor_destroy(k->comp[i]);
+        domine_crossover_destroy(k->xo[i]);
     }
     // END EFFECTS BLOCK
     free(k->ringA);
@@ -459,6 +473,14 @@ void domine_kernel_set_eq(DomineKernel *k, int position, const DomineEQParams *p
 void domine_kernel_set_bass(DomineKernel *k, int position, const DomineBassParams *params) {
     if (k == NULL || (position != 0 && position != 1) || params == NULL) return;
     domine_bass_set_params(k->bass[position], params);
+}
+
+void domine_kernel_set_crossover(DomineKernel *k, int position, const DomineCrossoverParams *params) {
+    if (k == NULL || params == NULL || position < 0 || position > 1) return;
+    const int role = params->role == DOMINE_ROLE_SATELLITE || params->role == DOMINE_ROLE_SUBWOOFER
+        ? params->role : DOMINE_ROLE_FULL_RANGE;
+    atomic_store_explicit(&k->role[position], role, memory_order_relaxed);
+    domine_crossover_set_params(k->xo[position], params);
 }
 
 void domine_kernel_set_compressor(DomineKernel *k, int position, const DomineCompressorParams *params) {
@@ -711,6 +733,8 @@ static RenderResult render(DomineKernel *k,
     const uint32_t delayA = delay < 0 ? (uint32_t)(-delay) : 0;
     const uint32_t delayB = delay > 0 ? (uint32_t)delay : 0;
     const int bothChannels = monoPerSpeaker || monoFallback;
+    const int subA = atomic_load_explicit(&k->role[0], memory_order_relaxed) == DOMINE_ROLE_SUBWOOFER;
+    const int subB = atomic_load_explicit(&k->role[1], memory_order_relaxed) == DOMINE_ROLE_SUBWOOFER;
 
     OutChannel a0 = {0}, a1 = {0}, b0 = {0}, b1 = {0};
     const int hasA0 = map_out_channel(out, outAChannelOffset, &a0);
@@ -790,6 +814,21 @@ static RenderResult render(DomineKernel *k,
             srcA = mixA;
             srcB = mixB;
         }
+        // Subwoofer: the mono sum in place of its side, crossfaded over 10 ms.
+        // A full range or satellite position at subMix 0 is untouched.
+        {
+            const float sum = (l + r) * 0.5f;
+            const uint32_t len = k->subMixLength;
+            float *src[2] = { &srcA, &srcB };
+            const int sub[2] = { subA, subB };
+            for (int p = 0; p < 2; p++) {
+                if (sub[p] && k->subMix[p] < len) k->subMix[p]++;
+                else if (!sub[p] && k->subMix[p] > 0) k->subMix[p]--;
+                const uint32_t m = k->subMix[p];
+                if (m == len) *src[p] = sum;
+                else if (m != 0) *src[p] += (sum - *src[p]) * ((float)m / (float)len);
+            }
+        }
 
         // EFFECTS BLOCK (SPEC 5a): per position chain on the program source,
         // after mapping and before the click source, delay line and trim gain.
@@ -800,6 +839,9 @@ static RenderResult render(DomineKernel *k,
         if (!domine_bass_is_idle(k->bass[1])) domine_bass_process(k->bass[1], &srcB, 1);
         if (!domine_compressor_is_idle(k->comp[0])) domine_compressor_process(k->comp[0], &srcA, 1);
         if (!domine_compressor_is_idle(k->comp[1])) domine_compressor_process(k->comp[1], &srcB, 1);
+        // Role crossover last: full range is idle and skipped.
+        if (!domine_crossover_is_idle(k->xo[0])) domine_crossover_process(k->xo[0], &srcA, 1);
+        if (!domine_crossover_is_idle(k->xo[1])) domine_crossover_process(k->xo[1], &srcB, 1);
         // END EFFECTS BLOCK
 
         // Click test: replaces the source before the delay line.

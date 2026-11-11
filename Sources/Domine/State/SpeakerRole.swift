@@ -1,0 +1,47 @@
+import DomineDSP
+
+/// What part of the range a speaker plays (docs/IDEAS.md, customizability 1).
+/// Full range is today's behaviour, bit for bit. A satellite is high-passed
+/// at the crossover; a subwoofer plays the mono sum, low-passed at the
+/// crossover, and in Surround is left out of panning.
+enum SpeakerRole: String, Codable, CaseIterable, Identifiable, Sendable {
+    case fullRange
+    case satellite
+    case subwoofer
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .fullRange: "Full range"
+        case .satellite: "Satellite"
+        case .subwoofer: "Subwoofer"
+        }
+    }
+
+    /// Crossover frequency range and default, shared by every speaker of a setup.
+    static let crossoverRange: ClosedRange<Float> = 40...200
+    static let defaultCrossoverHz: Float = 80
+
+    static func clampCrossover(_ hz: Float) -> Float {
+        hz.isFinite ? min(max(hz, crossoverRange.lowerBound), crossoverRange.upperBound) : defaultCrossoverHz
+    }
+
+    /// "80 Hz".
+    static func crossoverReadout(_ hz: Double) -> String { "\(Int(hz.rounded())) Hz" }
+
+    /// Unknown stored values decode as full range.
+    init(from decoder: any Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = SpeakerRole(rawValue: raw) ?? .fullRange
+    }
+
+    func crossoverParams(hz: Float) -> DomineCrossoverParams {
+        let role: DomineSpeakerRole = switch self {
+        case .fullRange: DOMINE_ROLE_FULL_RANGE
+        case .satellite: DOMINE_ROLE_SATELLITE
+        case .subwoofer: DOMINE_ROLE_SUBWOOFER
+        }
+        return DomineCrossoverParams(role: Int32(role.rawValue), freqHz: Self.clampCrossover(hz))
+    }
+}

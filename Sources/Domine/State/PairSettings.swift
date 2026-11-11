@@ -33,6 +33,11 @@ struct PairSettings: Codable, Equatable, Sendable {
     /// how far that speaker sits above or below the master volume.
     var leftVolumeOffsetDb: Float = 0
     var rightVolumeOffsetDb: Float = 0
+    /// Role of the Front Left and Front Right speaker, and the crossover
+    /// frequency they share, 40...200 Hz.
+    var leftRole: SpeakerRole = .fullRange
+    var rightRole: SpeakerRole = .fullRange
+    var crossoverHz: Float = SpeakerRole.defaultCrossoverHz
 
     /// What the kernel gets: full mix while `sameOnBoth`, else the slider.
     var effectiveCrossfeed: Float { sameOnBoth ? 1 : Float(min(max(crossfeed.isFinite ? crossfeed : 0, 0), 1)) }
@@ -40,7 +45,12 @@ struct PairSettings: Codable, Equatable, Sendable {
     init(delayMs: Float = 0, balance: Float = 0, masterVolume: Float = 0.5,
          effects: EffectsSettings = EffectsSettings(),
          crossfeed: Double = 0, sameOnBoth: Bool = false,
-         leftVolumeOffsetDb: Float = 0, rightVolumeOffsetDb: Float = 0) {
+         leftVolumeOffsetDb: Float = 0, rightVolumeOffsetDb: Float = 0,
+         leftRole: SpeakerRole = .fullRange, rightRole: SpeakerRole = .fullRange,
+         crossoverHz: Float = SpeakerRole.defaultCrossoverHz) {
+        self.leftRole = leftRole
+        self.rightRole = rightRole
+        self.crossoverHz = crossoverHz
         self.leftVolumeOffsetDb = leftVolumeOffsetDb
         self.rightVolumeOffsetDb = rightVolumeOffsetDb
         self.crossfeed = crossfeed
@@ -69,6 +79,8 @@ struct PairSettings: Codable, Equatable, Sendable {
         copy.effects = effects.swapped
         copy.leftVolumeOffsetDb = rightVolumeOffsetDb
         copy.rightVolumeOffsetDb = leftVolumeOffsetDb
+        copy.leftRole = rightRole
+        copy.rightRole = leftRole
         return copy
     }
 
@@ -79,6 +91,7 @@ struct PairSettings: Codable, Equatable, Sendable {
         let offsets = SpeakerVolumeLink.offsetRange
         leftVolumeOffsetDb = Self.clamp(leftVolumeOffsetDb, offsets.lowerBound, offsets.upperBound, fallback: 0)
         rightVolumeOffsetDb = Self.clamp(rightVolumeOffsetDb, offsets.lowerBound, offsets.upperBound, fallback: 0)
+        crossoverHz = SpeakerRole.clampCrossover(crossoverHz)
     }
 
     private static func clamp(_ value: Float, _ low: Float, _ high: Float, fallback: Float) -> Float {
@@ -88,6 +101,7 @@ struct PairSettings: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case delayMs, balance, masterVolume, effects, crossfeed, sameOnBoth
         case leftVolumeOffsetDb, rightVolumeOffsetDb
+        case leftRole, rightRole, crossoverHz
     }
 
     /// Missing or mistyped fields fall back to their defaults one by one,
@@ -103,6 +117,9 @@ struct PairSettings: Codable, Equatable, Sendable {
             crossfeed: (try? c.decodeIfPresent(Double.self, forKey: .crossfeed)) ?? defaults.crossfeed,
             sameOnBoth: (try? c.decodeIfPresent(Bool.self, forKey: .sameOnBoth)) ?? defaults.sameOnBoth,
             leftVolumeOffsetDb: (try? c.decodeIfPresent(Float.self, forKey: .leftVolumeOffsetDb)) ?? 0,
-            rightVolumeOffsetDb: (try? c.decodeIfPresent(Float.self, forKey: .rightVolumeOffsetDb)) ?? 0)
+            rightVolumeOffsetDb: (try? c.decodeIfPresent(Float.self, forKey: .rightVolumeOffsetDb)) ?? 0,
+            leftRole: (try? c.decodeIfPresent(SpeakerRole.self, forKey: .leftRole)) ?? .fullRange,
+            rightRole: (try? c.decodeIfPresent(SpeakerRole.self, forKey: .rightRole)) ?? .fullRange,
+            crossoverHz: (try? c.decodeIfPresent(Float.self, forKey: .crossoverHz)) ?? defaults.crossoverHz)
     }
 }
