@@ -14,13 +14,10 @@ extension AppModel {
         guard calibrationTask == nil else { return }
         stopClickTest()
         calibrationStatus = .listening
+        let session = calibration.beginSession()
         calibrationTask = Task { [weak self] in
             guard let self else { return }
-            self.calibration.beginSession()
-            defer {
-                self.calibrationTask = nil
-                self.finishCalibrationSession()
-            }
+            defer { self.finishCalibrationSession(session) }
             if !self.engine.state.isActive { await self.startRouting() }
             guard !Task.isCancelled else { return }
             guard self.engine.state == .running, let rate = self.engine.kernelSampleRate else {

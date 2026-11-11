@@ -146,6 +146,31 @@ final class CalibrationControllerTests {
         #expect(saved.pairSettings.delayMs == -12)
     }
 
+    /// Cancel, then Calibrate again while the cancelled run is still
+    /// winding down: the old run must not drop the new run's task.
+    @Test func cancelledRunDoesNotEndTheNextOne() async {
+        setUp(offset: 12)
+        var waits = 0
+        let script = script
+        model.calibration.wait = { [unowned self] in
+            script.swapped = model.engine.calibrationChirpsSwapped
+            waits += 1
+            guard waits == 1 else { return }
+            model.cancelCalibration()
+            model.tuningActions.autoCalibrate?()
+        }
+        model.openTuning()
+        model.tuningActions.autoCalibrate?()
+        let first = model.calibrationTask
+        await first?.value
+        let second = model.calibrationTask
+        #expect(second != nil)
+        await second?.value
+        #expect(model.calibrationTask == nil)
+        #expect(model.pairSettings.delayMs == -12)
+        #expect(model.tuningState.calibrationStatus == .done("Right was 12 ms late. Delay set."))
+    }
+
     @Test func leftLateBeyondFiftyMs() async {
         setUp(offset: -120.4)
         await calibrate()

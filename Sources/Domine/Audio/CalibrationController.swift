@@ -228,15 +228,25 @@ final class CalibrationController {
     /// until `endSession` knows whether the run failed.
     private var sessionRecordings: [CalibrationRecordingArchive.Recording] = []
 
-    /// Starts a calibration run (one or more `run` calls).
-    func beginSession() {
+    /// Counts sessions, so a cancelled run that is still winding down
+    /// cannot end the run that replaced it.
+    private(set) var session = 0
+
+    /// Starts a calibration run (one or more `run` calls) and returns its
+    /// number for `endSession`.
+    @discardableResult
+    func beginSession() -> Int {
+        session += 1
         sessionRecordings = []
+        return session
     }
 
     /// Ends the run: a failed run's recordings replace whatever the log
     /// folder held; a successful one empties it; a cancelled one leaves it.
-    /// The files are written off the main actor.
-    func endSession(failed: Bool, cancelled: Bool = false) {
+    /// The files are written off the main actor. A `session` other than the
+    /// latest is ignored.
+    func endSession(failed: Bool, cancelled: Bool = false, session: Int? = nil) {
+        if let session, session != self.session { return }
         let recordings = sessionRecordings
         sessionRecordings = []
         guard !cancelled else { return }
