@@ -182,6 +182,7 @@ extension AppModel {
                 connection: .connected,
                 level: routing ? Double(surroundLevel(uid: speaker.uid)) : 0)
             card.batteryPercent = batteryPercent[speaker.uid]
+            card.isCharging = batteryCharging[speaker.uid]
             return card
         }
     }
@@ -343,6 +344,7 @@ extension AppModel {
             statusText: isMonoFallback ? "Mono fallback" : "Connected", connection: .connected,
             level: Double(level), isMonoFallback: isMonoFallback)
         card.batteryPercent = batteryPercent[uid]
+        card.isCharging = batteryCharging[uid]
         return card
     }
 

@@ -158,6 +158,7 @@ final class AppModel {
     @ObservationIgnored let hal: any AudioHAL
     /// Battery percent by speaker UID; unknown speakers are absent (AppModel+Battery).
     var batteryPercent: [String: Int] = [:]
+    var batteryCharging: [String: Bool] = [:]
     @ObservationIgnored let batteryReader: any BatteryReading
     @ObservationIgnored var batteryTask: Task<Void, Never>?
     /// Follows the Domine virtual output's volume and mute (AppModel+VirtualOutput).

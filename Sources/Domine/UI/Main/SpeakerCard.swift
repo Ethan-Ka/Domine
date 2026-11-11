@@ -3,10 +3,13 @@ import SwiftUI
 /// One position on the stage (docs/mockups/Main.dc.html, Disconnected.dc.html).
 struct SpeakerCard: View {
     var state: SpeakerCardState
+    /// Name, position tag and meter only, for crowded Surround stages.
+    var compact = false
     var onSelect: @MainActor () -> Void = {}
     var onReconnect: @MainActor () -> Void = {}
 
     static let size = StageLayout.cardSize
+    private var frameSize: CGSize { compact ? StageLayout.compactCardSize : Self.size }
 
     var body: some View {
         switch state.connection {
@@ -44,6 +47,31 @@ struct SpeakerCard: View {
     private var isError: Bool { state.connection == .disconnected }
 
     private var card: some View {
+        Group { compact ? AnyView(compactCard) : AnyView(fullCard) }
+    }
+
+    private var compactCard: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 4) {
+                Text(state.title)
+                    .font(.caption.weight(.semibold))
+                Spacer(minLength: 2)
+                Text(state.sideTag)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(isError ? Color.red : Color.accentColor)
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            LevelMeter(level: isError ? 0 : state.level)
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 6)
+        .frame(width: frameSize.width, height: frameSize.height)
+        .background(cardBackground)
+        .contentShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var fullCard: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Image(systemName: "hifispeaker.fill")
@@ -68,7 +96,7 @@ struct SpeakerCard: View {
                             .foregroundStyle(isError ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondary))
                         if let percent = state.batteryPercent {
                             Spacer(minLength: 4)
-                            Image(systemName: Self.batterySymbol(percent))
+                            Image(systemName: state.isCharging == true ? "battery.100.bolt" : Self.batterySymbol(percent))
                             Text("\(percent)%")
                                 .monospacedDigit()
                         }
@@ -95,7 +123,7 @@ struct SpeakerCard: View {
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 12)
-        .frame(width: Self.size.width, height: Self.size.height)
+        .frame(width: frameSize.width, height: frameSize.height)
         .background(cardBackground)
         .contentShape(RoundedRectangle(cornerRadius: 10))
     }
@@ -126,7 +154,7 @@ struct SpeakerCard: View {
                 .font(.subheadline)
         }
         .foregroundStyle(.secondary)
-        .frame(width: Self.size.width, height: Self.size.height)
+        .frame(width: frameSize.width, height: frameSize.height)
         .background(cardBackground)
         .accessibilityElement(children: .combine)
     }

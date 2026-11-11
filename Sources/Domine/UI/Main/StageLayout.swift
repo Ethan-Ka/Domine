@@ -10,12 +10,32 @@ struct StageLayout: Equatable, Sendable {
     /// Stereo draws two front cards in the middle row; Surround is a top-down
     /// room with the listener in the middle.
     var mode: RoutingMode = .stereo
+    /// Cards on the stage; Surround switches to compact cards when many.
+    var speakerCount: Int = 2
 
     static let designSize = CGSize(width: 616, height: 320)
     static let cardInset = CGSize(width: 20, height: 16)
 
     static let cardSize = CGSize(width: 176, height: 100)
-    private var cardSize: CGSize { Self.cardSize }
+    /// Name, position tag and meter only.
+    static let compactCardSize = CGSize(width: 92, height: 32)
+    /// Surround sets above this many speakers always use compact cards.
+    static let maxFullCards = 4
+    /// Below this stage width or height, full cards no longer fit.
+    static let compactBelow = CGSize(width: 512, height: 220)
+
+    /// Single mode always keeps the full card at the top center.
+    var isCompact: Bool {
+        switch mode {
+        case .single: return false
+        case .stereo: return size.width < Self.compactBelow.width
+        case .surround:
+            return speakerCount > Self.maxFullCards
+                || size.width < Self.compactBelow.width || size.height < Self.compactBelow.height
+        }
+    }
+
+    var cardSize: CGSize { isCompact ? Self.compactCardSize : Self.cardSize }
 
     /// One uniform scale for the whole drawing: 1 at the design size.
     var scale: CGFloat {

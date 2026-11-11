@@ -25,7 +25,7 @@ struct DomineApp: App {
             }
             .frame(minWidth: 560, idealWidth: 640, minHeight: 420, idealHeight: 480)
         }
-        .windowResizability(.contentSize)
+        .windowResizability(.contentMinSize)
         .commands { UpdateCommands(checker: updater) }
 
         Window("Debug", id: "debug") {
