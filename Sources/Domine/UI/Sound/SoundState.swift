@@ -9,7 +9,21 @@ struct SoundState: Equatable, Sendable {
     /// Set in Surround mode: every speaker's effects and the link.
     var surround: SurroundSound?
 
-    static let bandLabels = ["80", "250", "1k", "4k", "10k"]
+    /// "80 Hz", "1 kHz": derived from a band's frequency so edits follow.
+    static func bandLabel(freqHz: Float) -> String {
+        if freqHz >= 1000 {
+            let k = Double(freqHz) / 1000
+            let text = k == k.rounded() ? String(Int(k)) : String(format: "%.1f", k)
+            return "\(text) kHz"
+        }
+        return "\(Int(freqHz.rounded())) Hz"
+    }
+
+    /// "+3 dB", "0 dB", "-2 dB".
+    static func gainText(_ db: Float) -> String {
+        let n = Int(db.rounded())
+        return n > 0 ? "+\(n) dB" : "\(n) dB"
+    }
     static let gainRange: ClosedRange<Float> = -12...12
 
     /// The preset the settings match, or nil when they have been edited.

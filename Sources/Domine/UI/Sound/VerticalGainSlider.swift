@@ -8,6 +8,7 @@ struct VerticalGainSlider: View {
     var axLabel: String
     var axValue: String
     var onChange: (Double) -> Void
+    var onDragging: (Bool) -> Void = { _ in }
 
     private static let thumbHeight: CGFloat = 14
 
@@ -37,7 +38,7 @@ struct VerticalGainSlider: View {
                     .frame(maxWidth: .infinity)
                 Rectangle()
                     .fill(Color.secondary)
-                    .frame(width: 12, height: 1)
+                    .frame(width: 24, height: 1)
                     .frame(maxWidth: .infinity)
                     .offset(y: h / 2)
                 RoundedRectangle(cornerRadius: 4)
@@ -51,9 +52,11 @@ struct VerticalGainSlider: View {
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .local)
                     .onChanged { g in
+                        onDragging(true)
                         let v = Self.value(forY: g.location.y, height: h, range: range)
                         if v != value { onChange(v) }
                     }
+                    .onEnded { _ in onDragging(false) }
             )
             .onTapGesture(count: 2) { onChange(0) }
         }

@@ -7,6 +7,8 @@ struct SoundSheet: View {
     @State private var side: StereoSide = .left
     /// Surround: the speaker picked while effects are unlinked.
     @State private var surroundSelection: String?
+    /// The EQ band being dragged, for the live readout.
+    @State private var draggingBand: Int?
 
     static let width: CGFloat = 420
     private static let customTag = "Custom"
@@ -35,7 +37,7 @@ struct SoundSheet: View {
             GroupBox { bass.padding(2) }
             GroupBox { compressor.padding(2) }
             HStack {
-                Button("Reset", action: reset)
+                Button(resetTitle, action: reset)
                 Spacer()
                 Button("Done", action: actions.done)
                     .keyboardShortcut(.defaultAction)
@@ -100,43 +102,60 @@ struct SoundSheet: View {
         }
     }
 
+    private var resetTitle: String {
+        if let surround = state.surround { return surround.isLinked ? "Reset All" : "Reset This Speaker" }
+        return state.effects.linkSpeakers ? "Reset All" : "Reset This Speaker"
+    }
+
     private func surroundLinkRow(_ surround: SurroundSound) -> some View {
-        HStack(spacing: 12) {
-            Toggle("Link speakers", isOn: Binding(
-                get: { surround.isLinked },
-                set: { actions.setSurroundLinked($0) }))
-                .toggleStyle(.checkbox)
-                .fixedSize()
-            if !surround.isLinked {
-                Picker("Speaker", selection: Binding(
-                    get: { surroundUID ?? "" },
-                    set: { surroundSelection = $0 })) {
-                    ForEach(surround.speakers) { speaker in
-                        Text(speaker.label).tag(speaker.uid)
-                    }
-                }
-                .labelsHidden()
-                .fixedSize()
-                .accessibilityLabel("Speaker")
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                Toggle("Same effects on all speakers", isOn: Binding(
+                    get: { surround.isLinked },
+                    set: { actions.setSurroundLinked($0) }))
+                    .toggleStyle(.checkbox)
+                    .fixedSize()
+                Spacer()
             }
-            Spacer()
-            Toggle("Mono", isOn: Binding(
+            if !surround.isLinked {
+                HStack(spacing: 8) {
+                    Text("Editing: \(surround.speakers.first { $0.uid == surroundUID }?.label ?? "")")
+                        .font(.callout)
+                    Picker("Speaker", selection: Binding(
+                        get: { surroundUID ?? "" },
+                        set: { surroundSelection = $0 })) {
+                        ForEach(surround.speakers) { speaker in
+                            Text(speaker.label).tag(speaker.uid)
+                        }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                    .accessibilityLabel("Speaker")
+                    Spacer()
+                }
+            }
+            Toggle("Mix left and right together", isOn: Binding(
                 get: { surround.isMono },
                 set: { actions.setSurroundMono($0) }))
                 .toggleStyle(.checkbox)
                 .fixedSize()
-                .help("Play left and right together on every speaker")
+            Text("Every speaker plays the full mix, not just its own side.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.leading, 20)
         }
     }
 
     private var speakerLinkRow: some View {
         HStack(spacing: 12) {
-            Toggle("Link speakers", isOn: Binding(
+            Toggle("Same effects on all speakers", isOn: Binding(
                 get: { state.effects.linkSpeakers },
                 set: { actions.setEffects(state.setting(link: $0)) }))
                 .toggleStyle(.checkbox)
                 .fixedSize()
             if !state.effects.linkSpeakers {
+                Text("Editing: \(side == .left ? "Left" : "Right")")
+                    .font(.callout)
                 Picker("Side", selection: $side) {
                     Text("Left").tag(StereoSide.left)
                     Text("Right").tag(StereoSide.right)
@@ -177,16 +196,23 @@ struct SoundSheet: View {
                 get: { current.eqEnabled }, set: { v in edit { $0.eqEnabled = v } }))
                 .toggleStyle(.checkbox)
             HStack(spacing: 0) {
-                ForEach(0..<5, id: \.self) { i in
+                ForEach(Array(current.eqBands.enumerated()), id: \.offset) { i, band in
+                    let label = SoundState.bandLabel(freqHz: band.freqHz)
                     VStack(spacing: 6) {
+                        Text(draggingBand == i ? SoundState.gainText(band.gainDb) : " ")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.primary)
+                            .frame(height: 14)
+                            .accessibilityHidden(true)
                         VerticalGainSlider(
-                            value: Double(current.eqBands[i].gainDb),
+                            value: Double(band.gainDb),
                             range: Double(SoundState.gainRange.lowerBound)...Double(SoundState.gainRange.upperBound),
-                            axLabel: "\(SoundState.bandLabels[i]) gain",
-                            axValue: "\(Int(current.eqBands[i].gainDb)) dB",
-                            onChange: { v in edit { $0.eqBands[i].gainDb = Float(v.rounded()) } })
+                            axLabel: "\(label) gain",
+                            axValue: SoundState.gainText(band.gainDb),
+                            onChange: { v in edit { $0.eqBands[i].gainDb = Float(v) } },
+                            onDragging: { draggingBand = $0 ? i : (draggingBand == i ? nil : draggingBand) })
                             .frame(width: 24, height: 110)
-                        Text(SoundState.bandLabels[i])
+                        Text(label)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .accessibilityHidden(true)
