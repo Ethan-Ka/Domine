@@ -9,13 +9,10 @@ extension AppModel {
         if surroundRouteSpeakers != nil { return autoCalibrateSurround() }
         stopClickTest()
         calibrationStatus = .listening
+        let session = calibration.beginSession()
         calibrationTask = Task { [weak self] in
             guard let self else { return }
-            self.calibration.beginSession()
-            defer {
-                self.calibrationTask = nil
-                self.finishCalibrationSession()
-            }
+            defer { self.finishCalibrationSession(session) }
             if !self.engine.state.isActive { await self.startRouting() }
             guard !Task.isCancelled else { return }
             guard self.engine.state == .running, let rate = self.engine.kernelSampleRate else {
@@ -86,10 +83,15 @@ extension AppModel {
 
     /// Hands the run's recordings to the archive: kept only when it failed,
     /// the folder emptied when it succeeded, untouched when cancelled.
-    func finishCalibrationSession() {
+    /// Does nothing once a newer run has started (Cancel, then Calibrate
+    /// while this one was still winding down): that run owns
+    /// `calibrationTask`, the status, and the session.
+    func finishCalibrationSession(_ session: Int) {
+        guard session == calibration.session else { return }
+        calibrationTask = nil
         var failed = false
         if case .failed? = calibrationStatus { failed = true }
-        calibration.endSession(failed: failed, cancelled: Task.isCancelled)
+        calibration.endSession(failed: failed, cancelled: Task.isCancelled, session: session)
     }
 
     func cancelCalibration() {
