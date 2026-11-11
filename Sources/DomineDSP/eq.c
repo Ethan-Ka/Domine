@@ -1,9 +1,10 @@
-// Five-band parametric EQ. See include/DomineEQ.h and DomineEffects.h.
+// Parametric EQ, up to DOMINE_EQ_BANDS bands. See include/DomineEQ.h and DomineEffects.h.
 //
 // Real-time safe. Parameters arrive through a seqlock over atomic words.
 // Each band keeps current coefficients and a per-sample step toward its
 // target, so a parameter change slides the coefficients linearly over 10 ms.
-// A band whose gain is exactly 0 has identity coefficients; once settled it
+// A band whose gain is exactly 0 (not a notch), or past bandCount, has
+// identity coefficients; once settled it
 // is skipped and its state zeroed, so an all-flat EQ leaves samples
 // untouched bit for bit.
 
@@ -14,7 +15,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define PARAM_WORDS (1 + DOMINE_EQ_BANDS * 3)
+// Words: enabled, bandCount, then per band freq, gain, q, type.
+#define BAND_WORDS 4
+#define PARAM_WORDS (2 + DOMINE_EQ_BANDS * BAND_WORDS)
+#define W_FREQ(i) (2 + BAND_WORDS * (i))
+#define W_GAIN(i) (3 + BAND_WORDS * (i))
+#define W_Q(i) (4 + BAND_WORDS * (i))
+#define W_TYPE(i) (5 + BAND_WORDS * (i))
 #define MAX_READ_TRIES 4
 
 typedef struct {
@@ -41,18 +48,22 @@ struct DomineEQ {
 static uint32_t f2u(float f) { uint32_t u; memcpy(&u, &f, 4); return u; }
 static float u2f(uint32_t u) { float f; memcpy(&f, &u, 4); return f; }
 
-static const double defaultFreq[DOMINE_EQ_BANDS] = { 100.0, 250.0, 1000.0, 4000.0, 10000.0 };
-static const int bandType[DOMINE_EQ_BANDS] = {
+static const double defaultFreq[DOMINE_EQ_DEFAULT_BANDS] = { 100.0, 250.0, 1000.0, 4000.0, 10000.0 };
+static const int defaultType[DOMINE_EQ_DEFAULT_BANDS] = {
     DOMINE_EQ_LOW_SHELF, DOMINE_EQ_PEAKING, DOMINE_EQ_PEAKING, DOMINE_EQ_PEAKING, DOMINE_EQ_HIGH_SHELF
 };
 
 DomineEQParams domine_eq_default_params(void) {
     DomineEQParams p;
+    memset(&p, 0, sizeof p);
     p.enabled = 0;
+    p.bandCount = DOMINE_EQ_DEFAULT_BANDS;
     for (int i = 0; i < DOMINE_EQ_BANDS; i++) {
-        p.bands[i].freqHz = (float)defaultFreq[i];
+        const int d = i < DOMINE_EQ_DEFAULT_BANDS;
+        p.types[i] = d ? defaultType[i] : DOMINE_EQ_PEAKING;
+        p.bands[i].freqHz = d ? (float)defaultFreq[i] : 1000.0f;
         p.bands[i].gainDb = 0.0f;
-        p.bands[i].q = bandType[i] == DOMINE_EQ_PEAKING ? 1.0f : 0.7071f;
+        p.bands[i].q = p.types[i] == DOMINE_EQ_PEAKING ? 1.0f : 0.7071f;
     }
     return p;
 }
@@ -65,7 +76,7 @@ static double clampd(double v, double lo, double hi) {
 void domine_eq_coefficients(int type, double sampleRate, double freqHz, double gainDb, double q,
                             double *out) {
     gainDb = clampd(gainDb, -DOMINE_EQ_MAX_GAIN_DB, DOMINE_EQ_MAX_GAIN_DB);
-    if (gainDb == 0.0) {
+    if (gainDb == 0.0 && type != DOMINE_EQ_NOTCH) {
         out[0] = 1.0; out[1] = out[2] = out[3] = out[4] = 0.0;
         return;
     }
@@ -76,7 +87,14 @@ void domine_eq_coefficients(int type, double sampleRate, double freqHz, double g
     const double cw = cos(w0), sw = sin(w0);
     const double alpha = sw / (2.0 * q);
     double b0, b1, b2, a0, a1, a2;
-    if (type == DOMINE_EQ_PEAKING) {
+    if (type == DOMINE_EQ_NOTCH) {
+        b0 = 1.0;
+        b1 = -2.0 * cw;
+        b2 = 1.0;
+        a0 = 1.0 + alpha;
+        a1 = -2.0 * cw;
+        a2 = 1.0 - alpha;
+    } else if (type != DOMINE_EQ_LOW_SHELF && type != DOMINE_EQ_HIGH_SHELF) {
         b0 = 1.0 + alpha * A;
         b1 = -2.0 * cw;
         b2 = 1.0 - alpha * A;
@@ -114,10 +132,12 @@ DomineEQ *domine_eq_create(double sampleRate) {
     atomic_init(&eq->seq, 0);
     const DomineEQParams d = domine_eq_default_params();
     atomic_init(&eq->words[0], 0);
+    atomic_init(&eq->words[1], (uint32_t)d.bandCount);
     for (int i = 0; i < DOMINE_EQ_BANDS; i++) {
-        atomic_init(&eq->words[1 + 3 * i], f2u(d.bands[i].freqHz));
-        atomic_init(&eq->words[2 + 3 * i], f2u(d.bands[i].gainDb));
-        atomic_init(&eq->words[3 + 3 * i], f2u(d.bands[i].q));
+        atomic_init(&eq->words[W_FREQ(i)], f2u(d.bands[i].freqHz));
+        atomic_init(&eq->words[W_GAIN(i)], f2u(d.bands[i].gainDb));
+        atomic_init(&eq->words[W_Q(i)], f2u(d.bands[i].q));
+        atomic_init(&eq->words[W_TYPE(i)], (uint32_t)d.types[i]);
         Band *b = &eq->bands[i];
         b->cur[0] = b->target[0] = 1.0;
         b->identity = 1;
@@ -133,10 +153,13 @@ void domine_eq_set_params(DomineEQ *eq, const DomineEQParams *p) {
     atomic_store_explicit(&eq->seq, s + 1, memory_order_relaxed);
     atomic_thread_fence(memory_order_release);
     atomic_store_explicit(&eq->words[0], p->enabled ? 1u : 0u, memory_order_relaxed);
+    const int count = p->bandCount < 0 ? 0 : (p->bandCount > DOMINE_EQ_BANDS ? DOMINE_EQ_BANDS : p->bandCount);
+    atomic_store_explicit(&eq->words[1], (uint32_t)count, memory_order_relaxed);
     for (int i = 0; i < DOMINE_EQ_BANDS; i++) {
-        atomic_store_explicit(&eq->words[1 + 3 * i], f2u(p->bands[i].freqHz), memory_order_relaxed);
-        atomic_store_explicit(&eq->words[2 + 3 * i], f2u(p->bands[i].gainDb), memory_order_relaxed);
-        atomic_store_explicit(&eq->words[3 + 3 * i], f2u(p->bands[i].q), memory_order_relaxed);
+        atomic_store_explicit(&eq->words[W_FREQ(i)], f2u(p->bands[i].freqHz), memory_order_relaxed);
+        atomic_store_explicit(&eq->words[W_GAIN(i)], f2u(p->bands[i].gainDb), memory_order_relaxed);
+        atomic_store_explicit(&eq->words[W_Q(i)], f2u(p->bands[i].q), memory_order_relaxed);
+        atomic_store_explicit(&eq->words[W_TYPE(i)], (uint32_t)p->types[i], memory_order_relaxed);
     }
     atomic_store_explicit(&eq->seq, s + 2, memory_order_release);
 }
@@ -153,12 +176,14 @@ static void pick_up(DomineEQ *eq) {
         if (atomic_load_explicit(&eq->seq, memory_order_relaxed) != s1) continue;
         eq->seenSeq = s1;
         const int enabled = w[0] != 0;
+        const uint32_t count = w[1];
         for (int i = 0; i < DOMINE_EQ_BANDS; i++) {
             Band *b = &eq->bands[i];
-            const double gain = enabled ? (double)u2f(w[2 + 3 * i]) : 0.0;
-            double t[5];
-            domine_eq_coefficients(bandType[i], eq->sampleRate, (double)u2f(w[1 + 3 * i]), gain,
-                                   (double)u2f(w[3 + 3 * i]), t);
+            double t[5] = { 1.0, 0.0, 0.0, 0.0, 0.0 };
+            if (enabled && (uint32_t)i < count) {
+                domine_eq_coefficients((int)w[W_TYPE(i)], eq->sampleRate, (double)u2f(w[W_FREQ(i)]),
+                                       (double)u2f(w[W_GAIN(i)]), (double)u2f(w[W_Q(i)]), t);
+            }
             for (int c = 0; c < 5; c++) {
                 b->target[c] = t[c];
                 b->step[c] = (t[c] - b->cur[c]) / (double)eq->smoothSamples;
