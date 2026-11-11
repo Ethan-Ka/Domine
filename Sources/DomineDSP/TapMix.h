@@ -12,6 +12,12 @@
 
 #define TAP_MAX 8
 #define TAP_RAMP_S 0.02
+// Per-app gain above 1 (boost up to +6 dB): a linked peak limiter on the mixed
+// input holds it at -1 dBFS (instant attack, 50 ms release). Idle, and
+// bit-exact, while every tap gain is at or below 1 and the limiter is released.
+#define TAP_GAIN_MAX 2.0f
+#define TAP_LIMIT_CEILING 0.8912509f
+#define TAP_LIMIT_RELEASE_S 0.05
 
 typedef struct { const float *data; uint32_t stride, frames; } TapIn;
 
@@ -32,6 +38,9 @@ typedef struct {
     float start[TAP_MAX], target[TAP_MAX], cur[TAP_MAX];
     uint32_t pos[TAP_MAX], rampLen;
     uint8_t primed[TAP_MAX];
+    // Limiter for boosted taps: on while a gain or ramp is above 1, then until released.
+    uint8_t boosting;
+    float limGain, limRelease;
 } TapMixer;
 
 static inline uint32_t tap_f2u(float f) { uint32_t u; memcpy(&u, &f, 4); return u; }
@@ -41,6 +50,8 @@ static inline void tapmix_init(TapMixer *m, double sampleRate) {
     memset(m, 0, sizeof *m);
     const uint32_t ramp = (uint32_t)llround(TAP_RAMP_S * sampleRate);
     m->rampLen = ramp > 0 ? ramp : 1;
+    m->limGain = 1.0f;
+    m->limRelease = sampleRate > 0 ? (float)exp(-1.0 / (TAP_LIMIT_RELEASE_S * sampleRate)) : 0.0f;
     for (int i = 0; i < TAP_MAX; i++) atomic_init(&m->gainBits[i], tap_f2u(1.0f));
 }
 
@@ -63,7 +74,7 @@ static inline void tapmix_set_layout(TapMixer *m, uint32_t count, const uint32_t
 static inline void tapmix_set_gain(TapMixer *m, uint32_t tap, float gain) {
     if (tap >= TAP_MAX) return;
     if (!isfinite(gain) || !(gain > 0.0f)) gain = 0.0f;
-    if (gain > 1.0f) gain = 1.0f;
+    if (gain > TAP_GAIN_MAX) gain = TAP_GAIN_MAX;
     atomic_store_explicit(&m->gainBits[tap], tap_f2u(gain), memory_order_relaxed);
 }
 
@@ -101,6 +112,9 @@ static inline int tapmix_begin(TapMixer *m) {
             m->pos[t] = 0;
         }
     }
+    m->boosting = 0;
+    for (uint32_t t = 0; t < m->n; t++)
+        if (m->target[t] > 1.0f || m->cur[t] > 1.0f) m->boosting = 1;
     return m->n > 0;
 }
 
@@ -163,6 +177,16 @@ static inline void tapmix_read(TapMixer *m, const TapSet *s, uint32_t f, float *
         float a = tap_read(&s->l[t], f), b = tap_read(&s->r[t], f);
         if (g != 1.0f) { a *= g; b *= g; }
         if (t == 0) { l = a; r = b; } else { l += a; r += b; }
+    }
+    if (m->boosting || m->limGain != 1.0f) {
+        const float pl = fabsf(l), pr = fabsf(r);
+        const float peak = pl > pr ? pl : pr;
+        // Release toward 1 first, then clamp, so no sample passes the ceiling.
+        float lg = 1.0f + m->limRelease * (m->limGain - 1.0f);
+        if (lg > 0.99999f) lg = 1.0f;
+        if (peak * lg > TAP_LIMIT_CEILING) lg = TAP_LIMIT_CEILING / peak;
+        m->limGain = lg;
+        if (lg != 1.0f) { l *= lg; r *= lg; }
     }
     *outL = l;
     *outR = r;

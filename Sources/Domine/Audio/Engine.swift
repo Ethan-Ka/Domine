@@ -94,13 +94,17 @@ final class Engine {
     /// Process objects the next tap leaves out besides Domine itself
     /// (SPEC 3b). Empty until excluded apps are resolved to processes.
     var excludedProcesses: [AudioObjectID] = []
-    /// Apps with a reduced volume, each on its own muting tap (per-app volume).
-    /// Sorted by key, capped at `maxAppTaps`.
+    /// Apps with a volume other than 100 percent, each on its own muting tap
+    /// (per-app volume). Sorted by key, capped at `maxAppTaps`.
     private(set) var appTapRequests: [AppTapRequest] = []
     /// Wait before a changed app set rebuilds, so a burst causes one rebuild.
     @ObservationIgnored var appTapDebounce: Duration = .milliseconds(500)
     @ObservationIgnored private(set) var appTapRebuild: Task<Void, Never>?
-    static let maxAppTaps = 7
+    /// The debounce ended and the rebuild is under way; cancelling it now
+    /// would cut its fades short, so a later change waits its turn.
+    @ObservationIgnored private var appTapRebuildRunning = false
+    /// The kernels mix up to DOMINE_MAX_TAPS (8) taps: the global tap plus 7 apps.
+    static let maxAppTaps = Int(DOMINE_MAX_TAPS) - 1
 
     // Surround controls (SPEC 13). They apply live to a running surround kernel.
     /// The surround set in list order: positions move live (VBAP and
@@ -226,6 +230,9 @@ final class Engine {
         var defaultRateRestore: (uid: String, rate: Double)?
         var diagnostics: EngineDiagnostics?
         var watchTokens: [HALListenerToken] = []
+        /// The current default output's nominal-rate listener, replaced when
+        /// the default output moves without a rebuild.
+        var defaultRateToken: HALListenerToken?
         /// What the tap delivered at start, to notice a change while running.
         var tapFormat: AudioStreamBasicDescription?
         var defaultOutputUID: String?
@@ -432,6 +439,8 @@ final class Engine {
             startDiagnostics(present)
             watchFormat()
             watchSpeakers()
+            // An app-tap change made while this build ran.
+            reconcileAppTaps()
             return nil
         } catch {
             guard current == generation else { return nil }
@@ -770,10 +779,22 @@ final class Engine {
     private func watchFormat() {
         var properties: [HALProperty] = [.defaultOutputDevice]
         if let aggregate = resources.aggregate { properties.append(.nominalSampleRate(aggregate)) }
-        if let id = try? hal.defaultOutputDevice(), id != kAudioObjectUnknown {
-            properties.append(.nominalSampleRate(id))
-        }
         watch(properties) { [weak self] in self?.scheduleFormatCheck() }
+        watchDefaultOutputRate()
+    }
+
+    /// Listens for the current default output's rate, replacing the listener
+    /// on the previous default output.
+    private func watchDefaultOutputRate() {
+        resources.defaultRateToken?.cancel()
+        resources.defaultRateToken = nil
+        guard let id = try? hal.defaultOutputDevice(), id != kAudioObjectUnknown else { return }
+        let property = HALProperty.nominalSampleRate(id)
+        do {
+            resources.defaultRateToken = try hal.addListener(property) { [weak self] in self?.scheduleFormatCheck() }
+        } catch {
+            Self.log.error("Could not watch \(String(describing: property), privacy: .public): \(error.description, privacy: .public)")
+        }
     }
 
     private func watch(_ properties: [HALProperty], handler: @escaping @MainActor @Sendable () -> Void) {
@@ -830,9 +851,7 @@ final class Engine {
                 resources.defaultRateRestore = nil
             }
             resources.defaultOutputUID = defaultUID
-            if let id = try? hal.defaultOutputDevice(), id != kAudioObjectUnknown {
-                watch([.nominalSampleRate(id)]) { [weak self] in self?.scheduleFormatCheck() }
-            }
+            watchDefaultOutputRate()
             Self.log.info("Default output is now \(defaultUID ?? "none", privacy: .public) at the tap's rate; no rebuild")
             return false
         }
@@ -902,18 +921,64 @@ final class Engine {
     }
 
     /// Sets the apps that get their own tap. Gains apply at once without a
-    /// rebuild; a changed set of apps or processes rebuilds after `appTapDebounce`.
+    /// rebuild. When only an app's processes change (a helper starts or
+    /// quits), its tap and the global tap's exclusions update in place; a
+    /// changed set of apps, or a failed update, rebuilds after
+    /// `appTapDebounce`. A change made while the engine starts is applied
+    /// once the start finishes.
     func setAppTaps(_ requests: [AppTapRequest]) {
         let new = Array(requests.sorted { $0.key < $1.key }.prefix(Self.maxAppTaps))
         let changed = Self.appTapSignature(new) != Self.appTapSignature(appTapRequests)
         appTapRequests = new
         applyTapGains()
-        guard changed, state.isRouting else { return }
-        appTapRebuild?.cancel()
+        // A gain-only change never touches the taps (nor restarts a waiting rebuild).
+        if changed { reconcileAppTaps() }
+    }
+
+    /// Brings the built app taps in line with `appTapRequests` while routing.
+    private func reconcileAppTaps() {
+        guard state.isRouting, resources.appTapSignature != Self.appTapSignature(appTapRequests) else { return }
+        if resources.tap != nil, resources.appTaps.map(\.key) == appTapRequests.map(\.key) {
+            // Same apps: no rebuild is needed, so drop one still waiting.
+            if !appTapRebuildRunning {
+                appTapRebuild?.cancel()
+                appTapRebuild = nil
+            }
+            if updateAppTapsInPlace() { return }
+        }
+        scheduleAppTapRebuild()
+    }
+
+    /// Points each app tap whose processes changed, and the global tap's
+    /// exclusions, at the new lists. Returns false if any update failed.
+    private func updateAppTapsInPlace() -> Bool {
+        guard let main = resources.tap else { return false }
+        do throws(EngineError) {
+            for (index, request) in appTapRequests.enumerated() {
+                let built = resources.appTapSignature.indices.contains(index) ? resources.appTapSignature[index] : []
+                guard built != Self.appTapSignature([request])[0] else { continue }
+                try taps.updateApp(resources.appTaps[index].tap, processes: request.processes)
+            }
+            try taps.updateExclusions(of: main, alsoExcluding: globalExclusions)
+        } catch {
+            Self.log.error("Could not update the app taps in place: \(error.description, privacy: .public); rebuilding")
+            return false
+        }
+        resources.appTapSignature = Self.appTapSignature(appTapRequests)
+        Self.log.info("App tap processes changed; taps updated in place")
+        return true
+    }
+
+    private func scheduleAppTapRebuild() {
+        let previous = appTapRebuildRunning ? appTapRebuild : nil
+        if !appTapRebuildRunning { appTapRebuild?.cancel() }
         let delay = appTapDebounce
         appTapRebuild = Task { [weak self] in
             if delay > .zero { try? await Task.sleep(for: delay) }
+            await previous?.value
             guard !Task.isCancelled, let self else { return }
+            self.appTapRebuildRunning = true
+            defer { self.appTapRebuildRunning = false }
             await self.rebuildForTapChange()
         }
     }
@@ -1069,6 +1134,7 @@ final class Engine {
     private func teardown() {
         resources.diagnostics?.stop()
         resources.watchTokens.forEach { $0.cancel() }
+        resources.defaultRateToken?.cancel()
         var ioProcGone = true
         var aggregateGone = true
         if let proc = resources.ioProc {
@@ -1295,6 +1361,7 @@ extension Engine {
             Self.log.info("Surround: \(present.map { "\($0.label) \($0.uid)" }.joined(separator: ", "), privacy: .public), layout \(String(describing: layout), privacy: .public)")
             watchFormat()
             watchSurroundSpeakers(uids)
+            reconcileAppTaps()
             return nil
         } catch {
             guard current == generation else { return nil }

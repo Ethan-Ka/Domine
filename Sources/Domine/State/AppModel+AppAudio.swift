@@ -12,22 +12,25 @@ extension AppModel {
         }
     }
 
-    /// Saves an app's volume, clamped to 0...1. Applies it to the engine
-    /// once the mixer is wired in.
+    /// The engine has its most app taps, so another app cannot get its own volume.
+    var appVolumeLimitReached: Bool { engine.appTapRequests.count >= Engine.maxAppTaps }
+
+    /// Saves an app's volume, clamped to 0...2 (above 1 boosts it). Applies
+    /// it to the engine.
     func setAppVolume(bundleID: String, _ volume: Double) {
-        let clamped = min(max(volume, 0), 1)
+        let clamped = min(max(volume, 0), AppTapRequest.maxGain)
         guard appVolumes[bundleID] != clamped else { return }
         appVolumes[bundleID] = clamped
         store.appVolumes = appVolumes
         applyAppVolumesToEngine()
     }
 
-    /// Gives each app with a saved volume below 100 percent (and not excluded)
-    /// its own tap, and pushes the volumes as gains.
+    /// Gives each app with a saved volume other than 100 percent (and not
+    /// excluded) its own tap, and pushes the volumes as gains.
     func applyAppVolumesToEngine() {
         let excluded = Set(engine.excludedProcesses)
         let alwaysExcluded = Set(exclusionsSettings.items.filter { $0.mode == .always }.map(\.bundleID))
-        let reduced = appVolumes.filter { $0.value < 1 && !alwaysExcluded.contains($0.key) }
+        let reduced = appVolumes.filter { $0.value != 1 && !alwaysExcluded.contains($0.key) }
         var requests: [AppTapRequest] = []
         // Sorted so a reordered process list is not seen as a change and
         // does not rebuild the tap.

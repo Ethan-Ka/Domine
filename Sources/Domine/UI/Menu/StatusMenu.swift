@@ -131,6 +131,14 @@ struct StatusMenu: View {
                 ForEach($state.apps) { $app in
                     StatusMenuAppRow(app: $app)
                 }
+                if state.appVolumeLimitReached {
+                    Text("Up to \(Engine.maxAppTaps) apps can have their own volume.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 2)
+                }
             }
         }
         .padding(.vertical, 4)

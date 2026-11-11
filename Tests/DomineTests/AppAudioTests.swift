@@ -53,8 +53,9 @@ struct AppAudioTests {
         let model = AppModel(hal: FakeHAL(), defaults: defaults)
         model.setAppVolume(bundleID: "a.b", 0.4)
         model.setAppVolume(bundleID: "c.d", 7)
-        #expect(model.appVolumes == ["a.b": 0.4, "c.d": 1])
-        #expect(model.store.appVolumes == ["a.b": 0.4, "c.d": 1])
+        model.setAppVolume(bundleID: "e.f", 1.5)
+        #expect(model.appVolumes == ["a.b": 0.4, "c.d": 2, "e.f": 1.5])
+        #expect(model.store.appVolumes == ["a.b": 0.4, "c.d": 2, "e.f": 1.5])
         #expect(AppModel(hal: FakeHAL(), defaults: defaults).appVolumes["a.b"] == 0.4)
     }
 

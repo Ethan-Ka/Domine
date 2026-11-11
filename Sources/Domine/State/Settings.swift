@@ -286,11 +286,11 @@ final class SettingsStore {
         }
     }
 
-    /// Per-app volume by bundle ID, 0...1. A missing app plays at 1.
+    /// Per-app volume by bundle ID, 0...2 (above 1 boosts). A missing app plays at 1.
     var appVolumes: [String: Double] {
         get {
             let raw = defaults.dictionary(forKey: Key.appVolumes.name) ?? [:]
-            return raw.compactMapValues { ($0 as? Double).map { min(max($0, 0), 1) } }
+            return raw.compactMapValues { ($0 as? Double).map { min(max($0, 0), AppTapRequest.maxGain) } }
         }
         set { defaults.set(newValue, forKey: Key.appVolumes.name) }
     }

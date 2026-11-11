@@ -15,6 +15,8 @@ struct StatusMenuState: Equatable, Sendable {
     var isRouting = false
     /// Apps playing audio now.
     var apps: [StatusMenuApp] = []
+    /// Every per-app tap is in use; another app keeps the main volume.
+    var appVolumeLimitReached = false
     var rooms: [Room] = []
     var currentRoomID: Room.ID?
 }
@@ -23,7 +25,7 @@ struct StatusMenuState: Equatable, Sendable {
 struct StatusMenuApp: Equatable, Sendable, Identifiable {
     var bundleID: String
     var name: String
-    /// 0...1
+    /// 0...2; above 1 boosts the app.
     var volume: Double = 1
     /// Excluded from Domine, mode Always.
     var isExcluded = false

@@ -66,9 +66,6 @@ Collected 2026-11-11 from read-only reviews of the UI, the settings sheets, and 
 
 ## Suspected issues not fixed in the bug review
 
-- Per-app volume: an app with reduced volume that starts a new helper process still rebuilds the whole audio path. Updating that tap in place, the way exclusions already work, would avoid a rebuild that can shift the speakers' timing.
-- An app-tap change made while the engine is starting is dropped.
-- Each default-output move that needs no rebuild adds another sample-rate listener until teardown.
 - Surround set changes have the same auto-start problem that mode switches had (`AppModel+Surround.swift`).
 - Single mode saves settings under the Stereo pair's key, and not at all when no right speaker is set.
 - `selectSurroundSet` can load a saved record whose speaker order differs from the requested order.

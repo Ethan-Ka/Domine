@@ -133,4 +133,81 @@ struct TapMixTests {
         domine_kernel_set_tap_gain(k.raw, 8, 0)
         domine_kernel_set_tap_gain(k.raw, 99, 0)
     }
+    // MARK: Gain above 1 (per-app boost)
+
+    static let ceiling: Float = 0.8912509
+
+    @Test func gainOfTwoDoublesAQuietTap() {
+        let k = Kernel()
+        Self.kernelLayout(k, 1, first: [0], channels: [2], interleaved: [1])
+        domine_kernel_set_tap_gain(k.raw, 0, 2)
+        let l: [Float] = [0.25, -0.125, 0.0625, 0.4]
+        let r: [Float] = [-0.25, 0.375, 0.0, -0.4]
+        let out = TestBufferList(channelsPerBuffer: [4], frames: l.count)
+        k.process(.interleaved(left: l, right: r), out)
+        #expect(out.channel(0) == [0.5, -0.25, 0.125, 0.8])
+        #expect(out.channel(1) == [0.5, -0.25, 0.125, 0.8])
+        #expect(out.channel(2) == [-0.5, 0.75, 0.0, -0.8])
+        #expect(out.channel(3) == [-0.5, 0.75, 0.0, -0.8])
+    }
+
+    @Test func gainAboveTwoClampsToTwo() {
+        let k = Kernel()
+        Self.kernelLayout(k, 1, first: [0], channels: [2], interleaved: [1])
+        domine_kernel_set_tap_gain(k.raw, 0, 5)
+        let l: [Float] = [0.25, 0.125]
+        let out = TestBufferList(channelsPerBuffer: [4], frames: l.count)
+        k.process(.interleaved(left: l, right: l), out)
+        #expect(out.channel(0) == [0.5, 0.25])
+    }
+
+    @Test func boostedTapIsLimitedBelowFullScale() {
+        let k = Kernel()
+        Self.kernelLayout(k, 2, first: [0, 1], channels: [2, 2], interleaved: [1, 1])
+        domine_kernel_set_tap_gain(k.raw, 1, 2)
+        let list = TestBufferList(channelsPerBuffer: [2, 2], frames: 2, fill: 0)
+        // Tap 0 at gain 1: 0.25 / -0.5. Tap 1 at gain 2: 0.375 / 0.25.
+        list.setChannel(buffer: 0, channel: 0, [0.25, 0.25])
+        list.setChannel(buffer: 0, channel: 1, [-0.5, -0.5])
+        list.setChannel(buffer: 1, channel: 0, [0.375, 0.375])
+        list.setChannel(buffer: 1, channel: 1, [0.25, 0.25])
+        let out = TestBufferList(channelsPerBuffer: [4], frames: 2)
+        k.process(list, out)
+        // Mixed: L 1.0, R 0.0. The limiter scales both by ceiling / 1.0.
+        let lg = Self.ceiling / Float(1.0)
+        #expect(out.channel(0) == [Float(1.0) * lg, Float(1.0) * lg])
+        #expect(out.channel(2) == [Float(0.0) * lg, Float(0.0) * lg])
+        #expect(out.channel(0).allSatisfy { $0 <= Self.ceiling })
+    }
+
+    @Test func unityGainLoudTapIsNotLimited() {
+        let k = Kernel()
+        Self.kernelLayout(k, 1, first: [0], channels: [2], interleaved: [1])
+        domine_kernel_set_tap_gain(k.raw, 0, 1)
+        let out = TestBufferList(channelsPerBuffer: [4], frames: Self.n)
+        k.process(.interleaved(left: Self.l1, right: Self.r1), out)
+        #expect(out.channel(0) == Self.l1)
+        #expect(out.channel(2) == Self.r1)
+    }
+
+    @Test func surroundTapGainOfTwo() {
+        let s = domine_surround_create(48000, 512)!
+        defer { domine_surround_destroy(s) }
+        let az: [Float] = [-30, 30]
+        az.withUnsafeBufferPointer { domine_surround_set_speakers(s, 2, $0.baseAddress) }
+        domine_surround_set_surround_level(s, 0)
+        Self.layout(1, first: [0], channels: [2], interleaved: [1]) {
+            domine_surround_set_tap_layout(s, $0, $1, $2, $3)
+        }
+        domine_surround_set_tap_gain(s, 0, 2)
+        let input = TestBufferList.interleaved(left: [Float](repeating: 0.25, count: 16),
+                                               right: [Float](repeating: -0.125, count: 16))
+        let out = TestBufferList(channelsPerBuffer: [4], frames: 16)
+        let offsets: [UInt32] = [0, 2]
+        offsets.withUnsafeBufferPointer {
+            domine_surround_process(s, input.pointer, out.pointer, 16, $0.baseAddress!)
+        }
+        #expect(out.channel(0)[15] == 0.5)
+        #expect(out.channel(2)[15] == -0.25)
+    }
 }

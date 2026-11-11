@@ -309,6 +309,16 @@ final class CoreAudioHAL: AudioHAL {
     }
 
     func setProcessTapExclusions(_ tap: AudioObjectID, excluding processes: [AudioObjectID]) throws(HALError) {
+        try setTapDescriptionProcesses(tap, processes)
+    }
+
+    func setProcessTapProcesses(_ tap: AudioObjectID, including processes: [AudioObjectID]) throws(HALError) {
+        try setTapDescriptionProcesses(tap, processes)
+    }
+
+    /// Rewrites the process list of a tap's description; whether the list is
+    /// excluded or included stays as the tap was created.
+    private func setTapDescriptionProcesses(_ tap: AudioObjectID, _ processes: [AudioObjectID]) throws(HALError) {
         var addr = address(kAudioTapPropertyDescription)
         var size = UInt32(MemoryLayout<Unmanaged<CATapDescription>?>.size)
         var value: Unmanaged<CATapDescription>?

@@ -276,8 +276,11 @@ float domine_kernel_peak(DomineKernel *k, int position);
 void domine_kernel_set_tap_layout(DomineKernel *k, uint32_t tapCount, const uint32_t *_Nullable firstBuffer,
                                   const uint32_t *_Nullable channels, const uint32_t *_Nullable interleaved);
 
-/// Gain of one tap, 0 to 1 (clamped), default 1. A change ramps linearly over
-/// 20 ms (the first process call snaps). Out-of-range tap indexes are ignored.
+/// Gain of one tap, 0 to 2 (clamped; above 1 boosts up to +6 dB), default 1.
+/// A change ramps linearly over 20 ms (the first process call snaps). While
+/// any tap's gain is above 1, a linked peak limiter on the mixed input holds
+/// it at -1 dBFS (instant attack, 50 ms release); at or below 1 the mix is
+/// unlimited and bit-exact. Out-of-range tap indexes are ignored.
 void domine_kernel_set_tap_gain(DomineKernel *k, uint32_t tap, float gain);
 
 #define DOMINE_MAX_TAPS 8
