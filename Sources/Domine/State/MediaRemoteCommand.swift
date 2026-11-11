@@ -7,8 +7,6 @@ enum MediaRemoteCommand: UInt32 {
     // MRMediaRemoteCommand values.
     case play = 0
     case pause = 1
-    case togglePlayPause = 2
-    case nextTrack = 4
 
     private typealias SendCommand = @convention(c) (UInt32, CFDictionary?) -> Bool
 

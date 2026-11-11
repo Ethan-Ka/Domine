@@ -194,9 +194,6 @@ final class EngineDiagnostics {
         return Self.f(rate, 1) + " Hz"
     }
 
-    /// Per-speaker overloads and disconnects since the session start.
-    var dropoutCounts: DropoutCounts { dropouts.counts }
-
     func resetDropoutCounts() { dropouts.reset() }
 
     /// Reads the current values for the Debug window. Changes no audio state.
