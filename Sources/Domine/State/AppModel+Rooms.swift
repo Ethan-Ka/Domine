@@ -13,7 +13,8 @@ extension AppModel {
         let room = Room(
             name: name, mode: routingMode, leftUID: leftUID, rightUID: rightUID,
             rearLeftUID: rearLeftUID, rearRightUID: rearRightUID,
-            surroundUIDs: surroundSettings.uids.isEmpty ? nil : surroundSettings.uids)
+            surroundUIDs: surroundSettings.uids.isEmpty ? nil : surroundSettings.uids,
+            surroundPreset: routingMode == .surround ? currentSurroundPresetName : nil)
         rooms.append(room)
         store.rooms = rooms
         setCurrentRoom(room.id)
@@ -30,6 +31,9 @@ extension AppModel {
         setSpeakers(left: room.leftUID, right: room.rightUID)
         setRear(left: room.rearLeftUID, right: room.rearRightUID)
         if let surround = room.surroundUIDs, !surround.isEmpty { selectSurroundSet(surround) }
+        if let name = room.surroundPreset, let preset = surroundFieldPreset(named: name) {
+            applySurroundFieldPreset(preset)
+        }
         setRoutingMode(room.mode)
         setCurrentRoom(id)
         if wasActive { Task { await startRouting() } }

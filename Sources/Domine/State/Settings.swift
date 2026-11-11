@@ -15,7 +15,7 @@ final class SettingsStore {
         case meterStyle, meterPeakHold, showMeters
         case previousOutputUID, outputNeedsRestore, excludedAppsPlayThroughUID, exclusions, appVolumes
         case hasCompletedWelcome, audioCaptureWorking, audioCaptureSignature
-        case rooms, currentRoomID, rememberedSpeakers, delayNudgeSteps, menuBarShows
+        case rooms, currentRoomID, rememberedSpeakers, delayNudgeSteps, menuBarShows, surroundFieldPresets
 
         var name: String { SettingsStore.keyPrefix + rawValue }
     }
@@ -325,6 +325,24 @@ final class SettingsStore {
             guard let data = try? JSONEncoder().encode(newValue) else { return }
             defaults.set(data, forKey: Key.rememberedSpeakers.name)
         }
+    }
+
+    /// The user's surround presets. Entries that fail to decode are dropped.
+    var surroundFieldPresets: [SurroundFieldPreset] {
+        get {
+            guard let data = defaults.data(forKey: Key.surroundFieldPresets.name),
+                  let entries = try? JSONDecoder().decode([LossyFieldPreset].self, from: data) else { return [] }
+            return entries.compactMap(\.value)
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue) else { return }
+            defaults.set(data, forKey: Key.surroundFieldPresets.name)
+        }
+    }
+
+    private struct LossyFieldPreset: Decodable {
+        let value: SurroundFieldPreset?
+        init(from decoder: any Decoder) throws { value = try? SurroundFieldPreset(from: decoder) }
     }
 
     var currentRoomID: UUID? {

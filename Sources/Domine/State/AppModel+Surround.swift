@@ -430,3 +430,57 @@ extension AppModel {
         }
     }
 }
+
+// MARK: - Field presets
+
+extension AppModel {
+    /// Built-in presets first, then the user's.
+    var allSurroundFieldPresets: [SurroundFieldPreset] { SurroundFieldPreset.builtIn + surroundFieldPresets }
+
+    func surroundFieldPreset(named name: String) -> SurroundFieldPreset? {
+        allSurroundFieldPresets.first { $0.name == name }
+    }
+
+    /// The preset whose values the field controls match right now.
+    var currentSurroundPresetName: String? {
+        allSurroundFieldPresets.first { $0.matches(surroundSettings) }?.name
+    }
+
+    /// Changes the field controls only; speakers, offsets, trims and effects stay.
+    func applySurroundFieldPreset(_ preset: SurroundFieldPreset) {
+        updateSurroundSettings { preset.apply(to: &$0) }
+    }
+
+    /// Saves the current field controls under `name`, replacing a user preset
+    /// of that name. Nil for a blank name or a built-in one.
+    @discardableResult
+    func saveSurroundFieldPreset(name: String) -> SurroundFieldPreset? {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, !SurroundFieldPreset.isBuiltInName(name) else { return nil }
+        let preset = SurroundFieldPreset(name: name, from: surroundSettings)
+        if let index = surroundFieldPresets.firstIndex(where: { $0.name == name }) {
+            surroundFieldPresets[index] = preset
+        } else {
+            surroundFieldPresets.append(preset)
+        }
+        store.surroundFieldPresets = surroundFieldPresets
+        return preset
+    }
+
+    /// Renames a user preset, and the rooms that remember it.
+    func renameSurroundFieldPreset(_ name: String, to newName: String) {
+        let newName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !newName.isEmpty, !SurroundFieldPreset.isBuiltInName(newName),
+              !surroundFieldPresets.contains(where: { $0.name == newName }),
+              let index = surroundFieldPresets.firstIndex(where: { $0.name == name }) else { return }
+        surroundFieldPresets[index].name = newName
+        store.surroundFieldPresets = surroundFieldPresets
+        for i in rooms.indices where rooms[i].surroundPreset == name { rooms[i].surroundPreset = newName }
+        store.rooms = rooms
+    }
+
+    func deleteSurroundFieldPreset(_ name: String) {
+        surroundFieldPresets.removeAll { $0.name == name }
+        store.surroundFieldPresets = surroundFieldPresets
+    }
+}
