@@ -53,6 +53,32 @@ final class SettingsStore {
         defaults.removeObject(forKey: Self.storageKey(for: PairKey(leftUID: leftUID, rightUID: rightUID)))
     }
 
+    // MARK: Single (one speaker)
+
+    nonisolated static func singleStorageKey(uid: String) -> String {
+        keyPrefix + "single." + uid
+    }
+
+    /// Single mode's tuning for one speaker: master volume, effects, and the
+    /// speaker's volume offset (as `leftVolumeOffsetDb`). Kept apart from
+    /// every pair's record. Unknown or corrupt returns defaults.
+    func singleSettings(uid: String) -> PairSettings {
+        guard let data = defaults.data(forKey: Self.singleStorageKey(uid: uid)),
+              let stored = try? JSONDecoder().decode(PairSettings.self, from: data)
+        else { return PairSettings() }
+        return Self.singleFields(of: stored)
+    }
+
+    /// Saves only the fields Single uses.
+    func setSingleSettings(_ settings: PairSettings, uid: String) {
+        guard let data = try? JSONEncoder().encode(Self.singleFields(of: settings)) else { return }
+        defaults.set(data, forKey: Self.singleStorageKey(uid: uid))
+    }
+
+    private static func singleFields(of s: PairSettings) -> PairSettings {
+        PairSettings(masterVolume: s.masterVolume, effects: s.effects, leftVolumeOffsetDb: s.leftVolumeOffsetDb)
+    }
+
     // MARK: Global
 
     var lastLeftUID: String? {
@@ -261,11 +287,14 @@ final class SettingsStore {
         set { set(newValue, .audioCaptureSignature) }
     }
 
-    /// Saved rooms. Missing or corrupt reads as none.
+    /// Saved rooms. Missing or corrupt reads as none; a room that fails to
+    /// decode is dropped and the rest are kept.
     var rooms: [Room] {
         get {
-            defaults.data(forKey: Key.rooms.name)
-                .flatMap { try? JSONDecoder().decode([Room].self, from: $0) } ?? []
+            guard let data = defaults.data(forKey: Key.rooms.name),
+                  let entries = try? JSONDecoder().decode([Lossy<Room>].self, from: data)
+            else { return [] }
+            return entries.compactMap(\.value)
         }
         set {
             guard let data = try? JSONEncoder().encode(newValue) else { return }
@@ -295,7 +324,7 @@ final class SettingsStore {
     var exclusions: [AppExclusion] {
         get {
             guard let data = defaults.data(forKey: Key.exclusions.name),
-                  let entries = try? JSONDecoder().decode([LossyExclusion].self, from: data)
+                  let entries = try? JSONDecoder().decode([Lossy<AppExclusion>].self, from: data)
             else { return [] }
             return entries.compactMap(\.value)
         }
@@ -334,10 +363,10 @@ final class SettingsStore {
 }
 
 /// Decodes one list element without failing the whole array.
-private struct LossyExclusion: Decodable {
-    let value: AppExclusion?
+private struct Lossy<Value: Decodable>: Decodable {
+    let value: Value?
 
     init(from decoder: any Decoder) throws {
-        value = try? AppExclusion(from: decoder)
+        value = try? Value(from: decoder)
     }
 }

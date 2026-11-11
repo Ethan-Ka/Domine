@@ -232,6 +232,9 @@ final class SpeakerVolumeLink {
         attachedDevices = [:]
         atMaximum = []
         volume = nil
+        // The step belongs to the speakers just let go; a coarser one
+        // attached next must not have its rounding read as a press.
+        step = nil
     }
 
     // MARK: Private

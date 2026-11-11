@@ -210,7 +210,7 @@ final class AppModel {
         store.migrateQuadSets(rooms: rooms)
         surroundSettings = Self.loadSurroundSettings(store: store)
         currentRoomID = store.currentRoomID.flatMap { id in rooms.contains { $0.id == id } ? id : nil }
-        pairSettings = Self.loadPairSettings(store: store, left: leftUID, right: rightUID)
+        pairSettings = Self.loadPairSettings(store: store, mode: routingMode, left: leftUID, right: rightUID)
         applyPairSettingsToEngine()
         volumeLink.onExternalChange = { [weak self] volume in self?.adoptHardwareVolume(volume) }
         engine.onRoutingEnded = { [weak self] in self?.engineEndedRouting() }
@@ -284,7 +284,7 @@ final class AppModel {
         store.lastRightUID = right
         rememberBluetoothSpeakers([left, right])
         refreshCurrentRoom()
-        pairSettings = Self.loadPairSettings(store: store, left: left, right: right)
+        pairSettings = Self.loadPairSettings(store: store, mode: routingMode, left: left, right: right)
         // A new pair is not a speaker connecting, so it never auto-starts.
         speakersWerePresent = allSpeakersPresent
         speakersPresenceKey = assignedSpeakersKey
@@ -311,7 +311,12 @@ final class AppModel {
         guard mode != routingMode else { return }
         let wasActive = engine.state.isActive
         if wasActive { stopRouting() }
+        let crossesSingle = (mode == .single) != (routingMode == .single)
         routingMode = mode
+        // Single keeps its own record per speaker; the pair's is not touched.
+        if crossesSingle {
+            pairSettings = Self.loadPairSettings(store: store, mode: mode, left: leftUID, right: rightUID)
+        }
         store.routingMode = mode
         routingRefusal = nil
         if mode == .surround { seedSurroundSetIfEmpty() }
@@ -325,6 +330,16 @@ final class AppModel {
         syncReconnector()
         applyPairSettingsToEngine()
         if wasActive { Task { await startRouting() } }
+    }
+
+    /// The surround set changed (SPEC 6a): like a mode switch, this is not a
+    /// speaker connecting, but the next one that connects counts against the
+    /// new set. A refusal about the old set no longer applies.
+    func surroundSetDidChange() {
+        if routingMode == .surround { routingRefusal = nil }
+        speakersWerePresent = allSpeakersPresent
+        speakersPresenceKey = assignedSpeakersKey
+        syncReconnector()
     }
 
     func uid(at position: SpeakerPosition) -> String? {
@@ -497,7 +512,9 @@ final class AppModel {
         guard s != pairSettings else { return }
         pairSettings = s
         mirrorMasterToVirtualOutput()
-        if let left = leftUID, let right = rightUID, left != right {
+        if routingMode == .single {
+            if let left = leftUID { store.setSingleSettings(s, uid: left) }
+        } else if let left = leftUID, let right = rightUID, left != right {
             store.setPairSettings(s, leftUID: left, rightUID: right)
         }
         applyPairSettingsToEngine()
@@ -566,7 +583,10 @@ final class AppModel {
         return offset < 0 ? master * Float(pow(10, Double(offset) / 20)) : master
     }
 
-    private static func loadPairSettings(store: SettingsStore, left: String?, right: String?) -> PairSettings {
+    /// Single mode reads the one speaker's own record; the other modes the pair's.
+    private static func loadPairSettings(store: SettingsStore, mode: RoutingMode,
+                                         left: String?, right: String?) -> PairSettings {
+        if mode == .single { return left.map { store.singleSettings(uid: $0) } ?? PairSettings() }
         guard let left, let right, left != right else { return PairSettings() }
         return store.pairSettings(leftUID: left, rightUID: right)
     }
