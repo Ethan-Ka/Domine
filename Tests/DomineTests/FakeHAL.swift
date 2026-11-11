@@ -143,21 +143,21 @@ final class FakeHAL: AudioHAL, @unchecked Sendable {
     // MARK: - Test controls
 
     @MainActor @discardableResult
-    func add(_ device: Device) -> AudioObjectID {
+    func add(_ device: Device, notify: Bool = true) -> AudioObjectID {
         let id = lock.withLock { insert(device) }
-        fire(.devices)
+        if notify { fire(.devices) }
         return id
     }
 
     @MainActor
-    func remove(uid: String) {
+    func remove(uid: String, notify: Bool = true) {
         let removed: AudioObjectID? = lock.withLock {
             guard let id = devices.first(where: { $0.value.uid == uid })?.key else { return nil }
             devices[id] = nil
             order.removeAll { $0 == id }
             return id
         }
-        guard let removed else { return }
+        guard let removed, notify else { return }
         fire(.isAlive(removed))
         fire(.devices)
     }

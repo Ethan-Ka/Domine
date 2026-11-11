@@ -17,7 +17,9 @@ final class DeviceCatalog {
 
     @ObservationIgnored private let hal: any AudioHAL
     @ObservationIgnored private var systemListeners: [HALListenerToken] = []
-    @ObservationIgnored private var nameListeners: [String: HALListenerToken] = [:]
+    /// Keyed by UID; the ID is the one the listener is on, since a device
+    /// that reconnects between two refreshes keeps its UID but gets a new ID.
+    @ObservationIgnored private var nameListeners: [String: (id: AudioObjectID, token: HALListenerToken)] = [:]
 
     init(hal: any AudioHAL) {
         self.hal = hal
@@ -39,7 +41,7 @@ final class DeviceCatalog {
     func stop() {
         systemListeners.forEach { $0.cancel() }
         systemListeners = []
-        nameListeners.values.forEach { $0.cancel() }
+        nameListeners.values.forEach { $0.token.cancel() }
         nameListeners = [:]
     }
 
@@ -96,13 +98,15 @@ final class DeviceCatalog {
     }
 
     private func updateNameListeners() {
-        let current = Dictionary(uniqueKeysWithValues: outputs.map { ($0.uid, $0.id) })
-        for uid in nameListeners.keys where current[uid] == nil {
-            nameListeners.removeValue(forKey: uid)?.cancel()
+        // Two objects can briefly report one UID during a reconnect; keep the first.
+        let current = Dictionary(outputs.map { ($0.uid, $0.id) }, uniquingKeysWith: { first, _ in first })
+        for (uid, listener) in nameListeners where current[uid] != listener.id {
+            nameListeners.removeValue(forKey: uid)?.token.cancel()
         }
         for (uid, id) in current where nameListeners[uid] == nil {
             do {
-                nameListeners[uid] = try hal.addListener(.name(id)) { [weak self] in self?.refresh() }
+                let token = try hal.addListener(.name(id)) { [weak self] in self?.refresh() }
+                nameListeners[uid] = (id, token)
             } catch {
                 lastError = error
             }
