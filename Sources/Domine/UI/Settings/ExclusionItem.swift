@@ -7,7 +7,7 @@ struct ExclusionItem: Identifiable, Equatable, Sendable {
         var title: String {
             switch self {
             case .always: "Always"
-            case .onlyDuringCalls: "Only during calls"
+            case .onlyDuringCalls: "Only while on a call"
             }
         }
     }

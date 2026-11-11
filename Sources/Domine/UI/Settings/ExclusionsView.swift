@@ -9,8 +9,15 @@ struct ExclusionsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Apps that skip your speakers").font(.headline)
+                Text("These apps play on another output, such as headphones, instead of your speakers.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Picker("Excluded apps play through:", selection: $state.playThroughDeviceUID) {
-                Text("Previous output").tag(String?.none)
+                Text("The output used before Domine").tag(String?.none)
                 ForEach(state.outputChoices) { choice in
                     Text(choice.label).tag(Optional(choice.uid))
                 }
@@ -19,6 +26,10 @@ struct ExclusionsView: View {
 
             VStack(spacing: 0) {
                 List(selection: $selection) {
+                    if state.items.isEmpty {
+                        Text("Click + to add an app, such as Zoom.")
+                            .foregroundStyle(.secondary)
+                    }
                     ForEach($state.items) { $item in
                         ExclusionRow(item: $item)
                     }

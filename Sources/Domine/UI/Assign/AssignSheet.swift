@@ -9,6 +9,10 @@ struct AssignSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(state.title)
                 .font(.headline)
+            Text("Pick the speaker for this position. Play a tone to hear which one it is.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             rowList
             if let footnote = state.footnote {
                 Text(footnote)
@@ -75,7 +79,7 @@ private struct AssignRowView: View {
             }
             .lineLimit(1)
             Spacer(minLength: 8)
-            Button("Play tone") { actions.playTone(row.uid) }
+            Button("Play tone to identify") { actions.playTone(row.uid) }
                 .disabled(!row.canPlayTone)
                 .accessibilityLabel("Play tone on \(row.name) \(row.suffix)")
         }

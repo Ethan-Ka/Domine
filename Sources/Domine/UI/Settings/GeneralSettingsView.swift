@@ -13,14 +13,9 @@ struct GeneralSettingsView: View {
         Form {
             LabeledContent("Volume keys:") {
                 VStack(alignment: .leading, spacing: 6) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Toggle("Control Domine with the keyboard volume keys", isOn: $state.volumeKeysEnabled)
-                        if state.showsAccessibilityPrompt {
-                            caption(GeneralSettingsState.accessibilityMissingCaption)
-                        }
-                    }
-                    if state.showsAccessibilityPrompt {
-                        Button("Grant Access") { actions.grantAccessibility() }
+                    Toggle("Control Domine with the keyboard volume keys", isOn: $state.volumeKeysEnabled)
+                    if state.volumeKeysEnabled {
+                        accessibilityStatus
                     }
                 }
             }
@@ -50,19 +45,34 @@ struct GeneralSettingsView: View {
                 }
             }
 
-            LabeledContent {
-                VStack(alignment: .leading, spacing: 6) {
-                    Toggle("Start routing when speakers connect", isOn: $state.startWhenBothConnect)
-                    Toggle("Reconnect speakers that drop", isOn: $state.reconnectDroppedSpeakers)
-                    Toggle("Keep speakers from turning off", isOn: $state.keepSpeakersAwake)
-                    Toggle("Pause playback if Domine quits while playing", isOn: $state.pauseOnExit)
-                    Toggle("Launch at login", isOn: $state.launchAtLogin)
+            Divider()
+
+            LabeledContent("Startup:") {
+                VStack(alignment: .leading, spacing: 8) {
+                    option("Launch at login", isOn: $state.launchAtLogin, caption: "Open Domine when you log in to your Mac.")
+                    option("Start routing when speakers connect", isOn: $state.startWhenBothConnect,
+                           caption: "Start routing automatically when all of the mode's speakers connect.")
                     if let automaticUpdates {
-                        Toggle("Check for updates automatically", isOn: automaticUpdates)
+                        option("Check for updates automatically", isOn: automaticUpdates,
+                               caption: "Look for a new version of Domine now and then.")
                     }
                 }
-            } label: {
-                EmptyView()
+            }
+
+            LabeledContent("Speakers:") {
+                VStack(alignment: .leading, spacing: 8) {
+                    option("Reconnect speakers that drop", isOn: $state.reconnectDroppedSpeakers,
+                           caption: "Try to bring a speaker back if its connection is lost.")
+                    option("Keep speakers from turning off", isOn: $state.keepSpeakersAwake,
+                           caption: "Plays an inaudible tone so the speakers don't go to sleep.")
+                }
+            }
+
+            LabeledContent("Quitting:") {
+                VStack(alignment: .leading, spacing: 8) {
+                    option("Pause playback if Domine quits while playing", isOn: $state.pauseOnExit,
+                           caption: "Pauses the music if Domine quits unexpectedly.")
+                }
             }
 
             Divider()
@@ -73,6 +83,36 @@ struct GeneralSettingsView: View {
         .padding(.horizontal, 32)
         .padding(.vertical, 24)
         .frame(width: 560, alignment: .top)
+    }
+
+    /// Accessibility status for the volume keys, with the grant buttons.
+    @ViewBuilder private var accessibilityStatus: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label {
+                Text(state.accessibilityGranted ? "Accessibility access granted" : "Accessibility access needed")
+            } icon: {
+                Image(systemName: state.accessibilityGranted ? "checkmark.circle.fill" : "exclamationmark.circle")
+                    .foregroundStyle(state.accessibilityGranted ? Color.green : Color.secondary)
+            }
+            if !state.accessibilityGranted {
+                if let note = setup.accessibilityNote {
+                    Text(note).font(.callout).foregroundStyle(.secondary)
+                }
+                HStack(spacing: 8) {
+                    Button("Grant Access") { actions.grantAccessibility() }
+                    if setup.accessibilityLikelyStale {
+                        Button("Reveal Domine in Finder") { setupActions.revealApp() }
+                    }
+                }
+            }
+        }
+    }
+
+    private func option(_ title: String, isOn: Binding<Bool>, caption text: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Toggle(title, isOn: isOn)
+            caption(text)
+        }
     }
 
     /// Secondary text under a checkbox, aligned with its title.

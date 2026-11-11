@@ -23,17 +23,6 @@ struct SetupSection: View {
                 }
             }
 
-            LabeledContent("Accessibility:") {
-                row(state.accessibilityText, ok: state.accessibilityGranted, note: state.accessibilityNote) {
-                    if !state.accessibilityGranted {
-                        Button("Grant Access") { actions.grantAccessibility() }
-                        if state.accessibilityLikelyStale {
-                            Button("Reveal Domine in Finder") { actions.revealApp() }
-                        }
-                    }
-                }
-            }
-
             LabeledContent("Speakers:") {
                 row(state.speakersText, ok: state.connectedGrips >= 2) {
                     if state.connectedGrips < 2 {
