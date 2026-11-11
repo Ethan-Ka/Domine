@@ -64,6 +64,8 @@ final class AppModel {
 
     /// Saved speaker setups. `currentRoomID` is the one matching the current setup.
     var rooms: [Room] = []
+    /// The user's surround presets (the built-in ones are `SurroundFieldPreset.builtIn`).
+    var surroundFieldPresets: [SurroundFieldPreset] = []
     var currentRoomID: UUID?
     var showsSaveRoom = false
     var showsManageRooms = false
@@ -207,6 +209,7 @@ final class AppModel {
         rearRightUID = store.lastRearRightUID
         routingMode = store.routingMode
         rooms = store.rooms
+        surroundFieldPresets = store.surroundFieldPresets
         store.migrateQuadSets(rooms: rooms)
         surroundSettings = Self.loadSurroundSettings(store: store)
         currentRoomID = store.currentRoomID.flatMap { id in rooms.contains { $0.id == id } ? id : nil }

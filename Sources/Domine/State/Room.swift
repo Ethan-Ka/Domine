@@ -14,9 +14,12 @@ struct Room: Codable, Equatable, Identifiable, Sendable {
     var rearRightUID: String?
     /// The surround set in list order (SPEC 13). nil in rooms saved before it.
     var surroundUIDs: [String]?
+    /// Name of the surround preset the room was saved with, if the field
+    /// controls matched one.
+    var surroundPreset: String?
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, mode, leftUID, rightUID, rearLeftUID, rearRightUID, surroundUIDs
+        case id, name, mode, leftUID, rightUID, rearLeftUID, rearRightUID, surroundUIDs, surroundPreset
     }
 }
 
@@ -33,6 +36,7 @@ extension Room {
         rightUID = (try? c.decodeIfPresent(String.self, forKey: .rightUID)) ?? nil
         rearLeftUID = (try? c.decodeIfPresent(String.self, forKey: .rearLeftUID)) ?? nil
         rearRightUID = (try? c.decodeIfPresent(String.self, forKey: .rearRightUID)) ?? nil
+        surroundPreset = (try? c.decodeIfPresent(String.self, forKey: .surroundPreset)) ?? nil
         surroundUIDs = ((try? c.decodeIfPresent([String].self, forKey: .surroundUIDs)) ?? nil)
             ?? SettingsStore.quadSet([leftUID, rightUID, rearLeftUID, rearRightUID])
     }

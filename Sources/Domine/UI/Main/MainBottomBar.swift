@@ -42,13 +42,16 @@ struct MainBottomBar: View {
                     }
                     compactSlider("Rotation", value: controls.rotation, range: SurroundControls.rotationRange,
                                   text: controls.rotationText, set: actions.setSurroundRotation)
-                    Menu("Presets") {
-                        ForEach(SurroundPreset.allCases, id: \.self) { preset in
-                            Button(preset.title) { actions.applySurroundPreset(preset) }
-                                .disabled(!preset.isEnabled(speakerCount: state.surroundCards.count))
+                    HStack(spacing: 8) {
+                        SurroundPresetMenu()
+                        Menu("Layout") {
+                            ForEach(SurroundPreset.allCases, id: \.self) { preset in
+                                Button(preset.title) { actions.applySurroundPreset(preset) }
+                                    .disabled(!preset.isEnabled(speakerCount: state.surroundCards.count))
+                            }
                         }
+                        .fixedSize()
                     }
-                    .fixedSize()
                 }
             }
             if controls.showsBluetoothWarning {
