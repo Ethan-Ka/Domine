@@ -25,8 +25,19 @@ struct StageLayout: Equatable, Sendable {
 
     /// Center of the Mac symbol, which is where the listener sits.
     var macCenter: CGPoint {
-        CGPoint(x: size.width / 2, y: size.height / 2)
+        // Single mode keeps the Mac below the card at the top of the stage.
+        if mode == .single {
+            return CGPoint(x: size.width / 2, y: max(size.height / 2, Self.singleMacMinY))
+        }
+        return CGPoint(x: size.width / 2, y: size.height / 2)
     }
+
+    /// Single mode: the card hugs the top inset, and the Mac (symbol and
+    /// label, about 85 high, drawn 8 below its center) starts `bannerGap`
+    /// below the card.
+    static let singleMacMinY: CGFloat = cardInset.height + cardSize.height + bannerGap + 42 - 8
+    /// Top of the Mac symbol relative to `macCenter.y`.
+    static let macTopOffset: CGFloat = -34
 
     var guideRadius: CGFloat {
         switch mode {
@@ -50,6 +61,10 @@ struct StageLayout: Equatable, Sendable {
     static let guideMargin: CGFloat = 12
 
     func cardCenter(_ position: SpeakerPosition) -> CGPoint {
+        if mode == .single {
+            return clampedCardCenter(
+                CGPoint(x: size.width / 2, y: Self.cardInset.height + cardSize.height / 2))
+        }
         let offset = Self.stereoCardOffset * scale
         let x = position.isLeft ? macCenter.x - offset : macCenter.x + offset
         return clampedCardCenter(CGPoint(x: x, y: macCenter.y))
@@ -58,7 +73,10 @@ struct StageLayout: Equatable, Sendable {
     /// Where the connector leaves the Mac: just outside the symbol, on the
     /// line from the Mac's center to the card.
     func connectorStart(_ position: SpeakerPosition) -> CGPoint {
-        connectorStart(toward: connectorEnd(position))
+        if mode == .single {
+            return CGPoint(x: macCenter.x, y: macCenter.y + Self.macTopOffset)
+        }
+        return connectorStart(toward: connectorEnd(position))
     }
 
     /// Just outside the Mac symbol, on the line from its center to `end`.
@@ -90,6 +108,9 @@ struct StageLayout: Equatable, Sendable {
     /// Where the connector meets the card: middle of the edge facing the Mac.
     func connectorEnd(_ position: SpeakerPosition) -> CGPoint {
         let center = cardCenter(position)
+        if mode == .single {
+            return CGPoint(x: center.x, y: center.y + cardSize.height / 2)
+        }
         let dx = cardSize.width / 2
         return CGPoint(x: position.isLeft ? center.x + dx : center.x - dx, y: center.y)
     }

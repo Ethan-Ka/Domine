@@ -26,6 +26,18 @@ struct StageLayoutResizeTests {
         }
     }
 
+    @Test(arguments: [StageLayout.designSize, CGSize(width: 536, height: 260), CGSize(width: 924, height: 480)])
+    func singleCardIsCenteredAtTop(size: CGSize) {
+        let layout = StageLayout(size: size, mode: .single)
+        let card = layout.cardCenter(.frontLeft)
+        #expect(card.x == size.width / 2)
+        #expect(card.y == StageLayout.cardInset.height + StageLayout.cardSize.height / 2)
+        let end = layout.connectorEnd(.frontLeft)
+        #expect(end.y == card.y + StageLayout.cardSize.height / 2)
+        // Card bottom is above the Mac symbol top; connector runs down to the Mac.
+        #expect(end.y <= layout.connectorStart(.frontLeft).y)
+    }
+
     @Test func stereoDefaultSizeIsUnchanged() {
         let layout = StageLayout(size: StageLayout.designSize, mode: .stereo)
         #expect(layout.cardCenter(.frontLeft) == CGPoint(x: 108, y: 160))
