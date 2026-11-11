@@ -64,3 +64,44 @@ struct MeterBallistics: Sendable, Equatable {
         return min(Int((clamped * Float(count)).rounded(.down)), count)
     }
 }
+
+/// One held peak and a clip latch for a meter. Pure value type; times are
+/// seconds on any monotonic clock the caller picks.
+///
+/// The held level follows the displayed level up at once, stays for
+/// `holdSeconds`, then drops to the displayed level. A displayed level of 1
+/// (peak at or above 0 dBFS) latches a clip for `clipSeconds` or until cleared.
+struct MeterPeakHold: Sendable, Equatable {
+    static let holdSeconds: Double = 1.5
+    static let clipSeconds: Double = 2
+
+    private(set) var heldLevel: Float = 0
+    private var heldAt: Double = 0
+    private var clipAt: Double?
+
+    /// Feeds the displayed level seen at `time`.
+    mutating func update(level: Float, at time: Double) {
+        if level >= heldLevel || time - heldAt >= Self.holdSeconds {
+            heldLevel = level
+            heldAt = time
+        }
+        if level >= 1 { clipAt = time }
+    }
+
+    /// Held level at `time`: the held peak until it expires, then 0.
+    func held(at time: Double) -> Float {
+        time - heldAt < Self.holdSeconds ? heldLevel : 0
+    }
+
+    func isClipping(at time: Double) -> Bool {
+        guard let clipAt else { return false }
+        return time - clipAt < Self.clipSeconds
+    }
+
+    /// True while there is anything left to expire at `time`.
+    func isActive(at time: Double) -> Bool {
+        held(at: time) > 0 || isClipping(at: time)
+    }
+
+    mutating func clearClip() { clipAt = nil }
+}

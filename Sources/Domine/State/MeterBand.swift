@@ -23,3 +23,16 @@ enum MeterBand: Sendable, Equatable {
         }
     }
 }
+
+/// How the speaker card meters are drawn (Settings > General > Display).
+enum MeterStyle: String, CaseIterable, Sendable {
+    case segments
+    case bar
+
+    var title: String {
+        switch self {
+        case .segments: "Segments"
+        case .bar: "Bar"
+        }
+    }
+}

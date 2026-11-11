@@ -12,6 +12,7 @@ final class SettingsStore {
         case lastLeftUID, lastRightUID, lastRearLeftUID, lastRearRightUID, routingMode, lastSurroundUIDs
         case volumeKeysEnabled, restorePreviousOutput, closeBehavior, startWhenBothConnect, reconnectDroppedSpeakers
         case keepSpeakersAwake, pauseOnExit
+        case meterStyle, meterPeakHold, showMeters
         case previousOutputUID, outputNeedsRestore, excludedAppsPlayThroughUID, exclusions, appVolumes
         case hasCompletedWelcome, audioCaptureWorking, audioCaptureSignature
         case rooms, currentRoomID, rememberedSpeakers
@@ -201,6 +202,24 @@ final class SettingsStore {
     var pauseOnExit: Bool {
         get { bool(.pauseOnExit, default: true) }
         set { defaults.set(newValue, forKey: Key.pauseOnExit.name) }
+    }
+
+    /// Meter look. Segments by default.
+    var meterStyle: MeterStyle {
+        get { string(.meterStyle).flatMap(MeterStyle.init(rawValue:)) ?? .segments }
+        set { set(newValue.rawValue, .meterStyle) }
+    }
+
+    /// Show a held peak on the meters. On by default.
+    var meterPeakHold: Bool {
+        get { bool(.meterPeakHold, default: true) }
+        set { defaults.set(newValue, forKey: Key.meterPeakHold.name) }
+    }
+
+    /// Show level meters on the speaker cards. On by default.
+    var showMeters: Bool {
+        get { bool(.showMeters, default: true) }
+        set { defaults.set(newValue, forKey: Key.showMeters.name) }
     }
 
     /// Default output saved at start, for restore on stop and crash recovery (SPEC section 4c).

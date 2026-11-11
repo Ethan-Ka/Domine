@@ -201,3 +201,52 @@ struct MeterModelTests {
         model.stop()
     }
 }
+
+struct MeterPeakHoldTests {
+    @Test func holdsThenExpiresAfterOneAndAHalfSeconds() {
+        var hold = MeterPeakHold()
+        hold.update(level: 0.75, at: 10)
+        hold.update(level: 0.25, at: 11)
+        #expect(hold.held(at: 11) == 0.75)
+        #expect(hold.held(at: 11.49) == 0.75)
+        #expect(hold.held(at: 11.5) == 0)
+    }
+
+    @Test func higherLevelReplacesHeldAndRestartsTimer() {
+        var hold = MeterPeakHold()
+        hold.update(level: 0.5, at: 0)
+        hold.update(level: 0.875, at: 1)
+        #expect(hold.held(at: 2.4) == 0.875)
+        #expect(hold.held(at: 2.5) == 0)
+    }
+
+    @Test func expiredHoldFollowsCurrentLevel() {
+        var hold = MeterPeakHold()
+        hold.update(level: 0.75, at: 0)
+        hold.update(level: 0.25, at: 2)
+        #expect(hold.held(at: 2) == 0.25)
+    }
+
+    @Test func clipLatchesForTwoSecondsAtFullScale() {
+        var hold = MeterPeakHold()
+        hold.update(level: 0.99, at: 0)
+        #expect(!hold.isClipping(at: 0))
+        hold.update(level: 1, at: 5)
+        hold.update(level: 0, at: 5.5)
+        #expect(hold.isClipping(at: 6.99))
+        #expect(!hold.isClipping(at: 7))
+    }
+
+    @Test func clickClearsClip() {
+        var hold = MeterPeakHold()
+        hold.update(level: 1, at: 0)
+        hold.clearClip()
+        #expect(!hold.isClipping(at: 0.1))
+    }
+
+    @Test func accessibilityValueIsInDecibels() {
+        #expect(LevelMeter.accessibilityValue(level: 0) == "Silent")
+        #expect(LevelMeter.accessibilityValue(level: 1) == "0 decibels")
+        #expect(LevelMeter.accessibilityValue(level: 0.5) == "-30 decibels")
+    }
+}

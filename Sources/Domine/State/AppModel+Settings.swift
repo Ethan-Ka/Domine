@@ -11,7 +11,10 @@ extension AppModel {
             launchAtLogin: services.isLaunchAtLoginEnabled(),
             reconnectDroppedSpeakers: store.reconnectDroppedSpeakers,
             keepSpeakersAwake: store.keepSpeakersAwake,
-            pauseOnExit: store.pauseOnExit)
+            pauseOnExit: store.pauseOnExit,
+            meterStyle: store.meterStyle,
+            meterPeakHold: store.meterPeakHold,
+            showMeters: store.showMeters)
     }
 
     static func makeExclusionsSettings(store: SettingsStore, services: SystemServices) -> ExclusionsState {
@@ -51,6 +54,9 @@ extension AppModel {
             store.pauseOnExit = new.pauseOnExit
             syncPauseWatchdog()
         }
+        if new.meterStyle != old.meterStyle { store.meterStyle = new.meterStyle }
+        if new.meterPeakHold != old.meterPeakHold { store.meterPeakHold = new.meterPeakHold }
+        if new.showMeters != old.showMeters { store.showMeters = new.showMeters }
         if new.launchAtLogin != old.launchAtLogin {
             do {
                 try services.setLaunchAtLogin(new.launchAtLogin)
