@@ -13,9 +13,9 @@ enum SpeakerRole: String, Codable, CaseIterable, Identifiable, Sendable {
 
     var title: String {
         switch self {
-        case .fullRange: "Full range"
-        case .satellite: "Satellite"
-        case .subwoofer: "Subwoofer"
+        case .fullRange: "Everything"
+        case .satellite: "No deep bass"
+        case .subwoofer: "Bass only"
         }
     }
 
@@ -29,6 +29,29 @@ enum SpeakerRole: String, Codable, CaseIterable, Identifiable, Sendable {
 
     /// "80 Hz".
     static func crossoverReadout(_ hz: Double) -> String { "\(Int(hz.rounded())) Hz" }
+
+    /// What the chosen roles do, in one line; nil while every speaker plays
+    /// everything. Warns when the deep bass would play nowhere.
+    static func caption(roles: [SpeakerRole], hz: Double) -> String? {
+        let split = crossoverReadout(hz)
+        let bassOnly = roles.filter { $0 == .subwoofer }.count
+        let noBass = roles.contains(.satellite)
+        let everything = roles.contains(.fullRange)
+        if bassOnly == roles.count, !roles.isEmpty {
+            return "Every speaker is bass only, so nothing plays above \(split)."
+        }
+        if bassOnly > 0 {
+            let who = bassOnly == 1 ? "the bass-only speaker" : "the bass-only speakers"
+            return "Sound below \(split) plays only on \(who)."
+        }
+        if noBass, !everything {
+            return "No speaker plays the sound below \(split). Set one to Bass only or Everything."
+        }
+        if noBass {
+            return "Speakers set to No deep bass skip the sound below \(split)."
+        }
+        return nil
+    }
 
     /// Unknown stored values decode as full range.
     init(from decoder: any Decoder) throws {

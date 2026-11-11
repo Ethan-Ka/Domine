@@ -77,7 +77,12 @@ struct SpeakerRoleSettingsTests {
 
     @Test func roleRowCaptionAndReadout() {
         #expect(SpeakerRole.crossoverReadout(80) == "80 Hz")
-        #expect(SpeakerRole.allCases.map(\.title) == ["Full range", "Satellite", "Subwoofer"])
+        #expect(SpeakerRole.allCases.map(\.title) == ["Everything", "No deep bass", "Bass only"])
+        #expect(SpeakerRole.caption(roles: [.fullRange, .fullRange], hz: 80) == nil)
+        #expect(SpeakerRole.caption(roles: [.satellite, .subwoofer], hz: 80) == "Sound below 80 Hz plays only on the bass-only speaker.")
+        #expect(SpeakerRole.caption(roles: [.satellite, .satellite], hz: 100) == "No speaker plays the sound below 100 Hz. Set one to Bass only or Everything.")
+        #expect(SpeakerRole.caption(roles: [.satellite, .fullRange], hz: 80) == "Speakers set to No deep bass skip the sound below 80 Hz.")
+        #expect(SpeakerRole.caption(roles: [.subwoofer, .subwoofer], hz: 80) == "Every speaker is bass only, so nothing plays above 80 Hz.")
         var state = TuningState(delayMs: 0, balance: 0)
         state.speakerRoles = [SpeakerRoleRow(uid: "a", title: "Left", suffix: "4F2A")]
         #expect(!state.isCrossoverEnabled)

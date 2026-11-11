@@ -42,6 +42,7 @@ struct TuningState: Equatable, Sendable {
     var crossoverReadout: String { SpeakerRole.crossoverReadout(crossoverHz) }
     /// The crossover slider only matters once a speaker is not full range.
     var isCrossoverEnabled: Bool { speakerRoles.contains { $0.role != .fullRange } }
+    var roleCaption: String? { SpeakerRole.caption(roles: speakerRoles.map(\.role), hz: crossoverHz) }
 
     func speakerVolume(uid: String) -> SpeakerVolumeRow? {
         speakerVolumes.first { $0.uid == uid }

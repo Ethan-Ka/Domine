@@ -276,7 +276,7 @@ struct TuningSheet: View {
     /// Role per speaker and the shared crossover.
     private var roles: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("ROLE")
+            sectionTitle("BASS")
             surroundList(state.speakerRoles, rowHeight: Self.roleRowHeight) { row in
                 Picker(row.label, selection: Binding(
                     get: { row.role },
@@ -288,22 +288,30 @@ struct TuningSheet: View {
                 .font(.callout)
                 .accessibilityLabel("\(row.label) role")
             }
-            VStack(spacing: 4) {
-                readoutRow("Crossover", value: state.crossoverReadout)
-                Slider(
-                    value: Binding(
-                        get: { state.crossoverHz },
-                        set: { actions.setCrossoverHz($0.rounded()) }),
-                    in: Double(SpeakerRole.crossoverRange.lowerBound)...Double(SpeakerRole.crossoverRange.upperBound))
-                    .labelsHidden()
-                    .accessibilityLabel("Crossover")
-                    .accessibilityValue(state.crossoverReadout)
+            if state.isCrossoverEnabled {
+                VStack(spacing: 4) {
+                    readoutRow("Bass split", value: state.crossoverReadout)
+                    Slider(
+                        value: Binding(
+                            get: { state.crossoverHz },
+                            set: { actions.setCrossoverHz($0.rounded()) }),
+                        in: Double(SpeakerRole.crossoverRange.lowerBound)...Double(SpeakerRole.crossoverRange.upperBound))
+                        .labelsHidden()
+                        .accessibilityLabel("Bass split")
+                        .accessibilityValue(state.crossoverReadout)
+                    if state.speakerRoles.contains(where: { $0.role == .subwoofer }) {
+                        endLabels("Bass only speaker plays less", "Plays more")
+                    } else {
+                        endLabels("Less bass cut", "More bass cut")
+                    }
+                }
             }
-            .disabled(!state.isCrossoverEnabled)
-            Text("Satellites skip the deep bass; a subwoofer plays only the bass.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            if let caption = state.roleCaption {
+                Text(caption)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
