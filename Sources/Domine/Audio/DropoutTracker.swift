@@ -1,14 +1,16 @@
 import CoreAudio
+import Observation
 import Foundation
 
 /// Counts processor overloads on each sub-device of the aggregate and
 /// disconnects of the assigned speakers (device left the catalog or died).
 @MainActor
+@Observable
 final class DropoutTracker {
     private let hal: any AudioHAL
     private let devices: [EngineDiagnostics.Device]
-    private var tokens: [HALListenerToken] = []
-    private var gone: Set<String> = []
+    @ObservationIgnored private var tokens: [HALListenerToken] = []
+    @ObservationIgnored private var gone: Set<String> = []
     private(set) var counts: DropoutCounts
 
     init(hal: any AudioHAL, devices: [EngineDiagnostics.Device], now: Date = Date()) {
