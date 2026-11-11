@@ -127,19 +127,21 @@ extension AppModel {
         surroundSettings = surroundSettings.carried(to: uids)
         saveSurroundSettings()
         refreshCurrentRoom()
+        surroundSetDidChange()
         syncVolumeLink()
         applySurroundSettingsToEngine()
         if restart { Task { await startRouting() } }
     }
 
-    /// Loads a saved set (a room's): its stored record, else the current
-    /// record carried over to it.
+    /// Loads a saved set (a room's): its stored record in the requested
+    /// order, else the current record carried over to it.
     func selectSurroundSet(_ uids: [String]) {
         guard uids != surroundSettings.uids else { return }
         let restart = routingMode == .surround && engine.state.isActive
         if restart { stopRouting() }
-        surroundSettings = store.surroundSettings(uids: uids) ?? surroundSettings.carried(to: uids)
+        surroundSettings = Self.savedSurroundSettings(store: store, uids: uids) ?? surroundSettings.carried(to: uids)
         saveSurroundSettings()
+        surroundSetDidChange()
         syncVolumeLink()
         applySurroundSettingsToEngine()
         if restart { Task { await startRouting() } }
@@ -155,14 +157,22 @@ extension AppModel {
         let pair = engine.swapSides ? [rightUID, leftUID] : [leftUID, rightUID]
         for uid in pair.compactMap({ $0 }) where !uids.contains(uid) { uids.append(uid) }
         guard !uids.isEmpty else { return }
-        surroundSettings = store.surroundSettings(uids: uids) ?? SurroundSettings(uids: uids)
+        surroundSettings = Self.savedSurroundSettings(store: store, uids: uids) ?? SurroundSettings(uids: uids)
         saveSurroundSettings()
         applySurroundSettingsToEngine()
     }
 
     static func loadSurroundSettings(store: SettingsStore) -> SurroundSettings {
         guard let uids = store.lastSurroundUIDs, !uids.isEmpty else { return SurroundSettings() }
-        return store.surroundSettings(uids: uids) ?? SurroundSettings(uids: uids)
+        return savedSurroundSettings(store: store, uids: uids) ?? SurroundSettings(uids: uids)
+    }
+
+    /// The stored record for these speakers, in the order asked for. The key
+    /// is order-free, so the record may list them differently; reordering
+    /// keeps every speaker's position and per-speaker values.
+    static func savedSurroundSettings(store: SettingsStore, uids: [String]) -> SurroundSettings? {
+        guard let stored = store.surroundSettings(uids: uids) else { return nil }
+        return stored.uids == uids ? stored : stored.carried(to: uids)
     }
 
     func saveSurroundSettings() {
